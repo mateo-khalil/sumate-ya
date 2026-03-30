@@ -1,0 +1,19 @@
+{
+  "name": "sumate-ya",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sumate Ya - Football player connection platform monorepo",
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck --force",
+    "test": "turbo test",
+    "codegen": "turbo codegen",
+    "format": "turbo format"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.20"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "lint": {
+      "outputs": []
+    },
+    "typecheck": {
+      "dependsOn": ["codegen"],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["codegen"],
+      "outputs": ["coverage/**"]
+    },
+    "codegen": {
+      "outputs": ["src/generated/**", "graphql/generated/**"]
+    },
+    "format": {
+      "outputs": []
+    }
+  }
+}

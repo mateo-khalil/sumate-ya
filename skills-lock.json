@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "api-endpoint": {
+      "source": "mateo-khalil/monorepo-skills",
+      "sourceType": "github",
+      "computedHash": "e650653a0163d2034c03d56e1961378025e361b6d5f0efce9d66f69c6cf6099c"
+    }
+  }
+}
