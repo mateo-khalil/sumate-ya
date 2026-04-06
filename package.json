@@ -11,7 +11,10 @@
     "typecheck": "turbo typecheck --force",
     "test": "turbo test",
     "codegen": "turbo codegen",
-    "format": "turbo format"
+    "format": "turbo format",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app"
   },
   "devDependencies": {
     "turbo": "^2.8.20"
