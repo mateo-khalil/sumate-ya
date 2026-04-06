@@ -1,82 +1,78 @@
 {
-	"servers": {
-		"io.github.upstash/context7": {
-			"type": "stdio",
-			"command": "npx",
-			"args": [
-				"@upstash/context7-mcp@1.0.31"
-			],
-			"env": {
-				"CONTEXT7_API_KEY": "${input:CONTEXT7_API_KEY}"
-			},
-			"gallery": "https://api.mcp.github.com",
-			"version": "1.0.31"
-		},
-		"makenotion/notion-mcp-server": {
-			"type": "http",
-			"url": "https://mcp.notion.com/sse",
-			"gallery": "https://api.mcp.github.com",
-			"version": "1.0.0"
-		},
-		"com.supabase/mcp": {
-			"type": "stdio",
-			"command": "npx",
-			"args": [
-				"--project-ref",
-				"${input:project-ref}",
-				"--read-only",
-				"${input:read-only}",
-				"--features",
-				"${input:features}",
-				"--api-url",
-				"${input:api-url}",
-				"--registry",
-				"https://registry.npmjs.org",
-				"@supabase/mcp-server-supabase@0.7.0"
-			],
-			"env": {
-				"SUPABASE_ACCESS_TOKEN": "${input:SUPABASE_ACCESS_TOKEN}"
-			},
-			"gallery": "https://api.mcp.github.com",
-			"version": "0.7.0"
-		}
-	},
-	"inputs": [
-		{
-			"id": "CONTEXT7_API_KEY",
-			"type": "promptString",
-			"description": "API key for authentication",
-			"password": true
-		},
-		{
-			"id": "project-ref",
-			"type": "promptString",
-			"description": "Supabase project reference ID",
-			"password": false
-		},
-		{
-			"id": "read-only",
-			"type": "promptString",
-			"description": "Enable read-only mode",
-			"password": false
-		},
-		{
-			"id": "features",
-			"type": "promptString",
-			"description": "Comma-separated list of features to enable",
-			"password": false
-		},
-		{
-			"id": "api-url",
-			"type": "promptString",
-			"description": "Custom API URL",
-			"password": false
-		},
-		{
-			"id": "SUPABASE_ACCESS_TOKEN",
-			"type": "promptString",
-			"description": "Personal access token for Supabase API",
-			"password": true
-		}
-	]
+  "servers": {
+    "io.github.upstash/context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@upstash/context7-mcp@1.0.31"],
+      "env": {
+        "CONTEXT7_API_KEY": "${input:CONTEXT7_API_KEY}"
+      },
+      "gallery": "https://api.mcp.github.com",
+      "version": "1.0.31"
+    },
+    "notion": {
+      "type": "http",
+      "url": "https://mcp.notion.com/mcp"
+    },
+    "com.supabase/mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "--project-ref",
+        "${input:project-ref}",
+        "--read-only",
+        "${input:read-only}",
+        "--features",
+        "${input:features}",
+        "--api-url",
+        "${input:api-url}",
+        "--registry",
+        "https://registry.npmjs.org",
+        "@supabase/mcp-server-supabase@0.7.0"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "${input:SUPABASE_ACCESS_TOKEN}"
+      },
+      "gallery": "https://api.mcp.github.com",
+      "version": "0.7.0"
+    }
+  },
+  "inputs": [
+    {
+      "id": "CONTEXT7_API_KEY",
+      "type": "promptString",
+      "description": "API key for authentication",
+      "password": true
+    },
+    {
+      "id": "project-ref",
+      "type": "promptString",
+      "description": "Supabase project reference ID",
+      "password": false
+    },
+    {
+      "id": "read-only",
+      "type": "promptString",
+      "description": "Enable read-only mode",
+      "password": false
+    },
+    {
+      "id": "features",
+      "type": "promptString",
+      "description": "Comma-separated list of features to enable",
+      "password": false
+    },
+    {
+      "id": "api-url",
+      "type": "promptString",
+      "description": "Custom API URL",
+      "password": false
+    },
+    {
+      "id": "SUPABASE_ACCESS_TOKEN",
+      "type": "promptString",
+      "description": "Personal access token for Supabase API",
+      "password": true
+    }
+  ]
 }

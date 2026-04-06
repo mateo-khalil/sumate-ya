@@ -1,0 +1,97 @@
+digraph SumateYaMER {
+  graph [
+    label="Sumate Ya - Modelo Entidad Relacion",
+    labelloc=t,
+    fontsize=20,
+    fontname="Helvetica-Bold",
+    rankdir=LR,
+    splines=ortho,
+    nodesep=0.8,
+    ranksep=1.0,
+    pad=0.3
+  ];
+
+  node [shape=plain, fontname="Helvetica"];
+  edge [color="#475569", fontname="Helvetica", fontsize=10, arrowsize=0.8, penwidth=1.2];
+
+  users [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#334155">
+      <TR><TD BGCOLOR="#E2E8F0"><B>USERS</B></TD></TR>
+      <TR><TD ALIGN="LEFT">PK id</TD></TR>
+      <TR><TD ALIGN="LEFT">name</TD></TR>
+      <TR><TD ALIGN="LEFT">email</TD></TR>
+      <TR><TD ALIGN="LEFT">role</TD></TR>
+    </TABLE>
+  >];
+
+  clubs [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#334155">
+      <TR><TD BGCOLOR="#E2E8F0"><B>CLUBS</B></TD></TR>
+      <TR><TD ALIGN="LEFT">PK id</TD></TR>
+      <TR><TD ALIGN="LEFT">name</TD></TR>
+      <TR><TD ALIGN="LEFT">zone</TD></TR>
+    </TABLE>
+  >];
+
+  clubSlots [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#334155">
+      <TR><TD BGCOLOR="#E2E8F0"><B>CLUB_SLOTS</B></TD></TR>
+      <TR><TD ALIGN="LEFT">PK id</TD></TR>
+      <TR><TD ALIGN="LEFT">FK clubId</TD></TR>
+      <TR><TD ALIGN="LEFT">slot</TD></TR>
+    </TABLE>
+  >];
+
+  matches [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#334155">
+      <TR><TD BGCOLOR="#E2E8F0"><B>MATCHES</B></TD></TR>
+      <TR><TD ALIGN="LEFT">PK id</TD></TR>
+      <TR><TD ALIGN="LEFT">organizerId</TD></TR>
+      <TR><TD ALIGN="LEFT">FK clubId</TD></TR>
+      <TR><TD ALIGN="LEFT">format</TD></TR>
+      <TR><TD ALIGN="LEFT">capacity</TD></TR>
+      <TR><TD ALIGN="LEFT">slot</TD></TR>
+    </TABLE>
+  >];
+
+  matchParticipants [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#334155">
+      <TR><TD BGCOLOR="#E2E8F0"><B>MATCH_PARTICIPANTS</B></TD></TR>
+      <TR><TD ALIGN="LEFT">PK id</TD></TR>
+      <TR><TD ALIGN="LEFT">FK matchId</TD></TR>
+      <TR><TD ALIGN="LEFT">playerId</TD></TR>
+      <TR><TD ALIGN="LEFT">team</TD></TR>
+    </TABLE>
+  >];
+
+  tournaments [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#334155">
+      <TR><TD BGCOLOR="#E2E8F0"><B>TOURNAMENTS</B></TD></TR>
+      <TR><TD ALIGN="LEFT">PK id</TD></TR>
+      <TR><TD ALIGN="LEFT">organizerId</TD></TR>
+      <TR><TD ALIGN="LEFT">FK clubId</TD></TR>
+      <TR><TD ALIGN="LEFT">name</TD></TR>
+      <TR><TD ALIGN="LEFT">format</TD></TR>
+    </TABLE>
+  >];
+
+  tournamentSlots [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#334155">
+      <TR><TD BGCOLOR="#E2E8F0"><B>TOURNAMENT_SLOTS</B></TD></TR>
+      <TR><TD ALIGN="LEFT">PK id</TD></TR>
+      <TR><TD ALIGN="LEFT">FK tournamentId</TD></TR>
+      <TR><TD ALIGN="LEFT">slot</TD></TR>
+    </TABLE>
+  >];
+
+  clubs -> clubSlots [label="disponibilidad", taillabel="1", headlabel="N", labeldistance=1.8];
+  clubs -> matches [label="sede", taillabel="1", headlabel="N", labeldistance=1.8];
+  clubs -> tournaments [label="sede", taillabel="1", headlabel="N", labeldistance=1.8];
+
+  matches -> matchParticipants [label="participantes", taillabel="1", headlabel="N", labeldistance=1.8];
+  tournaments -> tournamentSlots [label="jornadas", taillabel="1", headlabel="N", labeldistance=1.8];
+
+  users -> matches [label="organiza", taillabel="1", headlabel="N", labeldistance=1.8];
+  users -> tournaments [label="organiza", taillabel="1", headlabel="N", labeldistance=1.8];
+  users -> matchParticipants [label="participa", taillabel="1", headlabel="N", labeldistance=1.8];
+}
