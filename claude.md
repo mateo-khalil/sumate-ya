@@ -31,6 +31,22 @@ apps/
 packages/      → Shared code (types, utils, GraphQL fragments)
 ```
 
+## Hard Rule: Frontend Rules First (Mandatory)
+
+Before working on any file under `apps/frontend/**`, always read `.claude/rules/frontend.md` first.
+
+## Hard Rule: Backend Rules First (Mandatory)
+
+Before working on any file under `apps/backend/**`, always read `.claude/rules/backend.md` first.
+When backend work touches GraphQL schema/resolvers/contracts, also read `.claude/rules/graphql.md`.
+
+### Required behavior
+
+1. Treat `.claude/rules/backend.md` as the source of truth for backend architecture and coding constraints.
+2. Follow its required folder structure, import rules, RLS/client patterns, and caching constraints on every backend task.
+3. Apply `.claude/rules/graphql.md` for backend GraphQL work and run codegen after `.graphql` edits.
+4. If a backend task needs an exception, update the rule file first (or ask for confirmation) before implementing code changes.
+
 ### Astro SSR Strategy (CRITICAL)
 
 Use **hybrid rendering** (`output: 'hybrid'` in astro.config). Pages are **static by default** and opt into SSR only when needed.
