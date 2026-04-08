@@ -6,12 +6,12 @@ After finishing EVERY user task, the agent MUST create exactly one new markdown 
 
 ### Required behavior
 
-1. Read existing files in `docs/prompts/` and find the highest numeric ID used.
-2. Create the next file with ID = previous max + 1.
-3. Use zero-padded IDs with 4 digits.
-4. Filename format MUST be: `docs/prompts/####-prompt-log.md`.
-   - Examples: `0001-prompt-log.md`, `0002-prompt-log.md`.
-5. If no files exist yet, start at `0001-prompt-log.md`.
+1. Generate a random task ID (recommended: 8+ lowercase alphanumeric characters).
+2. Check `docs/prompts/` to ensure the generated ID is not already used.
+3. If there is a collision, generate a new random ID and retry.
+4. Filename format MUST be: `docs/prompts/<random-id>-prompt-log.md`.
+   - Examples: `a7f3k9q2-prompt-log.md`, `x4m1t8vb-prompt-log.md`.
+5. Do not use sequential numbering.
 6. The file content MUST include:
    - The user prompt, copied explicitly.
    - Exactly 3 bullet points summarizing what the agent mainly did.
@@ -24,7 +24,7 @@ After finishing EVERY user task, the agent MUST create exactly one new markdown 
 # Prompt Log
 
 - Timestamp: YYYY-MM-DD HH:mm:ss
-- Task ID: ####
+- Task ID: <random-id>
 
 ## User Prompt
 
