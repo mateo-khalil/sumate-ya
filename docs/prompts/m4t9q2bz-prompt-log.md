@@ -5,7 +5,7 @@
 
 ## User Prompt
 
-> remove tracking for this file. 
+> remove tracking for this file.
 > .vscode/mcp.json
 
 ## Agent Main Actions

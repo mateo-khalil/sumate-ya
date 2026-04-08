@@ -6,20 +6,20 @@
 
 Sumate Ya is a football player connection platform. Monorepo managed by **Turbo + pnpm**.
 
-| Layer | Technology | Notes |
-|-------|-----------|-------|
-| **Frontend** | Astro 6 + React 19 | Hybrid rendering (static by default, SSR opt-in) |
-| **UI Library** | shadcn/ui + Tailwind CSS 4 + Radix UI | React-based components via Astro React integration |
-| **Client State** | nanostores + @nanostores/react | Lightweight, framework-agnostic, Astro-native |
-| **GraphQL Client** | urql | Lightweight, tree-shakeable, SSR-friendly |
-| **Backend** | Express 5 + Apollo Server 5 | Node.js >= 22.12, TypeScript, ESM |
-| **API Protocol** | GraphQL (player-facing) + REST (auth, admin, webhooks) | See `backend.md` for routing rules |
-| **Database** | Supabase (PostgreSQL) | camelCase naming, quoted identifiers, RLS enforced |
-| **Auth** | Supabase Auth + JWT | Profiles table extends auth.users |
-| **Cache** | Redis via ioredis | Service-layer caching with `cacheGetOrSet()` |
-| **Validation** | Zod | Schema validation on backend inputs |
-| **Testing** | Vitest | Unit + integration tests |
-| **Codegen** | GraphQL CodeGen | Auto-generates TS types from `.graphql` schemas |
+| Layer              | Technology                                             | Notes                                              |
+| ------------------ | ------------------------------------------------------ | -------------------------------------------------- |
+| **Frontend**       | Astro 6 + React 19                                     | Hybrid rendering (static by default, SSR opt-in)   |
+| **UI Library**     | shadcn/ui + Tailwind CSS 4 + Radix UI                  | React-based components via Astro React integration |
+| **Client State**   | nanostores + @nanostores/react                         | Lightweight, framework-agnostic, Astro-native      |
+| **GraphQL Client** | urql                                                   | Lightweight, tree-shakeable, SSR-friendly          |
+| **Backend**        | Express 5 + Apollo Server 5                            | Node.js >= 22.12, TypeScript, ESM                  |
+| **API Protocol**   | GraphQL (player-facing) + REST (auth, admin, webhooks) | See `backend.md` for routing rules                 |
+| **Database**       | Supabase (PostgreSQL)                                  | camelCase naming, quoted identifiers, RLS enforced |
+| **Auth**           | Supabase Auth + JWT                                    | Profiles table extends auth.users                  |
+| **Cache**          | Redis via ioredis                                      | Service-layer caching with `cacheGetOrSet()`       |
+| **Validation**     | Zod                                                    | Schema validation on backend inputs                |
+| **Testing**        | Vitest                                                 | Unit + integration tests                           |
+| **Codegen**        | GraphQL CodeGen                                        | Auto-generates TS types from `.graphql` schemas    |
 
 ### Monorepo Structure
 
@@ -36,16 +36,19 @@ packages/      → Shared code (types, utils, GraphQL fragments)
 Use **hybrid rendering** (`output: 'hybrid'` in astro.config). Pages are **static by default** and opt into SSR only when needed.
 
 **Use static (default) for:**
+
 - Landing page, about, legal pages
 - Public match/tournament listings (hydrate filters client-side)
 - Any page where content is the same for all users
 
 **Use SSR (`export const prerender = false`) only when:**
+
 - The page requires auth-gated data that cannot be fetched client-side
 - The page needs server-side redirects based on session state
 - SEO requires personalized or real-time content in the initial HTML
 
 **Hydration rules:**
+
 - Use `client:load` for interactive components that must work immediately (nav, auth forms)
 - Use `client:visible` for components below the fold (match cards, filters, maps)
 - Use `client:idle` for non-critical interactivity (notifications badge, tooltips)
