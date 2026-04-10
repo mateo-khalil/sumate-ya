@@ -1,0 +1,30 @@
+# GraphQL Schema: Match and Club types with queries
+
+# Club where matches are played
+type Club {
+  id: ID!
+  name: String!
+  zone: String
+  imageUrl: String
+}
+
+# A football match that players can join
+type Match {
+  id: ID!
+  title: String!
+  startTime: String!
+  format: String!
+  totalSlots: Int!
+  availableSlots: Int!
+  status: String!
+  club: Club
+  createdAt: String!
+}
+
+# Root Query type
+type Query {
+  # Get matches optionally filtered by status. Default returns all open matches
+  matches(status: String): [Match!]!
+  # Get a single match by ID
+  match(id: ID!): Match
+}

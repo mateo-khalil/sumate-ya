@@ -1,0 +1,26 @@
+---
+/**
+ * Partidos Page - List of available matches
+ *
+ * Decision Context:
+ * - Why: Static page (default in hybrid mode) with client-visible hydration for interactive cards.
+ * - Pattern: Uses MatchList React island with client:visible for lazy hydration.
+ * - Query is public (no auth required) so no SSR needed.
+ * - Previously fixed bugs: none relevant.
+ */
+import Layout from '@/layouts/Layout.astro';
+import { MatchList } from '@/components/matches';
+---
+
+<Layout title="Partidos Disponibles - Sumate Ya">
+  <main class="container mx-auto px-4 py-8">
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold tracking-tight">Partidos Disponibles</h1>
+      <p class="text-muted-foreground mt-2">
+        Encontrá un partido cerca tuyo y sumate a jugar
+      </p>
+    </header>
+
+    <MatchList client:visible />
+  </main>
+</Layout>

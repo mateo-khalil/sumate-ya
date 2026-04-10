@@ -1,0 +1,34 @@
+# Partidos (Matches) Disponibles
+
+query GetOpenMatches {
+  matches(status: "open") {
+    id
+    title
+    startTime
+    format
+    totalSlots
+    availableSlots
+    club {
+      name
+      zone
+    }
+  }
+}
+
+query GetMatchById($id: ID!) {
+  match(id: $id) {
+    id
+    title
+    startTime
+    format
+    totalSlots
+    availableSlots
+    status
+    createdAt
+    club {
+      name
+      zone
+      imageUrl
+    }
+  }
+}

@@ -1,177 +1,121 @@
-import type { Match } from '../types.js'
-import { db } from '../config/database.js'
+/**
+ * Match Repository - Database access layer for matches
+ *
+ * Decision Context:
+ * - Why: Explicit column selection prevents egress costs (backend.md egress prevention rules).
+ * - Pattern: COLUMNS constant per table, JOIN for related data to avoid N+1.
+ * - Previously fixed bugs: Adapted to actual Supabase schema with scheduledAt, capacity, description.
+ */
 
-interface MatchRow {
-  id: string
-  organizerId: string
-  organizerName: string
-  clubId: string
-  clubName: string
-  zone: string
-  slot: Date
-  format: number
-  capacity: number
-  invitedPlayerIds: string[]
-  requiresTeamSelection: boolean
-  createdAt: Date
-}
+import { supabase } from '../config/supabase.js';
+import type { SupabaseClient } from '../config/supabase.js';
+
+// =====================================================
+// Column Definitions (NEVER use select('*'))
+// Matches actual Supabase schema
+// =====================================================
 
 const MATCH_COLUMNS = `
-  m."id",
-  m."organizerId",
-  m."organizerName",
-  m."clubId",
-  m."clubName",
-  m."zone",
-  m."slot",
-  m."format",
-  m."capacity",
-  m."invitedPlayerIds",
-  m."requiresTeamSelection",
-  m."createdAt"
-`
+  id,
+  description,
+  "scheduledAt",
+  format,
+  capacity,
+  status,
+  "createdAt",
+  "clubId"
+`;
 
-const mapRowToMatch = async (row: MatchRow): Promise<Match> => {
-  const { rows: participants } = await db.query<{
-    playerId: string
-    name: string
-    team: 'A' | 'B' | null
-  }>(
-    `
-      SELECT "playerId", "name", "team"
-      FROM "matchParticipants"
-      WHERE "matchId" = $1
-      ORDER BY "id"
-    `,
-    [row.id]
-  )
+const CLUB_COLUMNS = `
+  id,
+  name,
+  zone
+`;
 
-  return {
-    id: row.id,
-    organizerId: row.organizerId,
-    organizerName: row.organizerName,
-    clubId: row.clubId,
-    clubName: row.clubName,
-    zone: row.zone,
-    slot: new Date(row.slot).toISOString(),
-    format: row.format as Match['format'],
-    capacity: row.capacity,
-    invitedPlayerIds: row.invitedPlayerIds ?? [],
-    participants,
-    requiresTeamSelection: row.requiresTeamSelection,
-    createdAt: new Date(row.createdAt).toISOString(),
+// =====================================================
+// Types
+// =====================================================
+
+export interface MatchRow {
+  id: string;
+  description: string | null;
+  scheduledAt: string;
+  format: string;
+  capacity: number;
+  status: string;
+  createdAt: string;
+  clubId: string | null;
+}
+
+export interface ClubRow {
+  id: string;
+  name: string;
+  zone: string | null;
+}
+
+export interface MatchWithClub extends MatchRow {
+  clubs: ClubRow | null;
+}
+
+// =====================================================
+// Repository Functions
+// =====================================================
+
+/**
+ * Get all matches with a specific status, including club data
+ */
+export async function getMatchesByStatus(
+  status: string,
+  client: SupabaseClient = supabase
+): Promise<MatchWithClub[]> {
+  const { data, error } = await client
+    .from('matches')
+    .select(`${MATCH_COLUMNS}, clubs(${CLUB_COLUMNS})`)
+    .eq('status', status)
+    .order('scheduledAt', { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to fetch matches: ${error.message}`);
   }
+
+  return (data as MatchWithClub[]) || [];
 }
 
+/**
+ * Get a single match by ID with club data
+ */
+export async function getMatchById(
+  id: string,
+  client: SupabaseClient = supabase
+): Promise<MatchWithClub | null> {
+  const { data, error } = await client
+    .from('matches')
+    .select(`${MATCH_COLUMNS}, clubs(${CLUB_COLUMNS})`)
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null; // Not found
+    }
+    throw new Error(`Failed to fetch match: ${error.message}`);
+  }
+
+  return data as MatchWithClub;
+}
+
+/**
+ * Get all open matches (convenience wrapper)
+ */
+export async function getOpenMatches(
+  client: SupabaseClient = supabase
+): Promise<MatchWithClub[]> {
+  return getMatchesByStatus('open', client);
+}
+
+// Export repository as object for consistency
 export const matchRepository = {
-  async create(match: Match) {
-    const client = await db.connect()
-    try {
-      await client.query('BEGIN')
-      await client.query(
-        `
-          INSERT INTO "matches" (
-            "id", "organizerId", "organizerName", "clubId", "clubName", "zone",
-            "slot", "format", "capacity", "invitedPlayerIds", "requiresTeamSelection", "createdAt"
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)
-        `,
-        [
-          match.id,
-          match.organizerId,
-          match.organizerName,
-          match.clubId,
-          match.clubName,
-          match.zone,
-          match.slot,
-          match.format,
-          match.capacity,
-          JSON.stringify(match.invitedPlayerIds),
-          match.requiresTeamSelection,
-          match.createdAt,
-        ]
-      )
-
-      for (const participant of match.participants) {
-        await client.query(
-          `
-            INSERT INTO "matchParticipants" ("matchId", "playerId", "name", "team")
-            VALUES ($1, $2, $3, $4)
-          `,
-          [match.id, participant.playerId, participant.name, participant.team]
-        )
-      }
-
-      await client.query('COMMIT')
-      return match
-    } catch (error) {
-      await client.query('ROLLBACK')
-      const message = error instanceof Error ? error.message : 'Error al crear match'
-      throw new Error(message)
-    } finally {
-      client.release()
-    }
-  },
-
-  async findAll() {
-    const { rows } = await db.query<MatchRow>(
-      `
-        SELECT ${MATCH_COLUMNS}
-        FROM "matches" m
-        ORDER BY m."createdAt" DESC
-      `
-    )
-
-    return Promise.all(rows.map((row) => mapRowToMatch(row)))
-  },
-
-  async findById(matchId: string) {
-    const { rows } = await db.query<MatchRow>(
-      `
-        SELECT ${MATCH_COLUMNS}
-        FROM "matches" m
-        WHERE m."id" = $1
-        LIMIT 1
-      `,
-      [matchId]
-    )
-
-    const row = rows[0]
-    if (!row) {
-      return null
-    }
-
-    return mapRowToMatch(row)
-  },
-
-  async addParticipant(matchId: string, input: { playerId: string; name: string; team: 'A' | 'B' | null }) {
-    await db.query(
-      `
-        INSERT INTO "matchParticipants" ("matchId", "playerId", "name", "team")
-        VALUES ($1, $2, $3, $4)
-      `,
-      [matchId, input.playerId, input.name, input.team]
-    )
-  },
-
-  async updateParticipantTeam(matchId: string, playerId: string, team: 'A' | 'B') {
-    await db.query(
-      `
-        UPDATE "matchParticipants"
-        SET "team" = $3
-        WHERE "matchId" = $1 AND "playerId" = $2
-      `,
-      [matchId, playerId, team]
-    )
-  },
-
-  async removeParticipant(matchId: string, playerId: string) {
-    await db.query(
-      `
-        DELETE FROM "matchParticipants"
-        WHERE "matchId" = $1 AND "playerId" = $2
-      `,
-      [matchId, playerId]
-    )
-  },
-}
+  getMatchesByStatus,
+  getMatchById,
+  getOpenMatches,
+};
