@@ -137,15 +137,21 @@ export async function cacheDelete(key: string): Promise<void> {
 }
 
 /**
- * Delete all keys matching a pattern
- * Use for invalidating related caches (e.g., all match lists)
+ * Delete all keys matching a pattern.
+ * Use for invalidating related caches (e.g., all match lists).
+ *
+ * NOTE: Must null-check `redis` FIRST — when REDIS_URL is unset, `redis` is null and
+ * calling `.keys()` on it would crash the request path. Previously fixed bug: an early
+ * revision omitted this guard and any mutation handler that invalidated cache in a
+ * Redis-less dev environment would 500.
  */
 export async function cacheDeletePattern(pattern: string): Promise<void> {
+  if (!redis || !redisAvailable) return;
+
   try {
     const keys = await redis.keys(pattern);
     if (keys.length > 0) {
       await redis.del(...keys);
-      console.log(`[Redis] Deleted ${keys.length} keys matching: ${pattern}`);
     }
   } catch (error) {
     console.error(`[Redis] cacheDeletePattern error for pattern ${pattern}:`, error);

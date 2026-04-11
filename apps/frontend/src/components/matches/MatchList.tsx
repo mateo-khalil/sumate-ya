@@ -2,31 +2,23 @@
  * MatchList Component - Displays grid of match cards
  *
  * Decision Context:
- * - Why: Encapsulates data fetching with urql and renders MatchCard grid.
- * - Pattern: Client-side fetch on mount; hydrated via client:visible in Astro.
- * - Previously fixed bugs: none relevant.
+ * - Why: Encapsulates data fetching with urql and renders the MatchCard grid.
+ * - Pattern: Client-side fetch on mount; hydrated via `client:visible` in Astro so the
+ *   request only fires when the user scrolls the section into view. SSR-populated
+ *   `initialMatches` can skip the fetch entirely.
+ * - GraphQL operations live in `src/graphql/operations/matches.ts` (frontend.md rule:
+ *   no inline GraphQL strings inside UI components). If you need to edit the query,
+ *   update BOTH `operations/matches.graphql` (codegen source of truth) and `operations/matches.ts`.
+ * - Error + empty + loading states are handled inline because they are layout-specific
+ *   skeletons; extract to a shared component if another list reuses them.
+ * - Previously fixed bugs: inline `GET_OPEN_MATCHES` string was defined in this file,
+ *   which broke the frontend GraphQL rule and duplicated the `.graphql` operation.
  */
 
 import { useEffect, useState } from 'react';
 import { MatchCard, type Match } from './MatchCard';
 import { executeQuery } from '@/lib/urql-client';
-
-const GET_OPEN_MATCHES = `
-  query GetOpenMatches {
-    matches(status: "open") {
-      id
-      title
-      startTime
-      format
-      totalSlots
-      availableSlots
-      club {
-        name
-        zone
-      }
-    }
-  }
-`;
+import { GET_OPEN_MATCHES } from '@/graphql/operations/matches';
 
 interface MatchListProps {
   /** Initial matches for SSR/SSG hydration (optional) */
@@ -39,7 +31,6 @@ export function MatchList({ initialMatches }: MatchListProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Skip fetch if we have initial data
     if (initialMatches) return;
 
     async function fetchMatches() {
@@ -57,9 +48,9 @@ export function MatchList({ initialMatches }: MatchListProps) {
   }, [initialMatches]);
 
   const handleJoin = (matchId: string) => {
-    // TODO: Implement join match mutation
-    console.log('Join match:', matchId);
-    // For now, show alert
+    // TODO: Implement join match mutation against the backend once the
+    // matchPlayers table + RLS policies are in place (see backend.md rule
+    // "NEVER write to a new table without adding RLS policies").
     alert(`Próximamente: unirse al partido ${matchId}`);
   };
 

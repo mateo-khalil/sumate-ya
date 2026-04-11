@@ -2,49 +2,41 @@
  * Match Service - Business logic for matches
  *
  * Decision Context:
- * - Why: Services return data only (no side effects) per backend.md rules.
- * - Pattern: Uses cacheGetOrSet() for read-heavy paths with 3min TTL for dynamic data.
- * - Join with clubs done at repository level to prevent N+1.
- * - Schema: Uses Supabase with uuid IDs. Maps DB columns to GraphQL schema.
+ * - Why: Services return data only (no side effects) per backend.md rules. Side effects
+ *   (broadcasts, notifications) must stay in resolvers, not here.
+ * - Caching: All read paths go through `cacheGetOrSet()` (egress-prevention rule). TTL is
+ *   `DYNAMIC_DATA` (3 min) because match slots change frequently; single-match lookups use
+ *   `SINGLE_ENTITY` (30 min). When mutations land that change match state, invalidate via
+ *   `cacheDelete(CACHE_PREFIX.MATCHES_OPEN)` and `cacheDeletePattern(CACHE_PREFIX.MATCHES_LIST + ':*')`.
+ * - Schema mapping: Supabase columns `description`, `scheduledAt`, `capacity` are mapped to
+ *   GraphQL fields `title`, `startTime`, `totalSlots` because the DB schema predates the
+ *   GraphQL contract. Keep this mapping in one place (`toMatchDTO`) so resolvers never see
+ *   raw DB rows.
+ * - `availableSlots` is currently `capacity` — participant counting is a TODO that requires
+ *   joining `matchPlayers`. Do NOT ship join logic without adding RLS policies for that table.
+ * - Uses generated GraphQL `Match` type so schema changes break this file at build time.
+ * - Previously fixed bugs: removed ad-hoc console.log debugging that ran on every request —
+ *   those were left from initial scaffolding and polluted prod logs.
  */
 
 import { cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
+import type { Match } from '../graphql/generated/graphql.js';
 import { matchRepository, type MatchWithClub } from '../repositories/matchRepository.js';
 import type { ServiceContext } from '../types/context.js';
 
 // =====================================================
-// Types for GraphQL response
-// Maps Supabase schema to frontend-friendly format
+// Data Transformation (DB row -> GraphQL contract)
 // =====================================================
 
-export interface MatchDTO {
-  id: string;
-  title: string;          // mapped from description
-  startTime: string;      // mapped from scheduledAt
-  format: string;
-  totalSlots: number;     // mapped from capacity
-  availableSlots: number; // capacity - participants (TODO: count participants)
-  status: string;
-  createdAt: string;
-  club: {
-    id: string;
-    name: string;
-    zone: string | null;
-  } | null;
-}
-
-// =====================================================
-// Data Transformation
-// =====================================================
-
-function toMatchDTO(row: MatchWithClub): MatchDTO {
+function toMatch(row: MatchWithClub): Match {
   return {
     id: row.id,
-    title: row.description || 'Partido sin título',  // map description → title
-    startTime: row.scheduledAt,                       // map scheduledAt → startTime
+    title: row.description ?? 'Partido sin título',
+    startTime: row.scheduledAt,
     format: row.format,
-    totalSlots: row.capacity,                         // map capacity → totalSlots
-    availableSlots: row.capacity,                     // TODO: subtract participant count
+    totalSlots: row.capacity,
+    // TODO: subtract `matchPlayers` count once participants are modelled
+    availableSlots: row.capacity,
     status: row.status,
     createdAt: row.createdAt,
     club: row.clubs
@@ -62,69 +54,49 @@ function toMatchDTO(row: MatchWithClub): MatchDTO {
 // =====================================================
 
 /**
- * List open matches with caching
- * Public endpoint - no auth required
+ * List open matches. Public endpoint - no auth required.
  */
-export async function listOpenMatches(_ctx: ServiceContext): Promise<MatchDTO[]> {
-  const cacheKey = CACHE_PREFIX.MATCHES_OPEN;
-
-  try {
-    const matches = await cacheGetOrSet<MatchWithClub[]>(
-      cacheKey,
-      async () => {
-        console.log('[MatchService] Fetching open matches from DB...');
-        const result = await matchRepository.getOpenMatches();
-        console.log('[MatchService] Got matches:', JSON.stringify(result, null, 2));
-        return result;
-      },
-      CACHE_TTL.DYNAMIC_DATA // 3 minutes - slots change frequently
-    );
-
-    console.log('[MatchService] Transforming', matches.length, 'matches');
-    return matches.map(toMatchDTO);
-  } catch (error) {
-    console.error('[MatchService] Error in listOpenMatches:', error);
-    throw error;
-  }
+export async function listOpenMatches(_ctx: ServiceContext): Promise<Match[]> {
+  const matches = await cacheGetOrSet<MatchWithClub[]>(
+    CACHE_PREFIX.MATCHES_OPEN,
+    () => matchRepository.getOpenMatches(),
+    CACHE_TTL.DYNAMIC_DATA,
+  );
+  return matches.map(toMatch);
 }
 
 /**
- * List matches by status with caching
+ * List matches by status.
  */
 export async function listMatchesByStatus(
   _ctx: ServiceContext,
-  status: string
-): Promise<MatchDTO[]> {
+  status: string,
+): Promise<Match[]> {
   const cacheKey = `${CACHE_PREFIX.MATCHES_LIST}:${status}`;
-
   const matches = await cacheGetOrSet<MatchWithClub[]>(
     cacheKey,
     () => matchRepository.getMatchesByStatus(status),
-    CACHE_TTL.DYNAMIC_DATA
+    CACHE_TTL.DYNAMIC_DATA,
   );
-
-  return matches.map(toMatchDTO);
+  return matches.map(toMatch);
 }
 
 /**
- * Get single match by ID with caching
+ * Get a single match by id.
  */
 export async function getMatchById(
   _ctx: ServiceContext,
-  id: string
-): Promise<MatchDTO | null> {
+  id: string,
+): Promise<Match | null> {
   const cacheKey = `${CACHE_PREFIX.MATCH_DETAIL}${id}`;
-
   const match = await cacheGetOrSet<MatchWithClub | null>(
     cacheKey,
     () => matchRepository.getMatchById(id),
-    CACHE_TTL.SINGLE_ENTITY // 30 minutes
+    CACHE_TTL.SINGLE_ENTITY,
   );
-
-  return match ? toMatchDTO(match) : null;
+  return match ? toMatch(match) : null;
 }
 
-// Export service as object
 export const matchService = {
   listOpenMatches,
   listMatchesByStatus,

@@ -1,16 +1,16 @@
 /**
  * GraphQL Resolvers Index
- * Merges all domain resolvers into a single resolvers object
+ *
+ * Decision Context:
+ * - Why: Aggregates per-domain resolvers from `resolvers/domains/` per backend.md rule.
+ * - Pattern: Each domain module exports `{ Query, Mutation }` partials; this file merges them.
+ * - Previously fixed bugs: none relevant.
  */
 
-import { matchResolvers } from './matchResolver.js';
+import { matchResolvers } from './domains/match.js';
 
-// Merge all resolvers
 export const resolvers = {
   Query: {
     ...matchResolvers.Query,
   },
-  // Mutation: {
-  //   // Add mutation resolvers here when needed
-  // },
 };

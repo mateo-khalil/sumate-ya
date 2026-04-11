@@ -2,9 +2,20 @@
  * Match Repository - Database access layer for matches
  *
  * Decision Context:
- * - Why: Explicit column selection prevents egress costs (backend.md egress prevention rules).
- * - Pattern: COLUMNS constant per table, JOIN for related data to avoid N+1.
- * - Schema: Uses Supabase with RLS, uuid IDs. Columns: description, scheduledAt, capacity, status.
+ * - Why: Explicit column selection prevents egress costs (backend.md egress-prevention
+ *   rules — "NEVER use `select('*')`"). All SELECTed columns are listed in `MATCH_COLUMNS`
+ *   / `CLUB_COLUMNS` so adding a column to the DB does not silently grow response size.
+ * - JOIN pattern: `clubs(...)` pulls the related row in one round-trip to avoid a
+ *   GraphQL-resolver N+1. The relation is many-to-one (`matches.clubId -> clubs.id`), so
+ *   Supabase returns `clubs` as a single object, NOT an array — the casts below go through
+ *   `unknown` because Supabase's inferred relation type is the conservative array form.
+ * - Accepts an optional `client` argument so resolvers can pass a user-scoped Supabase
+ *   client for RLS-enforced reads (backend.md "RLS-Aware Database Access").
+ * - Schema: Supabase with RLS, uuid IDs, camelCase quoted identifiers.
+ * - Previously fixed bugs: a prior revision used `data as MatchWithClub[]` which failed
+ *   TS compilation because the inferred relation type did not overlap. Casting via
+ *   `unknown` is intentional and documented here; do not remove without fixing the root
+ *   cause (generated Supabase types).
  */
 
 import { supabase } from '../config/supabase.js';
@@ -78,7 +89,7 @@ export async function getMatchesByStatus(
     throw new Error(`Failed to fetch matches: ${error.message}`);
   }
 
-  return (data as MatchWithClub[]) || [];
+  return (data as unknown as MatchWithClub[]) || [];
 }
 
 /**
@@ -101,7 +112,7 @@ export async function getMatchById(
     throw new Error(`Failed to fetch match: ${error.message}`);
   }
 
-  return data as MatchWithClub;
+  return data as unknown as MatchWithClub;
 }
 
 /**
