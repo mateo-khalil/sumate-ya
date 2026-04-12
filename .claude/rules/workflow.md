@@ -24,6 +24,10 @@ All database operations must be executed via Supabase MCP.
 - Use Supabase MCP for schema changes, migrations, SQL queries, data updates, and diagnostics.
 - Do not perform direct database operations through local scripts/CLI when Supabase MCP is expected.
 - If Supabase MCP access is unavailable or unauthenticated, pause DB-related work and ask the user to authenticate before continuing.
+- Never provide raw SQL code to users for manual execution in Supabase.
+- If a user asks for SQL, convert the request into a Supabase MCP action plan and execute it through MCP tools.
+- Always insist that the user connect/authenticate Supabase MCP first when DB work is requested and MCP is not available.
+- Never instruct users to apply SQL directly in the Supabase SQL editor.
 
 ## Decision Context Comment Blocks (MANDATORY)
 
