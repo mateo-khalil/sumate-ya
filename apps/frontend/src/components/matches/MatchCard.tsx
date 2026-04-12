@@ -4,6 +4,8 @@
  * Decision Context:
  * - Why: Composable card using shadcn/ui primitives for consistent UI.
  * - Pattern: Props-driven, no internal state; parent manages data.
+ * - Format mapping: GraphQL uses enum values (FIVE_VS_FIVE) which we map to display
+ *   labels here for user-friendly presentation.
  * - Previously fixed bugs: none relevant.
  */
 
@@ -17,14 +19,16 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar, MapPin, Users } from 'lucide-react';
+import type { MatchFormat, MatchStatus } from '@/graphql/operations/matches';
 
 export interface Match {
   id: string;
   title: string;
   startTime: string;
-  format: string;
+  format: MatchFormat;
   totalSlots: number;
   availableSlots: number;
+  status?: MatchStatus;
   club: {
     name: string;
     zone: string | null;
@@ -60,15 +64,17 @@ function formatTime(isoDate: string): string {
 }
 
 /**
- * Get format display name
+ * Map GraphQL format enum to display label
  */
-function formatDisplay(format: string): string {
-  const formats: Record<string, string> = {
-    'futbol-5': 'Fútbol 5',
-    'futbol-7': 'Fútbol 7',
-    'futbol-11': 'Fútbol 11',
-  };
-  return formats[format] || format;
+const FORMAT_LABELS: Record<MatchFormat, string> = {
+  FIVE_VS_FIVE: '5v5',
+  SEVEN_VS_SEVEN: '7v7',
+  TEN_VS_TEN: '10v10',
+  ELEVEN_VS_ELEVEN: '11v11',
+};
+
+function formatDisplay(format: MatchFormat): string {
+  return FORMAT_LABELS[format] || format;
 }
 
 export function MatchCard({ match, onJoin }: MatchCardProps) {

@@ -1,5 +1,5 @@
 import { GraphQLResolveInfo } from 'graphql';
-import { GraphQLContext } from '../types/context.js';
+import { GraphQLContext } from '../../types/context.js';
 export type Maybe<T> = T | null;
 export type InputMaybe<T> = Maybe<T>;
 export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
@@ -30,13 +30,37 @@ export type Match = {
   availableSlots: Scalars['Int']['output'];
   club?: Maybe<Club>;
   createdAt: Scalars['String']['output'];
-  format: Scalars['String']['output'];
+  format: MatchFormat;
   id: Scalars['ID']['output'];
   startTime: Scalars['String']['output'];
-  status: Scalars['String']['output'];
+  status: MatchStatus;
   title: Scalars['String']['output'];
   totalSlots: Scalars['Int']['output'];
 };
+
+export type MatchFilters = {
+  dateFrom?: InputMaybe<Scalars['String']['input']>;
+  dateTo?: InputMaybe<Scalars['String']['input']>;
+  format?: InputMaybe<MatchFormat>;
+  search?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<MatchStatus>;
+  zone?: InputMaybe<Scalars['String']['input']>;
+};
+
+export enum MatchFormat {
+  ElevenVsEleven = 'ELEVEN_VS_ELEVEN',
+  FiveVsFive = 'FIVE_VS_FIVE',
+  SevenVsSeven = 'SEVEN_VS_SEVEN',
+  TenVsTen = 'TEN_VS_TEN'
+}
+
+export enum MatchStatus {
+  Cancelled = 'CANCELLED',
+  Completed = 'COMPLETED',
+  Full = 'FULL',
+  InProgress = 'IN_PROGRESS',
+  Open = 'OPEN'
+}
 
 export type Query = {
   __typename?: 'Query';
@@ -51,7 +75,7 @@ export type QueryMatchArgs = {
 
 
 export type QueryMatchesArgs = {
-  status?: InputMaybe<Scalars['String']['input']>;
+  filters?: InputMaybe<MatchFilters>;
 };
 
 export type WithIndex<TObject> = TObject & Record<string, any>;
@@ -133,6 +157,9 @@ export type ResolversTypes = ResolversObject<{
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
   Match: ResolverTypeWrapper<Match>;
+  MatchFilters: MatchFilters;
+  MatchFormat: MatchFormat;
+  MatchStatus: MatchStatus;
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
 }>;
@@ -144,6 +171,7 @@ export type ResolversParentTypes = ResolversObject<{
   ID: Scalars['ID']['output'];
   Int: Scalars['Int']['output'];
   Match: Match;
+  MatchFilters: MatchFilters;
   Query: Record<PropertyKey, never>;
   String: Scalars['String']['output'];
 }>;
@@ -159,10 +187,10 @@ export type MatchResolvers<ContextType = GraphQLContext, ParentType extends Reso
   availableSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   club?: Resolver<Maybe<ResolversTypes['Club']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  format?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  format?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  status?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['MatchStatus'], ParentType, ContextType>;
   title?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   totalSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
 }>;

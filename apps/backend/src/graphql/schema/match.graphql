@@ -13,18 +13,51 @@ type Match {
   id: ID!
   title: String!
   startTime: String!
-  format: String!
+  format: MatchFormat!
   totalSlots: Int!
   availableSlots: Int!
-  status: String!
+  status: MatchStatus!
   club: Club
   createdAt: String!
 }
 
+# Match format enum (players per team)
+enum MatchFormat {
+  FIVE_VS_FIVE
+  SEVEN_VS_SEVEN
+  TEN_VS_TEN
+  ELEVEN_VS_ELEVEN
+}
+
+# Match status enum
+enum MatchStatus {
+  OPEN
+  FULL
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+# Input for filtering matches
+input MatchFilters {
+  # Filter by status (default: OPEN)
+  status: MatchStatus
+  # Filter by match format
+  format: MatchFormat
+  # Filter by club zone
+  zone: String
+  # Filter by date (from)
+  dateFrom: String
+  # Filter by date (to)
+  dateTo: String
+  # Search text in title/description
+  search: String
+}
+
 # Root Query type
 type Query {
-  # Get matches optionally filtered by status. Default returns all open matches
-  matches(status: String): [Match!]!
+  # Get matches with optional filters
+  matches(filters: MatchFilters): [Match!]!
   # Get a single match by ID
   match(id: ID!): Match
 }

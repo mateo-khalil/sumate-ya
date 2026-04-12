@@ -10,8 +10,8 @@
  *   through `ServiceContext.supabase` so RLS policies can verify `auth.uid()`.
  * - Uses codegen-generated types (`QueryResolvers`) so schema drift fails at build time
  *   — hand-rolled response types were removed per backend.md "Generated types" rule.
- * - Debug console.log spam removed; if logging is needed later use a structured logger,
- *   not ad-hoc console calls in the request path.
+ * - Filter support: `matches` query now accepts `MatchFilters` input type for flexible
+ *   filtering by status, format, zone, date range, and text search.
  * - Previously fixed bugs: none relevant.
  */
 
@@ -20,15 +20,11 @@ import type { QueryResolvers } from '../../generated/graphql.js';
 
 const Query: QueryResolvers = {
   /**
-   * Get matches filtered by status. Defaults to 'open' if no status provided.
+   * Get matches with optional filters. Defaults to open matches if no filters provided.
    * Public endpoint - no auth required.
    */
   matches: async (_parent, args, _ctx) => {
-    const status = args.status ?? 'open';
-    if (status === 'open') {
-      return matchService.listOpenMatches({});
-    }
-    return matchService.listMatchesByStatus({}, status);
+    return matchService.listMatches({}, args.filters);
   },
 
   /**

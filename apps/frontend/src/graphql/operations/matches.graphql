@@ -1,13 +1,14 @@
 # Partidos (Matches) Disponibles
 
-query GetOpenMatches {
-  matches(status: "open") {
+query GetMatches($filters: MatchFilters) {
+  matches(filters: $filters) {
     id
     title
     startTime
     format
     totalSlots
     availableSlots
+    status
     club {
       name
       zone
