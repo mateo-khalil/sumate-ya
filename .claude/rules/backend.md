@@ -141,6 +141,9 @@ catch (error) {
 - Use migrations for all schema changes (new tables, columns, indexes, RLS policies)
 - Test complex queries before embedding in service code
 - **camelCase naming**: All table and column names must be camelCase — always quote identifiers in SQL (e.g. `CREATE TABLE "matchPlayers" ("playerId" uuid NOT NULL)`)
+- Never provide SQL snippets to users for manual execution in Supabase
+- If DB work is requested and Supabase MCP is not connected/authenticated, stop and insist the user connect Supabase MCP first
+- Convert SQL requests into Supabase MCP operations instead of returning raw SQL text
 
 ## Egress Prevention (CRITICAL)
 
