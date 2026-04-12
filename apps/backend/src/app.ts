@@ -3,6 +3,7 @@ import cors from 'cors';
 import 'dotenv/config';
 
 import { applyApolloMiddleware } from './graphql/server.js';
+import { authMiddleware } from './middleware/auth.js';
 
 const app = express();
 
@@ -19,4 +20,9 @@ applyApolloMiddleware(app).catch((err) => {
   process.exit(1);
 });
 
+// Ejemplo: rutas protegidas por JWT
+// app.use('/api/partidos', authMiddleware, partidosRouter);
+// app.use('/api/club', authMiddleware, clubRouter);
+
+export { authMiddleware };
 export default app;
