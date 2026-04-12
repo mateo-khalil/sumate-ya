@@ -1,0 +1,132 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout>
+	<main class="login-page">
+		<section class="login-card" aria-labelledby="login-title">
+			<h1 id="login-title">Iniciar sesion</h1>
+			<p>Accede con tu email y password para continuar.</p>
+
+			<form id="login-form" class="login-form" novalidate>
+				<label for="email">Email</label>
+				<input
+					id="email"
+					name="email"
+					type="email"
+					autocomplete="email"
+					required
+					placeholder="tu@email.com"
+				/>
+
+				<label for="password">Password</label>
+				<input
+					id="password"
+					name="password"
+					type="password"
+					autocomplete="current-password"
+					required
+					minlength="6"
+					placeholder="••••••••"
+				/>
+
+				<button type="submit">Entrar</button>
+			</form>
+		</section>
+	</main>
+</Layout>
+
+<script>
+	// Decision context:
+	// - Why this approach: We keep login as a client-only form submission that redirects to '/' so the UX is immediate while backend auth is not yet wired.
+	// - Context and constraints: This Astro app is static-first; posting credentials to a non-existent backend endpoint would fail. We still enforce required email/password fields client-side.
+	// - Previously fixed bugs: none relevant.
+	// - Assumptions and caveats: This page does not authenticate users yet; it only validates the form and navigates to homepage.
+	const form = document.querySelector<HTMLFormElement>('#login-form');
+
+	if (form) {
+		form.addEventListener('submit', (event) => {
+			event.preventDefault();
+
+			if (!(form instanceof HTMLFormElement) || !form.checkValidity()) {
+				form.reportValidity();
+				return;
+			}
+
+			window.location.assign('/');
+		});
+	}
+</script>
+
+<style>
+	.login-page {
+		min-height: 100vh;
+		display: grid;
+		place-items: center;
+		padding: 24px;
+		background:
+			radial-gradient(circle at top, #d4f4dd 0%, transparent 40%),
+			radial-gradient(circle at bottom right, #cfe8ff 0%, transparent 45%),
+			#f8fafc;
+	}
+
+	.login-card {
+		width: min(100%, 420px);
+		padding: 28px;
+		border-radius: 18px;
+		background: #ffffff;
+		border: 1px solid #d0d5dd;
+		box-shadow: 0 24px 60px rgba(16, 24, 40, 0.12);
+	}
+
+	h1 {
+		margin: 0;
+		font-size: 1.8rem;
+		color: #101828;
+	}
+
+	p {
+		margin: 8px 0 20px;
+		color: #475467;
+	}
+
+	.login-form {
+		display: grid;
+		gap: 10px;
+	}
+
+	label {
+		font-weight: 600;
+		color: #344054;
+	}
+
+	input {
+		height: 44px;
+		padding: 0 12px;
+		border-radius: 10px;
+		border: 1px solid #d0d5dd;
+		font: inherit;
+		outline: none;
+	}
+
+	input:focus {
+		border-color: #1570ef;
+		box-shadow: 0 0 0 4px rgba(21, 112, 239, 0.15);
+	}
+
+	button {
+		margin-top: 8px;
+		height: 44px;
+		border: none;
+		border-radius: 10px;
+		font: inherit;
+		font-weight: 700;
+		color: #ffffff;
+		cursor: pointer;
+		background: linear-gradient(90deg, #0b6e4f 0%, #1f9d73 100%);
+	}
+
+	button:hover {
+		filter: brightness(0.98);
+	}
+</style>
