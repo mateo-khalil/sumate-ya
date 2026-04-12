@@ -1,25 +1,42 @@
 # Sumate Ya
 
-## Cómo correr?
+## Puesta en marcha
 
-```
+### 1) Instalar dependencias
+
+```bash
 npm i -g pnpm
 pnpm install
 ```
 
-En este punto, hay que tener el .env en el root con las variables:
+### 2) Configurar variables de entorno
 
-```
-SUPABASE_SERVICE_KEY
+Creá un archivo `.env` en el root del repo con estas variables:
+
+```env
+SUPABASE_SERVICE_KEY=<tu_service_key>
 SUPABASE_URL=https://getfqjkfsueucoalvtcc.supabase.co
 ```
 
-```
-pnpm run sumate-ya -> Esto va a agregar un symlink del .env en cada app, esto solo funciona para unix systems, en windows hay que copiar manualmente el .env a cada carpeta de apps/backend y apps/frontend
+> [!IMPORTANT]
+> Sin el `.env` en la raíz del proyecto, la app no puede levantar correctamente.
+
+### 3) Vincular `.env` a las apps
+
+```bash
+pnpm run sumate-ya
 ```
 
+> [!NOTE]
+> Este comando crea un symlink del `.env` para cada app y funciona solo en sistemas Unix.
+
+> [!TIP]
+> En Windows, copiá manualmente el `.env` a:
+> - `apps/backend/.env`
+> - `apps/frontend/.env`
+
+### 4) Levantar entorno de desarrollo
+
+```bash
 pnpm run dev
-
-```
-
 ```
