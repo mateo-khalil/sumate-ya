@@ -120,10 +120,13 @@ After finishing EVERY user task, the agent MUST create exactly one new markdown 
    - Examples: `a7f3k9q2-prompt-log.md`, `x4m1t8vb-prompt-log.md`.
 5. Do not use sequential numbering.
 6. The file content MUST include:
-   - The user prompt, copied explicitly.
+   - The user prompt, copied explicitly, with secrets redacted.
    - Exactly 3 bullet points summarizing what the agent mainly did.
    - A timestamp.
 7. This rule is mandatory and must not be skipped.
+8. If the user prompt contains secrets, mask the sensitive values with `****` in the prompt log.
+   - Applies to API keys, tokens, passwords, private keys, connection strings, and webhook secrets.
+   - Keep useful context, but never store raw secret values in `docs/prompts/`.
 
 ### Required file template
 
@@ -135,7 +138,7 @@ After finishing EVERY user task, the agent MUST create exactly one new markdown 
 
 ## User Prompt
 
-> [Paste the exact user prompt here]
+> [Paste the user prompt here, redacting any secrets as ****]
 
 ## Agent Main Actions
 

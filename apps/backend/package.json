@@ -15,7 +15,16 @@
     "db:start": "docker compose -f docker-compose.yml up -d postgres",
     "db:stop": "docker compose -f docker-compose.yml down",
     "db:migrate": "tsx src/scripts/dbMigrate.ts",
-    "db:seed": "tsx src/scripts/dbSeed.ts"
+    "db:seed": "tsx src/scripts/dbSeed.ts",
+    "supabase": "supabase",
+    "supabase:link": "supabase link --project-ref getfqjkfsueucoalvtcc",
+    "supabase:new": "supabase migration new",
+    "supabase:push": "supabase db push",
+    "supabase:pull": "supabase db pull",
+    "supabase:diff": "supabase db diff",
+    "supabase:list": "supabase migration list",
+    "supabase:reset": "supabase db reset --linked",
+    "supabase:types": "supabase gen types typescript --linked --schema public > src/generated/supabase.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.5.0",
