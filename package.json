@@ -19,6 +19,7 @@
     "docker:logs": "docker compose logs -f app"
   },
   "devDependencies": {
+    "supabase": "^2.89.1",
     "turbo": "^2.8.20"
   }
 }
