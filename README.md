@@ -32,6 +32,7 @@ pnpm run sumate-ya
 
 > [!TIP]
 > En Windows, copiá manualmente el `.env` a:
+>
 > - `apps/backend/.env`
 > - `apps/frontend/.env`
 
