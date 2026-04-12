@@ -5,7 +5,7 @@
 
 ## User Prompt
 
-> modify the porompt logger rules and add a rule to if the pormpot have secerts, like use this apy key for etc filter that api key with ****
+> modify the porompt logger rules and add a rule to if the pormpot have secerts, like use this apy key for etc filter that api key with \*\*\*\*
 
 ## Agent Main Actions
 
