@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@apollo/server": "^5.5.0",
+    "@graphql-tools/schema": "^10.0.25",
     "@graphql-tools/merge": "^9.1.7",
     "@graphql-tools/load-files": "^7.0.1",
     "@supabase/supabase-js": "^2.101.1",
