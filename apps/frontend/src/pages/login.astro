@@ -1,4 +1,16 @@
 ---
+/**
+ * Login Page (SSR)
+ *
+ * Decision Context:
+ * - Why SSR: Handles POST form submission server-side and reads/writes auth cookies.
+ * - Pattern: Progressive enhancement — works without JS. POST + redirect, no client fetch.
+ * - Security: Uses getUser() (validates JWT server-side) instead of getSession().
+ *   Error messages are ambiguous to avoid revealing email existence.
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
 import Layout from '../layouts/Layout.astro';
 import { createSupabaseServerClient, getRoleRedirect, type UserRole } from '../lib/supabase';
 

@@ -1,29 +1,35 @@
 ---
+/**
+ * Partidos (authenticated) — SSR
+ *
+ * Decision Context:
+ * - Why SSR: Protected route that reads auth cookies server-side. Middleware redirects
+ *   unauthenticated users to /login.
+ * - Security: Uses getUser() (server-validated JWT) instead of getSession() which trusts
+ *   the cookie blindly.
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
 import Layout from '../../layouts/Layout.astro';
-import { createSupabaseServerClient } from '../../lib/supabase';
+import { MatchList } from '../../components/matches';
 
-const supabase = createSupabaseServerClient(Astro.cookies, Astro.request);
-const {
-  data: { session },
-} = await supabase.auth.getSession();
-
-// El middleware ya garantiza que session existe aquí,
-// pero lo leemos para mostrar datos del usuario.
-const user = session!.user;
+// User is verified and attached by middleware — no redundant getUser() call needed
+const user = Astro.locals.user!;
 const nombre = user.user_metadata?.nombre ?? user.email;
 ---
 
-<Layout title="Partidos">
+<Layout title="Partidos Disponibles - Sumate Ya">
   <main class="page-wrapper">
     <header class="page-header">
-      <h1>⚽ Mis Partidos</h1>
+      <h1>⚽ Partidos Disponibles</h1>
       <span class="user-badge">{nombre}</span>
       <form method="POST" action="/api/auth/logout">
         <button type="submit" class="btn-logout">Cerrar sesión</button>
       </form>
     </header>
     <section class="page-content">
-      <p class="placeholder">Próximamente: listado de partidos disponibles.</p>
+      <MatchList client:visible />
     </section>
   </main>
 </Layout>

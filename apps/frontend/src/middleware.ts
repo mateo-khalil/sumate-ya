@@ -1,3 +1,14 @@
+/**
+ * Astro SSR middleware — auth guard + role-based routing.
+ *
+ * Decision Context:
+ * - Why: Centralizes auth checks so individual pages don't repeat getUser() + redirect logic.
+ * - Pattern: Checks PROTECTED_ROUTES first (short-circuit for public paths).
+ *   For role-restricted routes, queries profiles.role and redirects mismatches.
+ * - Security: getUser() validates the JWT server-side (not just reading cookies).
+ * - Previously fixed bugs: none relevant.
+ */
+
 import { defineMiddleware } from 'astro:middleware';
 import { createSupabaseServerClient, type UserRole } from './lib/supabase';
 
@@ -9,7 +20,7 @@ const ROLE_RESTRICTED: Record<string, UserRole> = {
   '/panel-club': 'club_admin',
 };
 
-export const onRequest = defineMiddleware(async ({ cookies, request, url, redirect }, next) => {
+export const onRequest = defineMiddleware(async ({ cookies, request, url, redirect, locals }, next) => {
   const pathname = url.pathname;
 
   // Rutas públicas: continuar sin verificar
@@ -42,10 +53,12 @@ export const onRequest = defineMiddleware(async ({ cookies, request, url, redire
 
     const userRole = profile?.role as UserRole | undefined;
     if (userRole !== requiredRole) {
-      // Redirigir a la ruta apropiada para su rol en lugar de mostrar 403
       return redirect(userRole === 'club_admin' ? '/panel-club' : '/partidos');
     }
   }
+
+  // Attach verified user to locals so pages skip redundant getUser() calls
+  locals.user = user;
 
   return next();
 });

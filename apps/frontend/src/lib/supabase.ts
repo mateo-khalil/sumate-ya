@@ -1,3 +1,15 @@
+/**
+ * Supabase SSR client factory for Astro.
+ *
+ * Decision Context:
+ * - Why @supabase/ssr: Handles cookie-based session persistence across SSR requests.
+ *   createServerClient manages getAll/setAll cookie contract required by Supabase Auth.
+ * - Security: Cookies are httpOnly + secure (in prod) + sameSite=lax to prevent XSS/CSRF.
+ * - Constraints: Must use parseCookieHeader (not deprecated Astro cookie API) because
+ *   @supabase/ssr v0.10+ expects the getAll/setAll pattern.
+ * - Previously fixed bugs: none relevant.
+ */
+
 import { createServerClient, parseCookieHeader } from '@supabase/ssr';
 import type { CookieOptions } from '@supabase/ssr';
 import type { AstroCookies } from 'astro';

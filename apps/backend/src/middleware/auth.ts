@@ -1,7 +1,18 @@
-import type { Request, Response, NextFunction } from 'express';
-import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+/**
+ * Express JWT authentication middleware.
+ *
+ * Decision Context:
+ * - Why: REST routes need the same RLS-scoped Supabase client that GraphQL resolvers get.
+ * - Pattern: Reuses createUserClient() from config/supabase.ts so the token-to-client
+ *   logic is defined in a single place. Attaches req.user and req.supabase for downstream handlers.
+ * - Constraints: Must NOT reveal whether an email exists (ambiguous 401 messages).
+ * - Previously fixed bugs: none relevant.
+ */
 
-// Augmentar el tipo de Request para que los handlers tengan acceso al usuario y al cliente
+import type { Request, Response, NextFunction } from 'express';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
+import { createUserClient } from '../config/supabase.js';
+
 declare global {
   namespace Express {
     interface Request {
@@ -11,15 +22,6 @@ declare global {
   }
 }
 
-/**
- * Middleware de autenticación JWT.
- *
- * Extrae el accessToken del header `Authorization: Bearer <token>`,
- * lo verifica contra Supabase y adjunta `req.user` y `req.supabase`
- * (cliente con scope de usuario) para los handlers siguientes.
- *
- * Uso: app.use('/api/protected', authMiddleware, router)
- */
 export async function authMiddleware(
   req: Request,
   res: Response,
@@ -28,52 +30,29 @@ export async function authMiddleware(
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
-    res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Se requiere el header Authorization: Bearer <token>',
-    });
+    res.status(401).json({ error: 'Unauthorized', message: 'Missing or malformed token.' });
     return;
   }
 
   const accessToken = authHeader.slice(7).trim();
 
   if (!accessToken) {
-    res.status(401).json({ error: 'Unauthorized', message: 'Token vacío.' });
+    res.status(401).json({ error: 'Unauthorized', message: 'Missing or malformed token.' });
     return;
   }
 
-  // Crear cliente Supabase con el JWT del usuario.
-  // Esto respeta las políticas RLS definidas para ese usuario.
-  const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-      auth: {
-        // Deshabilitar persistencia: en el backend no queremos cookies ni localStorage
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    },
-  );
+  const supabase = createUserClient(accessToken);
 
-  // Verificar el token llamando a Supabase (valida firma y expiración)
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
 
   if (error || !user) {
-    res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Token inválido o expirado.',
-    });
+    res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token.' });
     return;
   }
 
-  // Adjuntar al request para uso en los handlers
   req.user = user;
   req.supabase = supabase;
 

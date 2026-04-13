@@ -1,13 +1,19 @@
 ---
+/**
+ * Panel de Club (authenticated, club_admin role) — SSR
+ *
+ * Decision Context:
+ * - Why SSR: Protected route gated by role. Middleware verifies club_admin role and
+ *   redirects others.
+ * - Security: Uses getUser() (server-validated JWT) instead of getSession().
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
 import Layout from '../../layouts/Layout.astro';
-import { createSupabaseServerClient } from '../../lib/supabase';
 
-const supabase = createSupabaseServerClient(Astro.cookies, Astro.request);
-const {
-  data: { session },
-} = await supabase.auth.getSession();
-
-const user = session!.user;
+// User is verified and attached by middleware — no redundant getUser() call needed
+const user = Astro.locals.user!;
 const nombre = user.user_metadata?.nombre ?? user.email;
 ---
 
