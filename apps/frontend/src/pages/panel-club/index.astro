@@ -1,0 +1,85 @@
+---
+/**
+ * Panel de Club (authenticated, club_admin role) — SSR
+ *
+ * Decision Context:
+ * - Why SSR: Protected route gated by role. Middleware verifies club_admin role and
+ *   redirects others.
+ * - Security: Uses getUser() (server-validated JWT) instead of getSession().
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
+import Layout from '../../layouts/Layout.astro';
+
+// User is verified and attached by middleware — no redundant getUser() call needed
+const user = Astro.locals.user!;
+const nombre = user.displayName || user.email;
+---
+
+<Layout title="Panel de Club">
+  <main class="page-wrapper">
+    <header class="page-header">
+      <h1>🏟️ Panel de Club</h1>
+      <span class="user-badge">{nombre}</span>
+      <form method="POST" action="/api/auth/logout">
+        <button type="submit" class="btn-logout">Cerrar sesión</button>
+      </form>
+    </header>
+    <section class="page-content">
+      <p class="placeholder">Próximamente: gestión de turnos y canchas del club.</p>
+    </section>
+  </main>
+</Layout>
+
+<style>
+  .page-wrapper {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .page-header h1 {
+    flex: 1;
+    margin: 0;
+    font-size: 1.75rem;
+    color: #0f172a;
+  }
+
+  .user-badge {
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 20px;
+    padding: 0.25rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .btn-logout {
+    background: transparent;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 0.375rem 0.875rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    color: #374151;
+    transition: background 0.15s;
+  }
+
+  .btn-logout:hover {
+    background: #f3f4f6;
+  }
+
+  .placeholder {
+    color: #64748b;
+    font-size: 1rem;
+  }
+</style>

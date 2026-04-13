@@ -7,7 +7,7 @@
  * - Previously fixed bugs: Fixed import path - AS5 uses manual middleware integration.
  */
 
-import { ApolloServer } from '@apollo/server';
+import { ApolloServer, HeaderMap } from '@apollo/server';
 import { loadFilesSync } from '@graphql-tools/load-files';
 import { mergeTypeDefs } from '@graphql-tools/merge';
 import { makeExecutableSchema } from '@graphql-tools/schema';
@@ -96,7 +96,7 @@ export async function applyApolloMiddleware(app: Express): Promise<void> {
     const { body, headers, status } = await server.executeHTTPGraphQLRequest({
       httpGraphQLRequest: {
         method: req.method,
-        headers: new HeadersMap(req.headers as Record<string, string>),
+        headers: toHeaderMap(req.headers),
         body: req.body,
         search: new URL(req.url, `http://${req.headers.host}`).search,
       },
@@ -124,16 +124,19 @@ export async function applyApolloMiddleware(app: Express): Promise<void> {
   console.log('[Apollo] GraphQL endpoint ready at /graphql');
 }
 
-/**
- * Helper class to convert headers object to Headers-like map
- */
-class HeadersMap extends Map<string, string> {
-  constructor(headers: Record<string, string | string[] | undefined>) {
-    super();
-    for (const [key, value] of Object.entries(headers)) {
-      if (value) {
-        this.set(key.toLowerCase(), Array.isArray(value) ? value.join(', ') : value);
-      }
+function toHeaderMap(headers: Request['headers']): HeaderMap {
+  const headerMap = new HeaderMap();
+
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value === 'string') {
+      headerMap.set(key.toLowerCase(), value);
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      headerMap.set(key.toLowerCase(), value.join(', '));
     }
   }
+
+  return headerMap;
 }

@@ -29,6 +29,17 @@ All database operations must be executed via Supabase MCP.
 - Always insist that the user connect/authenticate Supabase MCP first when DB work is requested and MCP is not available.
 - Never instruct users to apply SQL directly in the Supabase SQL editor.
 
+## Typecheck Before Completion (MANDATORY)
+
+After any task that edits files in the workspace, run `turbo typecheck --force` from the repository root before marking the task complete.
+
+### Rules
+
+- This validation is required for every editing task, even if the change looks isolated.
+- The task is not complete unless `turbo typecheck --force` exits successfully.
+- If typecheck fails, continue working until the failure is resolved or clearly blocked.
+- Do not claim success, completion, or readiness for review while typecheck is failing.
+
 ## Decision Context Comment Blocks (MANDATORY)
 
 After any feature implementation or business logic change, add or update a decision context comment block in the changed code.

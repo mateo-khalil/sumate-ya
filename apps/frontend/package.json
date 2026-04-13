@@ -12,6 +12,7 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/node": "^10.0.4",
     "@astrojs/react": "^5.0.3",
     "@nanostores/react": "^1.1.0",
     "@radix-ui/react-slot": "^1.2.4",
@@ -21,6 +22,7 @@
     "astro": "^6.1.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^17.4.1",
     "graphql": "^16.13.2",
     "lucide-react": "^1.8.0",
     "nanostores": "^1.2.0",
