@@ -2,6 +2,11 @@
 
 declare namespace App {
   interface Locals {
-    user?: import('@supabase/supabase-js').User;
+    user?: {
+      id: string;
+      email: string;
+      displayName: string;
+      role: 'player' | 'club_admin';
+    };
   }
 }

@@ -8,7 +8,7 @@
  * - Previously fixed bugs: none relevant.
  */
 
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
@@ -17,19 +17,20 @@ let redisAvailable = false;
 
 // Only try to connect if REDIS_URL is explicitly set
 if (process.env.REDIS_URL) {
-  redis = new Redis(redisUrl, {
+  const redisClient = new Redis(redisUrl, {
     maxRetriesPerRequest: 1,
-    retryDelayOnFailover: 100,
     connectTimeout: 3000,
     lazyConnect: false,
   });
 
-  redis.on('error', (err) => {
+  redis = redisClient;
+
+  redisClient.on('error', (err: Error) => {
     console.warn('[Redis] Connection error (caching disabled):', err.message);
     redisAvailable = false;
   });
 
-  redis.on('connect', () => {
+  redisClient.on('connect', () => {
     console.log('[Redis] Connected successfully');
     redisAvailable = true;
   });
@@ -54,10 +55,10 @@ export const CACHE_PREFIX = {
 // =====================================================
 
 export const CACHE_TTL = {
-  LIST_QUERIES: 3600,      // 1 hour for stable lists
-  SINGLE_ENTITY: 1800,     // 30 minutes for individual items
-  DYNAMIC_DATA: 180,       // 3 minutes for frequently changing data (match slots)
-  USER_DATA: 300,          // 5 minutes for user-specific data
+  LIST_QUERIES: 3600, // 1 hour for stable lists
+  SINGLE_ENTITY: 1800, // 30 minutes for individual items
+  DYNAMIC_DATA: 180, // 3 minutes for frequently changing data (match slots)
+  USER_DATA: 300, // 5 minutes for user-specific data
 } as const;
 
 // =====================================================
@@ -69,7 +70,7 @@ export const CACHE_TTL = {
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
   if (!redis || !redisAvailable) return null;
-  
+
   try {
     const cached = await redis.get(key);
     if (cached) {
@@ -87,7 +88,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
  */
 export async function cacheSet<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
   if (!redis || !redisAvailable) return;
-  
+
   try {
     await redis.setex(key, ttlSeconds, JSON.stringify(value));
   } catch (error) {
@@ -102,7 +103,7 @@ export async function cacheSet<T>(key: string, value: T, ttlSeconds: number): Pr
 export async function cacheGetOrSet<T>(
   key: string,
   fetchFn: () => Promise<T>,
-  ttlSeconds: number
+  ttlSeconds: number,
 ): Promise<T> {
   try {
     const cached = await cacheGet<T>(key);
@@ -127,7 +128,7 @@ export async function cacheGetOrSet<T>(
  */
 export async function cacheDelete(key: string): Promise<void> {
   if (!redis || !redisAvailable) return;
-  
+
   try {
     await redis.del(key);
     console.log(`[Redis] Deleted key: ${key}`);

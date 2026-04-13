@@ -16,7 +16,7 @@ import { MatchList } from '../../components/matches';
 
 // User is verified and attached by middleware — no redundant getUser() call needed
 const user = Astro.locals.user!;
-const nombre = user.user_metadata?.nombre ?? user.email;
+const nombre = user.displayName || user.email;
 ---
 
 <Layout title="Partidos Disponibles - Sumate Ya">

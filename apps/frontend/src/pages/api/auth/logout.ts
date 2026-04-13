@@ -1,10 +1,11 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/supabase';
+import { clearAuthCookies, logoutFromBackend, readAccessToken } from '../../../lib/auth';
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ cookies, request, redirect }) => {
-  const supabase = createSupabaseServerClient(cookies, request);
-  await supabase.auth.signOut();
+export const POST: APIRoute = async ({ cookies, redirect }) => {
+  const accessToken = readAccessToken(cookies);
+  await logoutFromBackend(accessToken);
+  clearAuthCookies(cookies);
   return redirect('/login', 302);
 };

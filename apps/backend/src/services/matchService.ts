@@ -22,8 +22,17 @@
  */
 
 import { cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
-import type { Match, MatchFormat, MatchStatus, MatchFilters } from '../graphql/generated/graphql.js';
-import { matchRepository, type MatchWithClub, type MatchFilterOptions } from '../repositories/matchRepository.js';
+import {
+  MatchFormat,
+  MatchStatus,
+  type Match,
+  type MatchFilters,
+} from '../graphql/generated/graphql.js';
+import {
+  matchRepository,
+  type MatchWithClub,
+  type MatchFilterOptions,
+} from '../repositories/matchRepository.js';
 import type { ServiceContext } from '../types/context.js';
 
 // =====================================================
@@ -32,36 +41,36 @@ import type { ServiceContext } from '../types/context.js';
 
 /** Map GraphQL MatchFormat enum to DB values */
 const FORMAT_TO_DB: Record<MatchFormat, string> = {
-  FIVE_VS_FIVE: '5v5',
-  SEVEN_VS_SEVEN: '7v7',
-  TEN_VS_TEN: '10v10',
-  ELEVEN_VS_ELEVEN: '11v11',
+  [MatchFormat.FiveVsFive]: '5v5',
+  [MatchFormat.SevenVsSeven]: '7v7',
+  [MatchFormat.TenVsTen]: '10v10',
+  [MatchFormat.ElevenVsEleven]: '11v11',
 };
 
 /** Map DB format values to GraphQL enum */
 const DB_TO_FORMAT: Record<string, MatchFormat> = {
-  '5v5': 'FIVE_VS_FIVE',
-  '7v7': 'SEVEN_VS_SEVEN',
-  '10v10': 'TEN_VS_TEN',
-  '11v11': 'ELEVEN_VS_ELEVEN',
+  '5v5': MatchFormat.FiveVsFive,
+  '7v7': MatchFormat.SevenVsSeven,
+  '10v10': MatchFormat.TenVsTen,
+  '11v11': MatchFormat.ElevenVsEleven,
 };
 
 /** Map GraphQL MatchStatus enum to DB values */
 const STATUS_TO_DB: Record<MatchStatus, string> = {
-  OPEN: 'open',
-  FULL: 'full',
-  IN_PROGRESS: 'in_progress',
-  COMPLETED: 'completed',
-  CANCELLED: 'cancelled',
+  [MatchStatus.Open]: 'open',
+  [MatchStatus.Full]: 'full',
+  [MatchStatus.InProgress]: 'in_progress',
+  [MatchStatus.Completed]: 'completed',
+  [MatchStatus.Cancelled]: 'cancelled',
 };
 
 /** Map DB status values to GraphQL enum */
 const DB_TO_STATUS: Record<string, MatchStatus> = {
-  open: 'OPEN',
-  full: 'FULL',
-  in_progress: 'IN_PROGRESS',
-  completed: 'COMPLETED',
-  cancelled: 'CANCELLED',
+  open: MatchStatus.Open,
+  full: MatchStatus.Full,
+  in_progress: MatchStatus.InProgress,
+  completed: MatchStatus.Completed,
+  cancelled: MatchStatus.Cancelled,
 };
 
 // =====================================================
@@ -73,11 +82,11 @@ function toMatch(row: MatchWithClub): Match {
     id: row.id,
     title: row.description ?? 'Partido sin título',
     startTime: row.scheduledAt,
-    format: DB_TO_FORMAT[row.format] ?? 'FIVE_VS_FIVE',
+    format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
     totalSlots: row.capacity,
     // TODO: subtract `matchPlayers` count once participants are modelled
     availableSlots: row.capacity,
-    status: DB_TO_STATUS[row.status] ?? 'OPEN',
+    status: DB_TO_STATUS[row.status] ?? MatchStatus.Open,
     createdAt: row.createdAt,
     club: row.clubs
       ? {
@@ -127,7 +136,7 @@ function getFiltersCacheKey(filters: MatchFilterOptions): string {
 
 /**
  * List matches with filters. Public endpoint - no auth required.
- * 
+ *
  * Decision Context:
  * - Why: Central entry point for match listing with any combination of filters.
  * - Caching: Uses dynamic cache key based on filter combination.
@@ -153,27 +162,21 @@ export async function listMatches(
  * List open matches. Public endpoint - no auth required.
  */
 export async function listOpenMatches(_ctx: ServiceContext): Promise<Match[]> {
-  return listMatches(_ctx, { status: 'OPEN' });
+  return listMatches(_ctx, { status: MatchStatus.Open });
 }
 
 /**
  * List matches by status.
  */
-export async function listMatchesByStatus(
-  _ctx: ServiceContext,
-  status: string,
-): Promise<Match[]> {
-  const gqlStatus = DB_TO_STATUS[status] ?? 'OPEN';
+export async function listMatchesByStatus(_ctx: ServiceContext, status: string): Promise<Match[]> {
+  const gqlStatus = DB_TO_STATUS[status] ?? MatchStatus.Open;
   return listMatches(_ctx, { status: gqlStatus });
 }
 
 /**
  * Get a single match by id.
  */
-export async function getMatchById(
-  _ctx: ServiceContext,
-  id: string,
-): Promise<Match | null> {
+export async function getMatchById(_ctx: ServiceContext, id: string): Promise<Match | null> {
   const cacheKey = `${CACHE_PREFIX.MATCH_DETAIL}${id}`;
   const match = await cacheGetOrSet<MatchWithClub | null>(
     cacheKey,

@@ -5,29 +5,33 @@
  * Decision Context:
  * - Why SSR: Handles POST form submission server-side and reads/writes auth cookies.
  * - Pattern: Progressive enhancement — works without JS. POST + redirect, no client fetch.
- * - Security: Uses getUser() (validates JWT server-side) instead of getSession().
- *   Error messages are ambiguous to avoid revealing email existence.
+ * - Security: Frontend does not call Supabase directly; credentials are posted to backend auth.
+ *   HttpOnly cookies store tokens for subsequent SSR middleware checks.
  * - Previously fixed bugs: none relevant.
  */
 export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
-import { createSupabaseServerClient, getRoleRedirect, type UserRole } from '../lib/supabase';
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  clearAuthCookies,
+  getAuthCookieOptions,
+  getRoleRedirect,
+  getSessionFromBackend,
+  loginWithBackend,
+  readAccessToken,
+} from '../lib/auth';
 
-const supabase = createSupabaseServerClient(Astro.cookies, Astro.request);
+const accessToken = readAccessToken(Astro.cookies);
 
-// Si ya tiene sesión activa, redirigir según rol
-const {
-  data: { user },
-} = await supabase.auth.getUser();
+if (accessToken) {
+  const user = await getSessionFromBackend(accessToken);
+  if (user) {
+    return Astro.redirect(getRoleRedirect(user.role));
+  }
 
-if (user) {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-  return Astro.redirect(getRoleRedirect(profile?.role as UserRole | undefined));
+  clearAuthCookies(Astro.cookies);
 }
 
 // --- Manejo del formulario POST ---
@@ -42,34 +46,28 @@ if (Astro.request.method === 'POST') {
   if (!emailValue || !password) {
     errorMessage = 'Completá todos los campos.';
   } else {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: emailValue,
-      password,
-    });
+    try {
+      const result = await loginWithBackend(emailValue, password);
+      const cookieOptions = getAuthCookieOptions(Astro.url.protocol === 'https:');
 
-    if (error) {
-      // Supabase devuelve distintos mensajes según el tipo de error
-      if (
-        error.message.includes('Email not confirmed') ||
-        error.message.includes('email_not_confirmed')
-      ) {
+      Astro.cookies.set(ACCESS_TOKEN_COOKIE, result.accessToken, cookieOptions);
+      Astro.cookies.set(REFRESH_TOKEN_COOKIE, result.refreshToken, cookieOptions);
+
+      return Astro.redirect(getRoleRedirect(result.user.role));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Authentication failed';
+
+      if (message.includes('Email not confirmed') || message.includes('email_not_confirmed')) {
         errorMessage =
           'Debés confirmar tu email antes de iniciar sesión. Revisá tu casilla de correo.';
       } else if (
-        error.message.includes('Invalid login credentials') ||
-        error.message.includes('invalid_credentials')
+        message.includes('Invalid login credentials') ||
+        message.includes('invalid_credentials')
       ) {
         errorMessage = 'Email o contraseña incorrectos.';
       } else {
         errorMessage = 'Ocurrió un error al iniciar sesión. Intentá de nuevo.';
       }
-    } else if (data.session) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single();
-      return Astro.redirect(getRoleRedirect(profile?.role as UserRole | undefined));
     }
   }
 }

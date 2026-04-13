@@ -21,7 +21,7 @@
       "outputs": ["coverage/**"]
     },
     "codegen": {
-      "outputs": ["src/generated/**", "graphql/generated/**"]
+      "outputs": ["src/graphql/generated/**"]
     },
     "format": {
       "outputs": []

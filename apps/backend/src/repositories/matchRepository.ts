@@ -88,7 +88,7 @@ export interface MatchFilterOptions {
 
 /**
  * Get matches with dynamic filters
- * 
+ *
  * Decision Context:
  * - Why: Flexible filtering allows frontend to pass any combination of filters.
  * - Pattern: Build query conditionally using Supabase's fluent builder. Each filter
@@ -102,7 +102,7 @@ export interface MatchFilterOptions {
  */
 export async function getMatchesWithFilters(
   filters: MatchFilterOptions = {},
-  client: SupabaseClient = supabase
+  client: SupabaseClient = supabase,
 ): Promise<MatchWithClub[]> {
   // If search is provided, we need to run parallel queries and merge
   if (filters.search) {
@@ -110,13 +110,9 @@ export async function getMatchesWithFilters(
   }
 
   // Standard query without search
-  const clubJoin = filters.zone
-    ? `clubs!inner(${CLUB_COLUMNS})`
-    : `clubs(${CLUB_COLUMNS})`;
+  const clubJoin = filters.zone ? `clubs!inner(${CLUB_COLUMNS})` : `clubs(${CLUB_COLUMNS})`;
 
-  let query = client
-    .from('matches')
-    .select(`${MATCH_COLUMNS}, ${clubJoin}`);
+  let query = client.from('matches').select(`${MATCH_COLUMNS}, ${clubJoin}`);
 
   // Apply status filter (default to 'open' if not provided)
   const statusFilter = filters.status || 'open';
@@ -154,7 +150,7 @@ export async function getMatchesWithFilters(
 
 /**
  * Search matches by description OR club name
- * 
+ *
  * Decision Context:
  * - Why: Supabase PostgREST doesn't support OR filters across related tables.
  * - Pattern: Run two parallel queries (description search + club name search),
@@ -165,54 +161,77 @@ export async function getMatchesWithFilters(
  */
 async function getMatchesWithSearch(
   filters: MatchFilterOptions,
-  client: SupabaseClient
+  client: SupabaseClient,
 ): Promise<MatchWithClub[]> {
   const searchTerm = `%${filters.search}%`;
-  const statusFilter = filters.status || 'open';
-
-  // Build base filters to apply to both queries
-  const applyCommonFilters = (q: ReturnType<typeof client.from>) => {
-    let query = q.eq('status', statusFilter);
-    if (filters.format) query = query.eq('format', filters.format);
-    if (filters.dateFrom) query = query.gte('scheduledAt', filters.dateFrom);
-    if (filters.dateTo) query = query.lte('scheduledAt', filters.dateTo);
-    return query;
-  };
 
   // Query 1: Search in match description
-  const descriptionQuery = applyCommonFilters(
-    client
-      .from('matches')
-      .select(`${MATCH_COLUMNS}, clubs(${CLUB_COLUMNS})`)
-  )
+  let descriptionQuery = client
+    .from('matches')
+    .select(`${MATCH_COLUMNS}, clubs(${CLUB_COLUMNS})`)
+    .eq('status', filters.status || 'open');
+
+  if (filters.format) {
+    descriptionQuery = descriptionQuery.eq('format', filters.format);
+  }
+  if (filters.dateFrom) {
+    descriptionQuery = descriptionQuery.gte('scheduledAt', filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    descriptionQuery = descriptionQuery.lte('scheduledAt', filters.dateTo);
+  }
+
+  const descriptionQueryWithSearch = descriptionQuery
     .ilike('description', searchTerm)
     .order('scheduledAt', { ascending: true });
 
   // Query 2: Search in club name (requires inner join)
-  const clubQuery = applyCommonFilters(
-    client
-      .from('matches')
-      .select(`${MATCH_COLUMNS}, clubs!inner(${CLUB_COLUMNS})`)
-  )
+  let clubQuery = client
+    .from('matches')
+    .select(`${MATCH_COLUMNS}, clubs!inner(${CLUB_COLUMNS})`)
+    .eq('status', filters.status || 'open');
+
+  if (filters.format) {
+    clubQuery = clubQuery.eq('format', filters.format);
+  }
+  if (filters.dateFrom) {
+    clubQuery = clubQuery.gte('scheduledAt', filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    clubQuery = clubQuery.lte('scheduledAt', filters.dateTo);
+  }
+
+  const clubQueryWithSearch = clubQuery
     .ilike('clubs.name', searchTerm)
     .order('scheduledAt', { ascending: true });
 
   // Apply zone filter if present
-  let q1 = descriptionQuery;
-  let q2 = clubQuery;
+  let q1 = descriptionQueryWithSearch;
+  let q2 = clubQueryWithSearch;
   if (filters.zone) {
     // For description query, need to filter on clubs.zone but clubs might be null
     // So we use inner join version for zone filtering
-    q1 = applyCommonFilters(
-      client
-        .from('matches')
-        .select(`${MATCH_COLUMNS}, clubs!inner(${CLUB_COLUMNS})`)
-    )
+    let descriptionZoneQuery = client
+      .from('matches')
+      .select(`${MATCH_COLUMNS}, clubs!inner(${CLUB_COLUMNS})`)
+      .eq('status', filters.status || 'open');
+
+    if (filters.format) {
+      descriptionZoneQuery = descriptionZoneQuery.eq('format', filters.format);
+    }
+    if (filters.dateFrom) {
+      descriptionZoneQuery = descriptionZoneQuery.gte('scheduledAt', filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      descriptionZoneQuery = descriptionZoneQuery.lte('scheduledAt', filters.dateTo);
+    }
+
+    q1 = descriptionZoneQuery
       .ilike('description', searchTerm)
       .eq('clubs.zone', filters.zone)
       .order('scheduledAt', { ascending: true });
 
-    q2 = clubQuery.eq('clubs.zone', filters.zone);
+    q2 = clubQueryWithSearch.eq('clubs.zone', filters.zone);
   }
 
   // Run both queries in parallel
@@ -227,7 +246,7 @@ async function getMatchesWithSearch(
 
   // Merge and deduplicate by ID
   const matchMap = new Map<string, MatchWithClub>();
-  
+
   for (const match of (descResult.data as unknown as MatchWithClub[]) || []) {
     matchMap.set(match.id, match);
   }
@@ -249,7 +268,7 @@ async function getMatchesWithSearch(
  */
 export async function getMatchesByStatus(
   status: string,
-  client: SupabaseClient = supabase
+  client: SupabaseClient = supabase,
 ): Promise<MatchWithClub[]> {
   return getMatchesWithFilters({ status }, client);
 }
@@ -259,7 +278,7 @@ export async function getMatchesByStatus(
  */
 export async function getMatchById(
   id: string,
-  client: SupabaseClient = supabase
+  client: SupabaseClient = supabase,
 ): Promise<MatchWithClub | null> {
   const { data, error } = await client
     .from('matches')
@@ -280,9 +299,7 @@ export async function getMatchById(
 /**
  * Get all open matches (convenience wrapper)
  */
-export async function getOpenMatches(
-  client: SupabaseClient = supabase
-): Promise<MatchWithClub[]> {
+export async function getOpenMatches(client: SupabaseClient = supabase): Promise<MatchWithClub[]> {
   return getMatchesWithFilters({ status: 'open' }, client);
 }
 
