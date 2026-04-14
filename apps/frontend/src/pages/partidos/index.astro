@@ -19,69 +19,191 @@ const user = Astro.locals.user!;
 const nombre = user.displayName || user.email;
 ---
 
-<Layout title="Partidos Disponibles - Sumate Ya">
-  <main class="page-wrapper">
-    <header class="page-header">
-      <h1>⚽ Partidos Disponibles</h1>
-      <span class="user-badge">{nombre}</span>
-      <form method="POST" action="/api/auth/logout">
-        <button type="submit" class="btn-logout">Cerrar sesión</button>
-      </form>
-    </header>
-    <section class="page-content">
-      <MatchList client:visible />
-    </section>
-  </main>
+<Layout title="Partidos Disponibles — Sumate Ya">
+  <div class="app-shell">
+    <!-- Top navigation bar -->
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="topbar-ball">⚽</span>
+          <span class="topbar-name">SUMATE YA</span>
+        </div>
+        <div class="topbar-actions">
+          <span class="user-badge">
+            <span class="user-dot"></span>
+            {nombre}
+          </span>
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="btn-logout">Salir</button>
+          </form>
+        </div>
+      </div>
+      <!-- Orange accent line -->
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <!-- Page content -->
+    <main class="page-content">
+      <header class="section-header">
+        <div class="section-label">JUGÁ HOY</div>
+        <h1 class="section-title">Partidos Disponibles</h1>
+        <p class="section-sub">Encontrá tu lugar en el campo</p>
+      </header>
+
+      <section class="matches-section">
+        <MatchList client:visible />
+      </section>
+    </main>
+  </div>
 </Layout>
 
 <style>
-  .page-wrapper {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 2rem 1rem;
+  /* ---- Shell layout ---- */
+  .app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
 
-  .page-header {
+  /* ---- Top navbar ---- */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(7, 15, 31, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .topbar-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 1.25rem;
+    height: 56px;
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
+    justify-content: space-between;
   }
 
-  .page-header h1 {
-    flex: 1;
-    margin: 0;
-    font-size: 1.75rem;
-    color: #0f172a;
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
+  .topbar-ball {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .topbar-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.35rem;
+    letter-spacing: 0.1em;
+    color: #ffffff;
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .topbar-accent {
+    height: 2px;
+    background: linear-gradient(90deg, hsl(35 100% 48%), hsl(216 85% 45%), transparent);
+  }
+
+  /* ---- User badge ---- */
   .user-badge {
-    background: #e0f2fe;
-    color: #0369a1;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(246, 164, 0, 0.12);
+    border: 1px solid rgba(246, 164, 0, 0.25);
+    color: hsl(35 100% 65%);
     border-radius: 20px;
     padding: 0.25rem 0.875rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
+    font-family: 'Barlow Condensed', sans-serif;
+    letter-spacing: 0.03em;
   }
 
+  .user-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: hsl(35 100% 55%);
+    box-shadow: 0 0 4px hsl(35 100% 55%);
+  }
+
+  /* ---- Logout button ---- */
   .btn-logout {
     background: transparent;
-    border: 1px solid #e5e7eb;
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
-    padding: 0.375rem 0.875rem;
-    font-size: 0.875rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8125rem;
+    font-family: 'Barlow', sans-serif;
+    font-weight: 500;
     cursor: pointer;
-    color: #374151;
-    transition: background 0.15s;
+    color: hsl(215 20% 60%);
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
 
   .btn-logout:hover {
-    background: #f3f4f6;
+    background: rgba(255, 255, 255, 0.07);
+    color: hsl(210 20% 90%);
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
-  .placeholder {
-    color: #64748b;
-    font-size: 1rem;
+  /* ---- Page content ---- */
+  .page-content {
+    flex: 1;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem;
+  }
+
+  /* ---- Section header ---- */
+  .section-header {
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: hsl(35 100% 55%);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    margin: 0 0 0.375rem;
+    line-height: 1;
+  }
+
+  .section-sub {
+    margin: 0;
+    color: hsl(215 20% 50%);
+    font-size: 0.9rem;
+    font-family: 'Barlow', sans-serif;
+  }
+
+  /* ---- Matches section ---- */
+  .matches-section {
+    min-height: 200px;
   }
 </style>

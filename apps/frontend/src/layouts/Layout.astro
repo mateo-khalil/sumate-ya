@@ -19,8 +19,16 @@ const { title = 'Sumate Ya - Encontrá tu partido', description = 'Plataforma pa
 		<link rel="icon" href="/favicon.ico" />
 		<meta name="generator" content={Astro.generator} />
 		<title>{title}</title>
+
+		<!-- FIFA Design System fonts: Bebas Neue (display) + Barlow (body) -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap"
+			rel="stylesheet"
+		/>
 	</head>
-	<body class="min-h-screen bg-background antialiased">
+	<body class="min-h-screen antialiased">
 		<slot />
 	</body>
 </html>

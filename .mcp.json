@@ -6,7 +6,10 @@
     },
     "supabase": {
       "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=getfqjkfsueucoalvtcc"
+      "url": "https://mcp.supabase.com/mcp?project_ref=getfqjkfsueucoalvtcc",
+      "headers": {
+        "Authorization": "Bearer sbp_02c4c622dc9faa8b26ad8159fb34bc69b819d37e"
+      }
     }
   }
 }
