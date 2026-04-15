@@ -68,26 +68,38 @@ function mapAuthenticatedUser(user: User, role: AuthUserRole): AuthenticatedUser
   return {
     id: user.id,
     email: user.email ?? '',
-    displayName:
-      typeof user.user_metadata?.nombre === 'string'
-        ? user.user_metadata.nombre
-        : user.email ?? 'Usuario',
+    displayName: resolveDisplayName(user),
     role,
   };
 }
 
-async function getUserRole(userId: string): Promise<AuthUserRole> {
+async function ensureProfileAndGetRole(user: User): Promise<AuthUserRole> {
   const { data, error } = await supabase
     .from('profiles')
     .select(PROFILE_ROLE_COLUMNS)
-    .eq('id', userId)
-    .single();
+    .eq('id', user.id)
+    .maybeSingle();
 
-  if (error || !data) {
-    throw new Error(error?.message ?? 'Unable to resolve user role');
+  if (error) {
+    throw new Error(error.message);
   }
 
-  return data.role as AuthUserRole;
+  if (data?.role) {
+    return data.role as AuthUserRole;
+  }
+
+  const defaultRole: AuthUserRole = 'player';
+  const { error: insertError } = await supabase.from('profiles').insert({
+    id: user.id,
+    displayName: resolveDisplayName(user),
+    role: defaultRole,
+  });
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+
+  return defaultRole;
 }
 
 export const authService = {
@@ -111,7 +123,7 @@ export const authService = {
       throw new Error('Invalid login credentials');
     }
 
-    const role = await getUserRole(data.user.id);
+    const role = await ensureProfileAndGetRole(data.user);
 
     return {
       accessToken: data.session.access_token,
@@ -131,7 +143,7 @@ export const authService = {
       throw new Error('Invalid or expired token');
     }
 
-    const role = await getUserRole(user.id);
+    const role = await ensureProfileAndGetRole(user);
     return mapAuthenticatedUser(user, role);
   },
 
