@@ -73,12 +73,17 @@ if (Astro.request.method === 'POST') {
 }
 ---
 
-<Layout title="Iniciar sesión">
+<Layout title="Iniciar sesión — Sumate Ya">
   <main class="login-wrapper">
+    <!-- Stadium arc decoration -->
+    <div class="stadium-arc" aria-hidden="true"></div>
+
     <div class="login-card">
       <div class="login-header">
-        <span class="login-logo">⚽</span>
-        <h1>Sumate Ya</h1>
+        <div class="brand-lockup">
+          <span class="brand-icon">⚽</span>
+          <h1 class="brand-name">SUMATE YA</h1>
+        </div>
         <p class="login-subtitle">Iniciá sesión para continuar</p>
       </div>
 
@@ -86,7 +91,7 @@ if (Astro.request.method === 'POST') {
         errorMessage && (
           <div class="error-banner" role="alert">
             <span class="error-icon">⚠</span>
-            {errorMessage}
+            <span>{errorMessage}</span>
           </div>
         )
       }
@@ -117,71 +122,136 @@ if (Astro.request.method === 'POST') {
           />
         </div>
 
-        <button type="submit" class="btn-submit">Ingresar</button>
+        <button type="submit" class="btn-submit">INGRESAR</button>
       </form>
     </div>
   </main>
 </Layout>
 
 <style>
+  /* ---- Layout ---- */
   .login-wrapper {
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
   }
 
+  /* ---- Stadium arc decoration ---- */
+  .stadium-arc {
+    position: fixed;
+    bottom: -30vw;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90vw;
+    height: 45vw;
+    border: 2px solid rgba(246, 164, 0, 0.12);
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+    pointer-events: none;
+  }
+
+  .stadium-arc::before {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 60%;
+    border: 1px solid rgba(27, 105, 224, 0.10);
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  }
+
+  /* ---- Card (glassmorphism) ---- */
   .login-card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 2.5rem 2rem;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 16px;
+    padding: 2.75rem 2.25rem;
     width: 100%;
     max-width: 420px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow:
+      0 0 0 1px rgba(246, 164, 0, 0.06),
+      0 24px 64px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    position: relative;
+    z-index: 1;
   }
 
+  /* Orange top stripe */
+  .login-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 2rem;
+    right: 2rem;
+    height: 3px;
+    background: linear-gradient(90deg, hsl(35 100% 48%), hsl(216 85% 45%));
+    border-radius: 0 0 3px 3px;
+  }
+
+  /* ---- Brand header ---- */
   .login-header {
     text-align: center;
-    margin-bottom: 1.75rem;
+    margin-bottom: 2rem;
   }
 
-  .login-logo {
-    font-size: 2.5rem;
+  .brand-lockup {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
   }
 
-  .login-header h1 {
-    margin: 0.25rem 0 0.25rem;
+  .brand-icon {
     font-size: 1.75rem;
-    font-weight: 700;
-    color: #0f172a;
+    line-height: 1;
+  }
+
+  .brand-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.25rem;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1;
   }
 
   .login-subtitle {
     margin: 0;
-    color: #64748b;
-    font-size: 0.9rem;
+    color: hsl(215 20% 55%);
+    font-size: 0.875rem;
+    font-family: 'Barlow', sans-serif;
+    letter-spacing: 0.01em;
   }
 
+  /* ---- Error banner ---- */
   .error-banner {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
-    background: #fef2f2;
-    border: 1px solid #fca5a5;
-    color: #b91c1c;
+    background: rgba(220, 38, 38, 0.12);
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    color: hsl(0 72% 70%);
     border-radius: 8px;
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
+    font-family: 'Barlow', sans-serif;
   }
 
   .error-icon {
     flex-shrink: 0;
-    font-style: normal;
   }
 
+  /* ---- Form fields ---- */
   .login-form {
     display: flex;
     flex-direction: column;
@@ -195,44 +265,71 @@ if (Astro.request.method === 'POST') {
   }
 
   .field label {
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(215 20% 65%);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-family: 'Barlow Condensed', sans-serif;
   }
 
   .field input {
-    border: 1px solid #d1d5db;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    padding: 0.625rem 0.875rem;
-    font-size: 1rem;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    padding: 0.75rem 1rem;
+    font-size: 0.9375rem;
+    font-family: 'Barlow', sans-serif;
+    color: hsl(210 20% 94%);
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     outline: none;
     width: 100%;
   }
 
-  .field input:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  .field input::placeholder {
+    color: hsl(215 20% 40%);
   }
 
+  .field input:focus {
+    border-color: hsl(216 85% 55%);
+    background: rgba(27, 105, 224, 0.08);
+    box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.2);
+  }
+
+  /* ---- Submit button ---- */
   .btn-submit {
     margin-top: 0.5rem;
-    padding: 0.75rem;
-    background: #2563eb;
+    padding: 0.875rem;
+    background: linear-gradient(135deg, hsl(35 100% 48%), hsl(35 100% 42%));
     color: #fff;
     border: none;
     border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 600;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.12em;
     cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
+    transition: transform 0.1s, box-shadow 0.15s, filter 0.15s;
+    box-shadow: 0 4px 20px rgba(246, 164, 0, 0.35);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-submit::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+    pointer-events: none;
   }
 
   .btn-submit:hover {
-    background: #1d4ed8;
+    filter: brightness(1.08);
+    box-shadow: 0 6px 28px rgba(246, 164, 0, 0.5);
+    transform: translateY(-1px);
   }
 
   .btn-submit:active {
-    transform: scale(0.98);
+    transform: scale(0.98) translateY(0);
+    box-shadow: 0 2px 12px rgba(246, 164, 0, 0.3);
   }
 </style>

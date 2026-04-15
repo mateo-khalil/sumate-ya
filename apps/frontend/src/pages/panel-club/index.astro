@@ -17,69 +17,412 @@ const user = Astro.locals.user!;
 const nombre = user.displayName || user.email;
 ---
 
-<Layout title="Panel de Club">
-  <main class="page-wrapper">
-    <header class="page-header">
-      <h1>🏟️ Panel de Club</h1>
-      <span class="user-badge">{nombre}</span>
-      <form method="POST" action="/api/auth/logout">
-        <button type="submit" class="btn-logout">Cerrar sesión</button>
-      </form>
-    </header>
-    <section class="page-content">
-      <p class="placeholder">Próximamente: gestión de turnos y canchas del club.</p>
-    </section>
-  </main>
+<Layout title="Panel de Club — Sumate Ya">
+  <div class="app-shell">
+    <!-- Top navigation bar -->
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="topbar-ball">⚽</span>
+          <span class="topbar-name">SUMATE YA</span>
+          <span class="topbar-role-pill">CLUB</span>
+        </div>
+        <div class="topbar-actions">
+          <span class="user-badge">
+            <span class="user-dot"></span>
+            {nombre}
+          </span>
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="btn-logout">Salir</button>
+          </form>
+        </div>
+      </div>
+      <!-- Gold accent line for club_admin role -->
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <div class="page-layout">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">GESTIÓN</div>
+          <nav class="sidebar-nav">
+            <a href="#" class="sidebar-link sidebar-link--active">
+              <span class="sidebar-icon">🏟️</span>
+              Panel principal
+            </a>
+            <a href="#" class="sidebar-link">
+              <span class="sidebar-icon">📅</span>
+              Turnos
+            </a>
+            <a href="#" class="sidebar-link">
+              <span class="sidebar-icon">⚽</span>
+              Canchas
+            </a>
+            <a href="#" class="sidebar-link">
+              <span class="sidebar-icon">👥</span>
+              Jugadores
+            </a>
+          </nav>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">REPORTES</div>
+          <nav class="sidebar-nav">
+            <a href="#" class="sidebar-link">
+              <span class="sidebar-icon">📊</span>
+              Estadísticas
+            </a>
+          </nav>
+        </div>
+      </aside>
+
+      <!-- Main content -->
+      <main class="page-content">
+        <header class="section-header">
+          <div class="section-label">ADMINISTRACIÓN DE CLUB</div>
+          <h1 class="section-title">Panel de Club</h1>
+          <p class="section-sub">Gestioná tus canchas, turnos y jugadores</p>
+        </header>
+
+        <!-- Stats row placeholder -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-value">—</div>
+            <div class="stat-name">Canchas activas</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">—</div>
+            <div class="stat-name">Turnos hoy</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">—</div>
+            <div class="stat-name">Jugadores</div>
+          </div>
+        </div>
+
+        <!-- Placeholder content -->
+        <div class="coming-soon-card">
+          <div class="coming-soon-icon">🏗️</div>
+          <p class="coming-soon-text">Próximamente: gestión de turnos y canchas del club.</p>
+        </div>
+      </main>
+    </div>
+  </div>
 </Layout>
 
 <style>
-  .page-wrapper {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 2rem 1rem;
+  /* ---- Shell layout ---- */
+  .app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
 
-  .page-header {
+  /* ---- Top navbar ---- */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(7, 15, 31, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .topbar-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 1.25rem;
+    height: 56px;
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
+    justify-content: space-between;
   }
 
-  .page-header h1 {
-    flex: 1;
-    margin: 0;
-    font-size: 1.75rem;
-    color: #0f172a;
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
+  .topbar-ball {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+
+  .topbar-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.35rem;
+    letter-spacing: 0.1em;
+    color: #ffffff;
+  }
+
+  /* Gold pill for club_admin identity */
+  .topbar-role-pill {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: rgba(246, 164, 0, 0.15);
+    border: 1px solid rgba(246, 164, 0, 0.35);
+    color: hsl(42 100% 60%);
+    border-radius: 4px;
+    padding: 0.125rem 0.5rem;
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  /* Gold accent line — differentiates club_admin from player orange */
+  .topbar-accent {
+    height: 2px;
+    background: linear-gradient(90deg, hsl(42 100% 55%), hsl(216 85% 45%), transparent);
+  }
+
+  /* ---- User badge ---- */
   .user-badge {
-    background: #fef3c7;
-    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(246, 164, 0, 0.1);
+    border: 1px solid rgba(246, 164, 0, 0.22);
+    color: hsl(42 100% 65%);
     border-radius: 20px;
     padding: 0.25rem 0.875rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
+    font-family: 'Barlow Condensed', sans-serif;
+    letter-spacing: 0.03em;
   }
 
+  .user-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: hsl(42 100% 58%);
+    box-shadow: 0 0 4px hsl(42 100% 58%);
+  }
+
+  /* ---- Logout button ---- */
   .btn-logout {
     background: transparent;
-    border: 1px solid #e5e7eb;
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
-    padding: 0.375rem 0.875rem;
-    font-size: 0.875rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8125rem;
+    font-family: 'Barlow', sans-serif;
+    font-weight: 500;
     cursor: pointer;
-    color: #374151;
-    transition: background 0.15s;
+    color: hsl(215 20% 60%);
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
 
   .btn-logout:hover {
-    background: #f3f4f6;
+    background: rgba(255, 255, 255, 0.07);
+    color: hsl(210 20% 90%);
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
-  .placeholder {
-    color: #64748b;
+  /* ---- Page layout (sidebar + content) ---- */
+  .page-layout {
+    flex: 1;
+    display: flex;
+    max-width: 1280px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 2rem 1.25rem;
+    gap: 2rem;
+  }
+
+  /* ---- Sidebar ---- */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .sidebar {
+      display: none;
+    }
+  }
+
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .sidebar-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: hsl(215 20% 40%);
+    text-transform: uppercase;
+    padding: 0 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: 'Barlow', sans-serif;
+    font-weight: 500;
+    color: hsl(215 20% 55%);
+    text-decoration: none;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .sidebar-link:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: hsl(210 20% 85%);
+  }
+
+  .sidebar-link--active {
+    background: rgba(246, 164, 0, 0.1);
+    color: hsl(42 100% 65%);
+    border: 1px solid rgba(246, 164, 0, 0.18);
+  }
+
+  .sidebar-link--active:hover {
+    background: rgba(246, 164, 0, 0.14);
+    color: hsl(42 100% 70%);
+  }
+
+  .sidebar-icon {
     font-size: 1rem;
+    line-height: 1;
+  }
+
+  /* ---- Page content ---- */
+  .page-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* ---- Section header ---- */
+  .section-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: hsl(42 100% 55%);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    margin: 0 0 0.375rem;
+    line-height: 1;
+  }
+
+  .section-sub {
+    margin: 0;
+    color: hsl(215 20% 50%);
+    font-size: 0.9rem;
+    font-family: 'Barlow', sans-serif;
+  }
+
+  /* ---- Stats row ---- */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  @media (max-width: 600px) {
+    .stats-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .stat-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, hsl(42 100% 55%), transparent);
+  }
+
+  .stat-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    color: hsl(42 100% 65%);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-name {
+    font-size: 0.8rem;
+    font-family: 'Barlow', sans-serif;
+    color: hsl(215 20% 50%);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+
+  /* ---- Coming soon ---- */
+  .coming-soon-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 3rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: center;
+  }
+
+  .coming-soon-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+  }
+
+  .coming-soon-text {
+    margin: 0;
+    color: hsl(215 20% 50%);
+    font-size: 0.9375rem;
+    font-family: 'Barlow', sans-serif;
   }
 </style>
