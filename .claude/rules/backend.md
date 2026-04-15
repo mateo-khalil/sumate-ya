@@ -177,6 +177,41 @@ Supabase bills cached egress (API + Storage). Every query and storage request co
 - Prefer returning joined data from the parent query over per-field sub-queries
 - Use field presets to control nested depth
 
+## Error & Event Logging (MANDATORY)
+
+All backend functions (services, repositories, resolvers, controllers, middleware) MUST log errors and significant events. Silent failures are forbidden.
+
+### Rules
+
+- **ALWAYS** log caught errors with `console.error()` (or the project logger when available) before re-throwing or returning an error response.
+- Include contextual information in every log: function name, relevant IDs (userId, matchId, etc.), and the operation being attempted.
+- Log at appropriate levels:
+  - `console.error()` — unexpected failures, Supabase errors, unhandled exceptions
+  - `console.warn()` — recoverable issues, fallback paths taken, deprecated usage
+  - `console.info()` — significant business events (match created, player joined, payment processed)
+- **NEVER** log sensitive data: passwords, tokens, full JWTs, credit card numbers, or PII beyond user IDs.
+- In `catch` blocks, always log the original error **before** wrapping it:
+
+```typescript
+catch (error) {
+  console.error(`[PlayerService.getById] Failed for playerId=${id}:`, error);
+  throw new Error('Failed to fetch player');
+}
+```
+
+- For Supabase operations, log the `error` object from `{ data, error }` destructuring when it is truthy:
+
+```typescript
+const { data, error } = await db.from('matches').select(COLUMNS).eq('id', id);
+if (error) {
+  console.error(`[MatchRepository.findById] Supabase error for matchId=${id}:`, error.message);
+  throw new Error(error.message);
+}
+```
+
+- Middleware and controllers must log authentication failures and invalid requests with enough context to debug.
+- Use a consistent log prefix format: `[ClassName.methodName]` or `[moduleName.functionName]`.
+
 ## Adding a New Feature
 
 1. Inspect existing schema — check tables and columns
@@ -202,3 +237,5 @@ Supabase bills cached egress (API + Storage). Every query and storage request co
 - **NEVER** do `throw error` with raw Supabase errors — always `throw new Error(error.message)`
 - **NEVER** write to a new table without adding RLS policies for `authenticated` role
 - **NEVER** pass `{ userId }` alone to services that write data — include `supabase: userClient`
+- **NEVER** swallow errors silently — every `catch` block must log the error before handling it
+- **NEVER** omit context from log messages — always include the function name and relevant entity IDs
