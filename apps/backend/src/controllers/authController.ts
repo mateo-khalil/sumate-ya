@@ -49,7 +49,27 @@ export const authController = {
     }
   },
 
-  async logout(_req: Request, res: Response): Promise<void> {
+  /**
+   * Logout endpoint: Invalidates session via Supabase and returns 204.
+   *
+   * Decision Context:
+   * - Why: Ensures JWT is invalidated server-side, not just cleared from client cookies.
+   * - Pattern: Extracts token from Authorization header, calls authService.logout.
+   * - Constraints: Returns 204 even if token is missing/invalid — client should clear cookies regardless.
+   * - Previously fixed bugs: none relevant.
+   */
+  async logout(req: Request, res: Response): Promise<void> {
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+    if (accessToken) {
+      try {
+        await authService.logout(accessToken);
+      } catch {
+        // Ignore errors — token may already be expired
+      }
+    }
+
     res.status(204).send();
   },
 };

@@ -89,4 +89,24 @@ export const authService = {
     const role = await getUserRole(user.id);
     return mapAuthenticatedUser(user, role);
   },
+
+  /**
+   * Logout: Invalidates the user's session via Supabase Auth.
+   *
+   * Decision Context:
+   * - Why: Explicitly invalidates the JWT with Supabase so it cannot be reused.
+   * - Pattern: Uses user-scoped client to sign out the specific session.
+   * - Constraints: If accessToken is invalid/expired, signOut may fail silently — that's acceptable
+   *   because the token is already unusable.
+   * - Previously fixed bugs: none relevant.
+   */
+  async logout(accessToken: string): Promise<void> {
+    const userClient = createUserClient(accessToken);
+    const { error } = await userClient.auth.signOut();
+
+    if (error) {
+      // Log but don't throw — session may already be invalid
+      console.warn('[authService.logout] signOut error:', error.message);
+    }
+  },
 };
