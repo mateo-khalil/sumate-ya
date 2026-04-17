@@ -4,10 +4,21 @@
  * Decision Context:
  * - Why: Frontend must not access Supabase or the database directly. All auth and role
  *   resolution flows are brokered by the backend.
- * - Pattern: Uses anon client for credential login and backend-only clients for verified
- *   session/profile resolution.
- * - Constraints: Errors for invalid credentials remain ambiguous.
- * - Previously fixed bugs: none relevant.
+ * - Pattern: Uses anon client for credential login and service-role client (supabase singleton)
+ *   for admin operations. Profile and club inserts use the service-role client because the
+ *   new user has no active session yet — RLS would block the insert otherwise.
+ * - login(): Supabase signInWithPassword returns "Email not confirmed" as a distinct error
+ *   message when the user hasn't confirmed their email. This error is preserved and re-thrown
+ *   so authController can return 403 with a clear Spanish message. All other auth failures
+ *   remain ambiguous ("Invalid login credentials") to avoid email enumeration.
+ * - register(): Uses admin.createUser() with email_confirm: true so the user is immediately
+ *   active without email verification. This bypasses Supabase's per-IP rate limit (~30/hr on
+ *   the free tier) that auth.signUp() is subject to — critical because the backend's single IP
+ *   would exhaust that limit quickly. Profile and club rows are created in the same request;
+ *   orphaned auth users are cleaned up if either insert fails.
+ * - Previously fixed bugs:
+ *   - signUp() rate limit hit during testing → switched to admin.createUser() permanently
+ *   - login() masked "Email not confirmed" as generic error → now re-thrown distinctly
  */
 
 import type { User } from '@supabase/supabase-js';
@@ -29,6 +40,18 @@ export interface LoginResult {
   accessToken: string;
   refreshToken: string;
   user: AuthenticatedUser;
+}
+
+export interface RegisterInput {
+  displayName: string;
+  email: string;
+  password: string;
+  clubName: string;
+  address: string;
+  zone: string;
+  phone: string;
+  lat?: number;
+  lng?: number;
 }
 
 function mapAuthenticatedUser(user: User, role: AuthUserRole): AuthenticatedUser {
@@ -62,7 +85,19 @@ export const authService = {
     const authClient = createAnonClient();
     const { data, error } = await authClient.auth.signInWithPassword({ email, password });
 
-    if (error || !data.session || !data.user) {
+    if (error) {
+      const msg = error.message ?? '';
+      // Preserve email confirmation errors so the frontend can show a helpful message
+      if (
+        msg.toLowerCase().includes('email not confirmed') ||
+        msg.toLowerCase().includes('email_not_confirmed')
+      ) {
+        throw new Error('Email not confirmed');
+      }
+      throw new Error('Invalid login credentials');
+    }
+
+    if (!data.session || !data.user) {
       throw new Error('Invalid login credentials');
     }
 
@@ -107,6 +142,75 @@ export const authService = {
     if (error) {
       // Log but don't throw — session may already be invalid
       console.warn('[authService.logout] signOut error:', error.message);
+    }
+  },
+
+  async register(input: RegisterInput): Promise<void> {
+    // Step 1: Create user via admin API (service role).
+    // admin.createUser() bypasses Supabase's per-IP rate limit that auth.signUp() is subject
+    // to (~30/hr on the free tier). With the backend as a single IP origin, signUp() would
+    // exhaust that limit quickly under normal load. email_confirm: true makes the user
+    // immediately active — no email verification step required.
+    const { data, error: createError } = await supabase.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      user_metadata: { nombre: input.displayName },
+      email_confirm: true,
+    });
+
+    if (createError) {
+      const msg = createError.message ?? '';
+      if (
+        msg.toLowerCase().includes('already registered') ||
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('duplicate') ||
+        msg.toLowerCase().includes('unique')
+      ) {
+        throw new Error('User already registered');
+      }
+      throw new Error(msg || 'No se pudo crear el usuario.');
+    }
+
+    if (!data.user) {
+      throw new Error('No se pudo crear el usuario. Intentá de nuevo.');
+    }
+
+    const userId = data.user.id;
+
+    // Step 2: Insert profile with service-role client to bypass RLS.
+    // The new user has no active session yet, so user-scoped RLS would block the insert.
+    const { error: profileError } = await supabase.from('profiles').insert({
+      id: userId,
+      displayName: input.displayName,
+      role: 'club_admin',
+      matchesPlayed: 0,
+      matchesWon: 0,
+      isPublic: true,
+    });
+
+    if (profileError) {
+      await supabase.auth.admin.deleteUser(userId).catch(() => undefined);
+      throw new Error(`Error al crear el perfil: ${profileError.message}`);
+    }
+
+    // Step 3: Insert club linked to the new profile.
+    const { error: clubError } = await supabase.from('clubs').insert({
+      ownerId: userId,
+      name: input.clubName,
+      address: input.address,
+      zone: input.zone,
+      phone: input.phone,
+      lat: input.lat ?? null,
+      lng: input.lng ?? null,
+    });
+
+    if (clubError) {
+      await supabase.from('profiles').delete().eq('id', userId).then(
+        () => undefined,
+        () => undefined,
+      );
+      await supabase.auth.admin.deleteUser(userId).catch(() => undefined);
+      throw new Error(`Error al crear el club: ${clubError.message}`);
     }
   },
 };
