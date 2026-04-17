@@ -15,7 +15,10 @@
  *   active without email verification. This bypasses Supabase's per-IP rate limit (~30/hr on
  *   the free tier) that auth.signUp() is subject to — critical because the backend's single IP
  *   would exhaust that limit quickly. Profile and club rows are created in the same request;
- *   orphaned auth users are cleaned up if either insert fails.
+ *   orphaned auth users are cleaned up if either insert fails. After a successful insert the
+ *   backend sends a welcome email via Resend (emailService) — we no longer depend on Supabase
+ *   SMTP/auth-triggered emails, so Resend is the single source of outbound mail. Email failure
+ *   is logged but never rolls back registration (user must still be able to sign in).
  * - Previously fixed bugs:
  *   - signUp() rate limit hit during testing → switched to admin.createUser() permanently
  *   - login() masked "Email not confirmed" as generic error → now re-thrown distinctly
@@ -24,6 +27,7 @@
 import type { User } from '@supabase/supabase-js';
 
 import { createAnonClient, createUserClient, supabase } from '../config/supabase.js';
+import { emailService } from './emailService.js';
 
 const PROFILE_ROLE_COLUMNS = 'role';
 
@@ -211,6 +215,20 @@ export const authService = {
       );
       await supabase.auth.admin.deleteUser(userId).catch(() => undefined);
       throw new Error(`Error al crear el club: ${clubError.message}`);
+    }
+
+    // Step 4: Send welcome email via Resend. Non-blocking: a Resend outage must not
+    // roll back a successful registration — the user has a valid account at this point.
+    const mailResult = await emailService.sendWelcomeEmail(
+      input.email,
+      input.displayName,
+      input.clubName,
+    );
+    if (!mailResult.success) {
+      console.warn(
+        `[authService.register] Welcome email failed for userId=${userId}:`,
+        mailResult.error,
+      );
     }
   },
 };
