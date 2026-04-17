@@ -34,6 +34,9 @@ if (accessToken) {
   clearAuthCookies(Astro.cookies);
 }
 
+// --- Mensaje de registro exitoso ---
+const registered = Astro.url.searchParams.get('registered') === '1';
+
 // --- Manejo del formulario POST ---
 let errorMessage = '';
 let emailValue = '';
@@ -88,6 +91,15 @@ if (Astro.request.method === 'POST') {
       </div>
 
       {
+        registered && (
+          <div class="success-banner" role="status">
+            <span>✓</span>
+            <span>Registro exitoso. Ya podés iniciar sesión.</span>
+          </div>
+        )
+      }
+
+      {
         errorMessage && (
           <div class="error-banner" role="alert">
             <span class="error-icon">⚠</span>
@@ -124,6 +136,10 @@ if (Astro.request.method === 'POST') {
 
         <button type="submit" class="btn-submit">INGRESAR</button>
       </form>
+
+      <p class="register-link">
+        ¿Sos un club? <a href="/registro-club">Registrate acá</a>
+      </p>
     </div>
   </main>
 </Layout>
@@ -331,5 +347,39 @@ if (Astro.request.method === 'POST') {
   .btn-submit:active {
     transform: scale(0.98) translateY(0);
     box-shadow: 0 2px 12px rgba(246, 164, 0, 0.3);
+  }
+
+  /* ---- Success banner ---- */
+  .success-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: hsl(142 70% 60%);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
+    font-family: 'Barlow', sans-serif;
+  }
+
+  /* ---- Register link ---- */
+  .register-link {
+    margin-top: 1.25rem;
+    text-align: center;
+    font-size: 0.875rem;
+    font-family: 'Barlow', sans-serif;
+    color: hsl(215 20% 50%);
+  }
+
+  .register-link a {
+    color: hsl(35 100% 55%);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .register-link a:hover {
+    text-decoration: underline;
   }
 </style>
