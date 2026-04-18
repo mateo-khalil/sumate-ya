@@ -146,6 +146,47 @@ export async function registerClubWithBackend(
   return { ok: true, message: payload?.message ?? 'Registro exitoso' };
 }
 
+export interface RegisterPlayerInput {
+  displayName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
+/**
+ * Player registration frontend helper.
+ *
+ * Decision Context:
+ * - Why: Mirrors registerClubWithBackend() so the Astro page only speaks to the backend
+ *   REST layer. Keeping the shape identical (ok / message / errors) means both
+ *   registration pages can share the same error-rendering logic.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function registerPlayerWithBackend(
+  input: RegisterPlayerInput,
+): Promise<RegisterResult | { ok: false; message: string; errors?: RegisterFieldErrors }> {
+  const response = await fetch(`${backendUrl}/api/auth/register-player`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  const payload = (await response.json().catch(() => null)) as {
+    message?: string;
+    errors?: RegisterFieldErrors;
+  } | null;
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: payload?.message ?? 'Error al registrar. Intentá de nuevo.',
+      errors: payload?.errors,
+    };
+  }
+
+  return { ok: true, message: payload?.message ?? 'Registro exitoso' };
+}
+
 export async function logoutFromBackend(accessToken?: string): Promise<void> {
   if (!accessToken) {
     return;
