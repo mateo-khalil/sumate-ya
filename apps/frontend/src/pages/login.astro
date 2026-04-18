@@ -140,6 +140,9 @@ if (Astro.request.method === 'POST') {
       <p class="register-link">
         ¿Sos un club? <a href="/registro-club">Registrate acá</a>
       </p>
+      <p class="register-link">
+        ¿Sos jugador? <a href="/registro-jugador">Registrate acá</a>
+      </p>
     </div>
   </main>
 </Layout>
@@ -366,11 +369,15 @@ if (Astro.request.method === 'POST') {
 
   /* ---- Register link ---- */
   .register-link {
-    margin-top: 1.25rem;
+    margin-top: 0.75rem;
     text-align: center;
     font-size: 0.875rem;
     font-family: 'Barlow', sans-serif;
     color: hsl(215 20% 50%);
+  }
+
+  .register-link:first-of-type {
+    margin-top: 1.25rem;
   }
 
   .register-link a {

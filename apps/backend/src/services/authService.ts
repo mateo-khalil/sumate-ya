@@ -58,6 +58,12 @@ export interface RegisterInput {
   lng?: number;
 }
 
+export interface RegisterPlayerInput {
+  displayName: string;
+  email: string;
+  password: string;
+}
+
 function mapAuthenticatedUser(user: User, role: AuthUserRole): AuthenticatedUser {
   return {
     id: user.id,
@@ -230,5 +236,75 @@ export const authService = {
         mailResult.error,
       );
     }
+  },
+
+  /**
+   * Register a new player (role = 'player').
+   *
+   * Decision Context:
+   * - Why: Players sign up to find pickup matches and join teams. Unlike club_admin
+   *   registration, no club row is created and no additional business data is captured —
+   *   displayName, email, and password are the minimum viable profile.
+   * - Pattern: Mirrors register() — admin.createUser() with email_confirm: true (bypasses
+   *   the per-IP signUp rate limit) followed by a service-role insert into profiles with
+   *   role='player'. If the profile insert fails, the auth.users row is removed so the
+   *   email is not orphaned and the user can retry with the same credentials.
+   * - Constraints: Does NOT touch the clubs table — that is the sole differentiator vs.
+   *   the club_admin flow. matchesPlayed/matchesWon/isPublic default to the same values
+   *   used for club_admin so RLS-scoped reads of public profiles keep working uniformly.
+   * - Email: No welcome email is sent yet because emailService only has a club-flavored
+   *   template. Adding a player-specific template is out of scope for this story.
+   * - Previously fixed bugs: none relevant.
+   */
+  async registerPlayer(input: RegisterPlayerInput): Promise<void> {
+    const { data, error: createError } = await supabase.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      user_metadata: { nombre: input.displayName },
+      email_confirm: true,
+    });
+
+    if (createError) {
+      const msg = createError.message ?? '';
+      console.error(
+        `[authService.registerPlayer] createUser failed for email=${input.email}:`,
+        msg,
+      );
+      if (
+        msg.toLowerCase().includes('already registered') ||
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('duplicate') ||
+        msg.toLowerCase().includes('unique')
+      ) {
+        throw new Error('User already registered');
+      }
+      throw new Error(msg || 'No se pudo crear el usuario.');
+    }
+
+    if (!data.user) {
+      throw new Error('No se pudo crear el usuario. Intentá de nuevo.');
+    }
+
+    const userId = data.user.id;
+
+    const { error: profileError } = await supabase.from('profiles').insert({
+      id: userId,
+      displayName: input.displayName,
+      role: 'player',
+      matchesPlayed: 0,
+      matchesWon: 0,
+      isPublic: true,
+    });
+
+    if (profileError) {
+      console.error(
+        `[authService.registerPlayer] profile insert failed for userId=${userId}:`,
+        profileError.message,
+      );
+      await supabase.auth.admin.deleteUser(userId).catch(() => undefined);
+      throw new Error(`Error al crear el perfil: ${profileError.message}`);
+    }
+
+    console.info(`[authService.registerPlayer] Player registered userId=${userId}`);
   },
 };

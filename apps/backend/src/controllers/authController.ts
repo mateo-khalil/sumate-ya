@@ -36,6 +36,30 @@ const RegisterSchema = z
     path: ['confirmPassword'],
   });
 
+// ---------------------------------------------------------------------------
+// Zod schema for player registration
+//
+// Decision Context:
+// - Why: Player signup is intentionally minimal — only identity + credentials are
+//   captured. Extra fields (phone, position, skill level) belong to a later profile
+//   completion flow, not the initial signup, per product scope.
+// - Password min length: 8 chars (stricter than club admin's 6) because player accounts
+//   are created directly from the public web form without any club-side vetting; the
+//   higher floor reduces trivial credential-stuffing wins.
+// - Previously fixed bugs: none relevant.
+// ---------------------------------------------------------------------------
+const RegisterPlayerSchema = z
+  .object({
+    displayName: z.string().min(2, 'Nombre completo requerido (mínimo 2 caracteres)'),
+    email: z.string().email('Email inválido'),
+    password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+    confirmPassword: z.string().min(1, 'Confirmá tu contraseña'),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Las contraseñas no coinciden',
+    path: ['confirmPassword'],
+  });
+
 export const authController = {
   async login(req: Request, res: Response): Promise<void> {
     const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
@@ -146,6 +170,77 @@ export const authController = {
 
       if (message.toLowerCase().includes('password')) {
         res.status(400).json({ message: 'Datos inválidos', errors: { password: 'La contraseña no cumple los requisitos mínimos' } });
+        return;
+      }
+
+      res.status(400).json({ message: 'Error al registrar. Intentá de nuevo más tarde.' });
+    }
+  },
+
+  /**
+   * Player registration: same shape as register() but routes to authService.registerPlayer
+   * and uses RegisterPlayerSchema (no club fields). Error-mapping mirrors the club flow so
+   * the frontend can use a single error-rendering code path.
+   */
+  async registerPlayer(req: Request, res: Response): Promise<void> {
+    const parsed = RegisterPlayerSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      const errors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0];
+        if (typeof field === 'string' && !errors[field]) {
+          errors[field] = issue.message;
+        }
+      }
+      res.status(400).json({ message: 'Datos inválidos', errors });
+      return;
+    }
+
+    try {
+      await authService.registerPlayer({
+        displayName: parsed.data.displayName,
+        email: parsed.data.email,
+        password: parsed.data.password,
+      });
+      res.status(201).json({ message: 'Registro exitoso. Ya podés iniciar sesión.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Registration failed';
+      console.error('[authController.registerPlayer] Failed:', message);
+
+      if (
+        message.toLowerCase().includes('already registered') ||
+        message.toLowerCase().includes('already been registered')
+      ) {
+        res
+          .status(409)
+          .json({ message: 'Datos inválidos', errors: { email: 'Este email ya está registrado' } });
+        return;
+      }
+
+      if (
+        message.toLowerCase().includes('rate limit') ||
+        message.toLowerCase().includes('too many requests')
+      ) {
+        res.status(429).json({
+          message: 'Demasiados intentos de registro. Esperá unos minutos y volvé a intentarlo.',
+        });
+        return;
+      }
+
+      if (message.toLowerCase().includes('invalid email')) {
+        res.status(400).json({
+          message: 'Datos inválidos',
+          errors: { email: 'El email ingresado no es válido' },
+        });
+        return;
+      }
+
+      if (message.toLowerCase().includes('password')) {
+        res.status(400).json({
+          message: 'Datos inválidos',
+          errors: { password: 'La contraseña no cumple los requisitos mínimos' },
+        });
         return;
       }
 
