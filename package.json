@@ -13,6 +13,8 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck --force",
     "test": "turbo test",
+    "test:e2e": "npm --prefix apps/testing test",
+    "test:e2e:headed": "npm --prefix apps/testing run test:headed",
     "codegen": "turbo codegen",
     "format": "turbo format",
     "docker:up": "docker compose up --build -d",

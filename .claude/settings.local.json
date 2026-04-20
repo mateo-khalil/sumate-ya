@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(turbo typecheck *)",
+      "Bash(npx turbo *)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "notion",
+    "supabase"
+  ]
+}
