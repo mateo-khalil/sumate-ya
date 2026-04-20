@@ -21,6 +21,11 @@ import { defineConfig, devices } from '@playwright/test';
  *   up, we don't double-boot); CI always gets a fresh stack.
  * - `timeout: 180_000` — turbo dev cold-start (install + codegen + Astro + Apollo)
  *   can take well over a minute on first run; the default 60s was flaky.
+ * - Single `chrome` project (channel: 'chrome') — we intentionally target only
+ *   Google Chrome. Firefox/WebKit were dropped because our user base runs Chrome
+ *   and cross-browser runs tripled CI time without catching real regressions.
+ *   Using `channel: 'chrome'` pins the real Chrome build rather than bare
+ *   chromium, so what CI tests matches what users actually run.
  * - Previously fixed bugs: none relevant.
  */
 
@@ -53,42 +58,12 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  /* Configure projects for major browsers */
+  /* Run tests only in Google Chrome. */
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'chrome',
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
-
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
   ],
 
   /* Boot the full monorepo dev stack (turbo dev) from the repo root before tests run. */

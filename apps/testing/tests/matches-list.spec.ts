@@ -8,17 +8,38 @@ import { test, expect, type Page, type Route } from '@playwright/test';
  *   no tener datos seed en la DB de Supabase. Interceptando la respuesta del endpoint
  *   GraphQL dejamos los tests deterministas y los desacoplamos del estado del backend.
  * - El login NO va por GraphQL sino por POST a /login (SSR que golpea la REST del backend),
- *   así que el route de `http://localhost:4000/graphql` no interfiere con la autenticación.
+ *   así que el route de `**\/graphql` no interfiere con la autenticación.
  * - Usamos cookies HttpOnly (set por el flujo SSR de login) — Playwright las persiste entre
  *   navegaciones del mismo `page`, por lo que una vez logueados podemos ir directo a /partidos.
+ * - Por qué usamos el glob `**\/graphql` en lugar de la URL absoluta: el endpoint puede
+ *   cambiar de `http://localhost:4000/...` a `http://127.0.0.1:...` (o a un proxy del dev
+ *   server) y el matching literal por URL falla silenciosamente. El glob por path cubre
+ *   cualquier host/puerto.
+ * - Scope `main` en selectors: el Astro dev toolbar inyecta controles (incluyendo un
+ *   `<select>`) dentro del body que contaminan conteos globales. Restringir a `main`
+ *   garantiza que sólo contemos elementos de la página real.
  * - Assumptions:
- *   * El usuario `mateodura2010@gmail.com` tiene role != 'club_admin' → redirect a /partidos.
+ *   * El usuario `mateoduran2010@gmail.com` tiene role != 'club_admin' → redirect a /partidos.
  *   * El backend corre en :4000 y el frontend en :4321 (pnpm dev levantado a mano).
- * - Previously fixed bugs: none relevant.
+ * - Previously fixed bugs:
+ *   * Mock no interceptaba: urql envía las queries como **GET** con `operationName`,
+ *     `query` y `variables` en la querystring (no como POST JSON). El matcher
+ *     originalmente sólo miraba el body de POST, así que TODOS los requests caían al
+ *     backend real. `isGetMatchesRequest()` ahora mira primero los params de URL.
+ *   * Mock URL literal `http://localhost:4000/graphql` era frágil por diferencias de
+ *     host/puerto. Se cambió a glob `**\/graphql`.
+ *   * `page.locator('select')` contaba 4 elementos por el Astro dev toolbar. Se restringe
+ *     a `main select`.
+ *   * Interacciones con el filtro "Limpiar" fallaban porque React no había hidratado
+ *     todavía. Se espera a que la lista termine el loading antes de escribir en la búsqueda.
  */
 
 const FRONTEND_URL = 'http://localhost:4321';
-const GRAPHQL_URL = 'http://localhost:4000/graphql';
+// Regex path-only: matchea `/graphql` con cualquier host/puerto y opcionalmente
+// una querystring (urql arma queries con `?query=...&operationName=...`).
+// Usamos regex en lugar de glob porque Playwright ignora la querystring al matchear
+// globs, pero aún así queremos ser explícitos y robustos ante cambios de host.
+const GRAPHQL_ROUTE = /\/graphql(?:\?|$)/;
 
 const TEST_USER = {
   email: 'mateoduran2010@gmail.com',
@@ -56,27 +77,53 @@ function buildMatch(overrides: Partial<MockMatch> = {}): MockMatch {
  * Intercepta el endpoint GraphQL y responde `GetMatches` con la lista provista.
  * Deja pasar cualquier otra operación (si el front dispara más queries en el futuro).
  */
-async function mockMatchesQuery(page: Page, matches: MockMatch[]): Promise<void> {
-  await page.route(GRAPHQL_URL, async (route: Route) => {
-    const body = route.request().postDataJSON?.() as { query?: string; operationName?: string } | undefined;
-    const isGetMatches =
-      body?.operationName === 'GetMatches' || (body?.query?.includes('GetMatches') ?? false);
+/**
+ * Detecta si un request al endpoint `/graphql` corresponde a la operación `GetMatches`.
+ * urql envía queries como GET con los parámetros `query`, `operationName` y `variables`
+ * en la querystring (ver `@urql/core` fetchExchange) — NO como POST JSON. Por eso
+ * necesitamos inspeccionar tanto la URL como el body.
+ */
+function isGetMatchesRequest(route: Route): boolean {
+  const request = route.request();
+  const url = new URL(request.url());
+  const opName = url.searchParams.get('operationName');
+  const query = url.searchParams.get('query');
+  if (opName === 'GetMatches') return true;
+  if (typeof query === 'string' && query.includes('GetMatches')) return true;
 
-    if (isGetMatches) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ data: { matches } }),
-      });
+  if (request.method() === 'POST') {
+    const body = request.postDataJSON() as
+      | { query?: string; operationName?: string }
+      | null;
+    if (body?.operationName === 'GetMatches') return true;
+    if (typeof body?.query === 'string' && body.query.includes('GetMatches')) return true;
+  }
+  return false;
+}
+
+async function mockMatchesQuery(page: Page, matches: MockMatch[]): Promise<void> {
+  await page.unroute(GRAPHQL_ROUTE).catch(() => undefined);
+  await page.route(GRAPHQL_ROUTE, async (route: Route) => {
+    if (!isGetMatchesRequest(route)) {
+      await route.continue();
       return;
     }
-    await route.continue();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { matches } }),
+    });
   });
 }
 
 /** Mockea un error de servidor para el listado. */
 async function mockMatchesError(page: Page, message = 'Backend caído'): Promise<void> {
-  await page.route(GRAPHQL_URL, async (route: Route) => {
+  await page.unroute(GRAPHQL_ROUTE).catch(() => undefined);
+  await page.route(GRAPHQL_ROUTE, async (route: Route) => {
+    if (!isGetMatchesRequest(route)) {
+      await route.continue();
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -116,13 +163,19 @@ test.describe('Listado de partidos (/partidos)', () => {
     await page.goto(`${FRONTEND_URL}/partidos`);
 
     await expect(page.getByPlaceholder(/Buscar por partido o club/i)).toBeVisible();
-    // 3 selects: formato, zona, estado
-    await expect(page.locator('select')).toHaveCount(3);
+    // 3 selects: formato, zona, estado.
+    // Scope a `main` para ignorar el Astro dev toolbar (que puede inyectar un <select>).
+    await expect(page.locator('main select')).toHaveCount(3);
     await expect(page.getByRole('button', { name: /Más filtros/i })).toBeVisible();
   });
 
   test('"Más filtros" expande los date pickers y cambia el label del botón', async ({ page }) => {
     await page.goto(`${FRONTEND_URL}/partidos`);
+
+    // Esperar a que MatchList termine el fetch y hidrate antes de clickear — de lo
+    // contrario el click llega antes que React enganche el handler y setShowAdvanced
+    // nunca se dispara.
+    await expect(page.getByText('No hay partidos disponibles')).toBeVisible();
 
     await page.getByRole('button', { name: /Más filtros/i }).click();
 
@@ -134,6 +187,11 @@ test.describe('Listado de partidos (/partidos)', () => {
 
   test('al aplicar un filtro aparece "Limpiar" y al clickearlo se resetea la búsqueda', async ({ page }) => {
     await page.goto(`${FRONTEND_URL}/partidos`);
+
+    // Esperamos a que el empty-state (lista vacía mockeada) se renderice — garantiza
+    // que MatchList hidrató y los handlers onChange ya están enganchados. Sin esto,
+    // el fill() dispara antes de la hidratación y React no actualiza el estado.
+    await expect(page.getByText('No hay partidos disponibles')).toBeVisible();
 
     const search = page.getByPlaceholder(/Buscar por partido o club/i);
     await search.fill('river');
