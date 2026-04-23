@@ -33,7 +33,7 @@ const backendUrl =
   import.meta.env.PRIVATE_BACKEND_URL || process.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
 
 export function getRoleRedirect(role: UserRole | undefined): string {
-  return role === 'club_admin' ? '/panel-club' : '/partidos';
+  return role === 'club_admin' ? '/panel-club' : '/';
 }
 
 export function getAuthCookieOptions(isProd: boolean): CookieAttributes {

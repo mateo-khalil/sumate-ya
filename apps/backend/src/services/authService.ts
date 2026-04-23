@@ -31,6 +31,15 @@ import { emailService } from './emailService.js';
 
 const PROFILE_ROLE_COLUMNS = 'role';
 
+/**
+ * Resolve display name from Supabase User object
+ * Priority: user_metadata.displayName > email
+ */
+function resolveDisplayName(user: User): string {
+  const displayName = user.user_metadata?.displayName ?? user.email ?? 'Usuario';
+  return displayName;
+}
+
 export type AuthUserRole = 'player' | 'club_admin';
 
 export interface AuthenticatedUser {

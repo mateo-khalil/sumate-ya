@@ -1,22 +1,22 @@
 ---
 /**
- * Partidos (authenticated) — SSR
+ * Partidos — SSR (public, no auth required)
  *
  * Decision Context:
- * - Why SSR: Protected route that reads auth cookies server-side. Middleware redirects
- *   unauthenticated users to /login.
- * - Security: Uses getUser() (server-validated JWT) instead of getSession() which trusts
- *   the cookie blindly.
- * - Previously fixed bugs: none relevant.
+ * - Why public: Matches are visible to all users. Auth is only needed to join a match.
+ *   Unauthenticated users see the list and are redirected to /login when clicking "Sumarme".
+ * - Pattern: Reads optional session from cookie; passes isAuthenticated down to MatchList
+ *   so MatchCard can gate the join action client-side.
+ * - Previously fixed bugs: Was protected-only; removed from PROTECTED_ROUTES in middleware.
  */
 export const prerender = false;
 
 import Layout from '../../layouts/Layout.astro';
 import { MatchList } from '../../components/matches';
 
-// User is verified and attached by middleware — no redundant getUser() call needed
-const user = Astro.locals.user!;
-const nombre = user.displayName || user.email;
+const user = Astro.locals.user;
+const isAuthenticated = !!user;
+const nombre = user?.displayName || user?.email;
 ---
 
 <Layout title="Partidos Disponibles — Sumate Ya">
@@ -29,13 +29,19 @@ const nombre = user.displayName || user.email;
           <span class="topbar-name">SUMATE YA</span>
         </div>
         <div class="topbar-actions">
-          <span class="user-badge">
-            <span class="user-dot"></span>
-            {nombre}
-          </span>
-          <form method="POST" action="/api/auth/logout">
-            <button type="submit" class="btn-logout">Salir</button>
-          </form>
+          {isAuthenticated ? (
+            <>
+              <span class="user-badge">
+                <span class="user-dot"></span>
+                {nombre}
+              </span>
+              <form method="POST" action="/api/auth/logout">
+                <button type="submit" class="btn-logout">Salir</button>
+              </form>
+            </>
+          ) : (
+            <a href="/login" class="btn-logout">Iniciar Sesión</a>
+          )}
         </div>
       </div>
       <!-- Orange accent line -->
@@ -51,7 +57,7 @@ const nombre = user.displayName || user.email;
       </header>
 
       <section class="matches-section">
-        <MatchList client:visible />
+        <MatchList client:visible isAuthenticated={isAuthenticated} />
       </section>
     </main>
   </div>
