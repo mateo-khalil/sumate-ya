@@ -1,0 +1,84 @@
+name: "Tarea / Feature"
+description: "Crear una tarea de desarrollo con user story, subtareas y notas"
+title: "<emoji> Título corto"
+labels: ["💻 código"]
+projects: ["mateo-khalil/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Completá los campos para crear una tarea lista para el board.
+        Acordate de agregar luego el label de **área** (⚽ partidos, 🏆 torneos, etc.), el **Milestone** (Sprint N) y setear **Size / Priority / Tester** desde el panel del project.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      description: Sección de la app que toca esta tarea. Aplicá después el label correspondiente.
+      options:
+        - "⚽ partidos"
+        - "🏆 torneos"
+        - "🔐 autenticación"
+        - "🏢 club"
+        - "👤 perfil"
+        - "🗳️ votación"
+        - "⚙️ ajustes"
+        - "✨ extras"
+        - "🛠️ setup"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: task_type
+    attributes:
+      label: Tipo
+      options:
+        - "💻 código"
+        - "🐞 bug"
+        - "💅 polish"
+        - "📄 doc"
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: user_story
+    attributes:
+      label: User Story
+      description: "Formato: Como <rol>, quiero <acción> para <beneficio>."
+      placeholder: "Como jugador, quiero ... para ..."
+      value: |
+        Como **<rol>**, quiero **<qué>** para **<por qué>**.
+    validations:
+      required: true
+
+  - type: textarea
+    id: subtareas
+    attributes:
+      label: Subtareas
+      description: Lista de pasos concretos para completar la tarea.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: false
+
+  - type: textarea
+    id: notas
+    attributes:
+      label: Notas / Consideraciones
+      description: Constraints técnicos, decisiones, referencias, edge cases.
+      value: |
+        -
+    validations:
+      required: false
+
+  - type: input
+    id: epic
+    attributes:
+      label: Epic padre (opcional)
+      description: "Número del Epic al que pertenece (ej: #59). Luego setealo también desde 'Add parent' en el sidebar."
+      placeholder: "#59"
+    validations:
+      required: false
