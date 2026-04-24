@@ -1,5 +1,6 @@
 ---
 /**
+ * [MODIFIED] Added avatar upload modal and trigger.
  * Perfil — SSR (auth required)
  *
  * Decision Context:
@@ -21,7 +22,8 @@
 export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
-import ProfileCard from '../components/profile/ProfileCard.astro';
+import ProfileCard from '@/components/profile/ProfileCard.astro';
+import AvatarUpload from '@/components/profile/AvatarUpload.tsx';
 import { ACCESS_TOKEN_COOKIE } from '../lib/auth';
 import { GET_MY_PROFILE, type Profile } from '../graphql/operations/profile';
 
@@ -107,7 +109,12 @@ if (!accessToken) {
 
       <section class="profile-section">
         {profile ? (
-          <ProfileCard profile={profile} />
+          <div class="profile-card-wrapper">
+            <ProfileCard profile={profile} />
+            <button id="change-avatar-btn" class="btn-change-avatar" title="Cambiar foto de perfil">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+            </button>
+          </div>
         ) : (
           <div class="error-card" role="alert">
             <p class="error-title">No pudimos mostrar tu perfil</p>
@@ -120,8 +127,42 @@ if (!accessToken) {
         )}
       </section>
     </main>
+
+    <!-- Avatar Upload Modal -->
+    <div id="avatar-upload-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+      <div class="modal-content">
+        <button id="close-modal-btn" class="close-button" aria-label="Cerrar modal">&times;</button>
+        <h2 class="modal-title">Actualizar foto de perfil</h2>
+        <p class="modal-description">La imagen se redimensionará a 512x512px. Máximo 2MB.</p>
+        <AvatarUpload client:load />
+      </div>
+    </div>
   </div>
 </Layout>
+
+<script>
+  const modal = document.getElementById('avatar-upload-modal');
+  const openBtn = document.getElementById('change-avatar-btn');
+  const closeBtn = document.getElementById('close-modal-btn');
+
+  function showModal() {
+    modal?.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function hideModal() {
+    modal?.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  openBtn?.addEventListener('click', showModal);
+  closeBtn?.addEventListener('click', hideModal);
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      hideModal();
+    }
+  });
+</script>
 
 <style>
   .app-shell {
@@ -286,6 +327,101 @@ if (!accessToken) {
     padding: 0;
   }
 
+  .profile-card-wrapper {
+    position: relative;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .btn-change-avatar {
+    position: absolute;
+    top: 1.25rem;
+    left: 1.25rem;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(7, 15, 31, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: hsl(215 20% 75%);
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.2s, transform 0.2s;
+  }
+
+  .profile-card-wrapper:hover .btn-change-avatar {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .btn-change-avatar:hover {
+    background: rgba(20, 30, 50, 0.8);
+    color: #ffffff;
+  }
+
+  /* ---- Modal styles ---- */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(7, 15, 31, 0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.2s;
+  }
+  .modal-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .modal-content {
+    position: relative;
+    background: hsl(220 55% 11%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    padding: 2rem;
+    width: 90%;
+    max-width: 420px;
+    text-align: center;
+  }
+
+  .close-button {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    font-size: 1.75rem;
+    color: hsl(215 20% 50%);
+    cursor: pointer;
+    line-height: 1;
+  }
+  .close-button:hover {
+    color: hsl(210 20% 94%);
+  }
+
+  .modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.75rem;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    margin: 0 0 0.25rem;
+  }
+
+  .modal-description {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.9rem;
+    color: hsl(215 20% 60%);
+    margin: 0 0 1.5rem;
+  }
+
   /* ---- Error state ---- */
   .error-card {
     max-width: 560px;
@@ -348,5 +484,51 @@ if (!accessToken) {
   .btn-ghost:hover {
     background: rgba(255, 255, 255, 0.06);
     color: hsl(210 20% 94%);
+  }
+
+  /* Component-specific styles for AvatarUpload.tsx */
+  :global(.avatar-upload-container) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+  :global(.preview-area) {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    border: 2px dashed hsl(215 20% 30%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    overflow: hidden;
+  }
+  :global(.preview-area:hover) {
+    border-color: hsl(35 100% 55%);
+  }
+  :global(.avatar-preview) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  :global(.upload-placeholder) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: hsl(215 20% 50%);
+  }
+  :global(.error-message) {
+    color: hsl(0 72% 70%);
+    font-size: 0.875rem;
+    font-family: 'Barlow', sans-serif;
+    margin: 0;
+  }
+  :global(.upload-btn) {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 0.9rem;
   }
 </style>

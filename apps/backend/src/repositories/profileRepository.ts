@@ -75,6 +75,37 @@ export async function getProfileById(
   return data as unknown as ProfileRow;
 }
 
+/**
+ * Updates the avatarUrl column for a given profile.
+ *
+ * Decision Context:
+ * - Uses a user-scoped client by default so the UPDATE must satisfy the RLS policy
+ *   that gates writes to `auth.uid() = id`. Passing the service-role client (singleton)
+ *   here would bypass RLS and allow any backend code to overwrite any profile's avatar.
+ * - avatarUrl is an absolute public Storage URL. The calling service is responsible for
+ *   verifying the bucket exists before generating this URL (egress prevention rule).
+ * - Previously fixed bugs: none relevant.
+ */
+export async function updateAvatarUrl(
+  id: string,
+  avatarUrl: string,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('profiles')
+    .update({ avatarUrl })
+    .eq('id', id);
+
+  if (error) {
+    console.error(
+      `[profileRepository.updateAvatarUrl] Supabase error for profileId=${id}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
 export const profileRepository = {
   getProfileById,
+  updateAvatarUrl,
 };
