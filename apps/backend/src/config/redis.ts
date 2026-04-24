@@ -48,6 +48,9 @@ export const CACHE_PREFIX = {
   MATCH_DETAIL: 'match:',
   CLUBS_LIST: 'clubs:list',
   CLUB_DETAIL: 'club:',
+  // `profile:me:<userId>` — scoped to the owner because RLS differs per-user.
+  // Invalidate on profile mutations (updatePosition, stat recompute, etc.).
+  PROFILE_ME: 'profile:me:',
 } as const;
 
 // =====================================================

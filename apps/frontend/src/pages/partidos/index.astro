@@ -31,6 +31,7 @@ const nombre = user?.displayName || user?.email;
         <div class="topbar-actions">
           {isAuthenticated ? (
             <>
+              <a href="/perfil" class="nav-link">Mi Perfil</a>
               <span class="user-badge">
                 <span class="user-dot"></span>
                 {nombre}
@@ -119,6 +120,25 @@ const nombre = user?.displayName || user?.email;
   .topbar-accent {
     height: 2px;
     background: linear-gradient(90deg, hsl(35 100% 48%), hsl(216 85% 45%), transparent);
+  }
+
+  /* ---- Nav link (to /perfil etc.) ---- */
+  .nav-link {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(215 20% 65%);
+    text-decoration: none;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .nav-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: hsl(210 20% 94%);
   }
 
   /* ---- User badge ---- */

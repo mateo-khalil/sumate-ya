@@ -62,10 +62,31 @@ export enum MatchStatus {
   Open = 'OPEN'
 }
 
+export enum PlayerPosition {
+  Defender = 'DEFENDER',
+  Forward = 'FORWARD',
+  Goalkeeper = 'GOALKEEPER',
+  Midfielder = 'MIDFIELDER'
+}
+
+export type Profile = {
+  __typename?: 'Profile';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  division: Scalars['Int']['output'];
+  id: Scalars['ID']['output'];
+  matchesPlayed: Scalars['Int']['output'];
+  matchesWon: Scalars['Int']['output'];
+  preferredPosition?: Maybe<PlayerPosition>;
+  role: UserRole;
+  winrate?: Maybe<Scalars['Float']['output']>;
+};
+
 export type Query = {
   __typename?: 'Query';
   match?: Maybe<Match>;
   matches: Array<Match>;
+  myProfile: Profile;
 };
 
 
@@ -77,6 +98,11 @@ export type QueryMatchArgs = {
 export type QueryMatchesArgs = {
   filters?: InputMaybe<MatchFilters>;
 };
+
+export enum UserRole {
+  ClubAdmin = 'CLUB_ADMIN',
+  Player = 'PLAYER'
+}
 
 export type WithIndex<TObject> = TObject & Record<string, any>;
 export type ResolversObject<TObject> = WithIndex<TObject>;
@@ -154,24 +180,30 @@ export type DirectiveResolverFn<TResult = Record<PropertyKey, never>, TParent = 
 export type ResolversTypes = ResolversObject<{
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   Club: ResolverTypeWrapper<Club>;
+  Float: ResolverTypeWrapper<Scalars['Float']['output']>;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
   Match: ResolverTypeWrapper<Match>;
   MatchFilters: MatchFilters;
   MatchFormat: MatchFormat;
   MatchStatus: MatchStatus;
+  PlayerPosition: PlayerPosition;
+  Profile: ResolverTypeWrapper<Profile>;
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
+  UserRole: UserRole;
 }>;
 
 /** Mapping between all available schema types and the resolvers parents */
 export type ResolversParentTypes = ResolversObject<{
   Boolean: Scalars['Boolean']['output'];
   Club: Club;
+  Float: Scalars['Float']['output'];
   ID: Scalars['ID']['output'];
   Int: Scalars['Int']['output'];
   Match: Match;
   MatchFilters: MatchFilters;
+  Profile: Profile;
   Query: Record<PropertyKey, never>;
   String: Scalars['String']['output'];
 }>;
@@ -195,14 +227,28 @@ export type MatchResolvers<ContextType = GraphQLContext, ParentType extends Reso
   totalSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
 }>;
 
+export type ProfileResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Profile'] = ResolversParentTypes['Profile']> = ResolversObject<{
+  avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  division?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  matchesPlayed?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  matchesWon?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  preferredPosition?: Resolver<Maybe<ResolversTypes['PlayerPosition']>, ParentType, ContextType>;
+  role?: Resolver<ResolversTypes['UserRole'], ParentType, ContextType>;
+  winrate?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+}>;
+
 export type QueryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = ResolversObject<{
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType, RequireFields<QueryMatchArgs, 'id'>>;
   matches?: Resolver<Array<ResolversTypes['Match']>, ParentType, ContextType, Partial<QueryMatchesArgs>>;
+  myProfile?: Resolver<ResolversTypes['Profile'], ParentType, ContextType>;
 }>;
 
 export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Club?: ClubResolvers<ContextType>;
   Match?: MatchResolvers<ContextType>;
+  Profile?: ProfileResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
 }>;
 

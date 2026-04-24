@@ -1,0 +1,359 @@
+---
+/**
+ * ProfileCard — player profile summary (Astro island, no interactivity required)
+ *
+ * Decision Context:
+ * - Why Astro and not React: the card is fully static server-rendered data (name, avatar,
+ *   stats). frontend.md: "Prefer Astro for static content and use React islands only for
+ *   interactivity." No client JS shipped.
+ * - Design: FIFA dark stadium aesthetic (design-system.md) — Bebas Neue title, Barlow
+ *   body, FIFA orange/blue/gold tokens via CSS vars. No hardcoded hex/hsl values outside
+ *   the globals theme; inline hsl() references reuse the exact tokens documented in
+ *   globals.css so a future palette change only touches one file.
+ * - Avatar: falls back to the user's initials when `avatarUrl` is null/empty. Initials
+ *   are derived from `displayName` on the server — zero client cost and always aligned
+ *   with what the user sees in /partidos.
+ * - Division: rendered as a bold pill because the value space is small (1..N) and a
+ *   numeric badge reads better than a free-form label. Color ramps by tier so higher
+ *   divisions "pop" more — tie-break favors the orange primary for division 1.
+ * - Position: maps backend enum to a Spanish label + emoji for readability. Handles the
+ *   null case explicitly (new players with no preferred position set).
+ * - Winrate: progress bar + numeric label. `null` renders as "—" (not 0%) so zero-match
+ *   players aren't shown as losers. The bar color ramps through destructive/primary/gold
+ *   at 40/70 thresholds — purely visual, keeps the card scannable without a legend.
+ * - Previously fixed bugs: none relevant.
+ */
+
+import type { PlayerPosition, Profile } from '@/graphql/operations/profile';
+
+interface Props {
+  profile: Profile;
+}
+
+const { profile } = Astro.props;
+
+// ----- Initials fallback for empty avatar -----
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts
+    .map((p) => p.charAt(0).toUpperCase())
+    .join('')
+    .slice(0, 2);
+}
+
+const hasAvatar = !!profile.avatarUrl && profile.avatarUrl.length > 0;
+const initials = getInitials(profile.displayName);
+
+// ----- Position label + emoji -----
+const POSITION_LABEL: Record<PlayerPosition, { label: string; emoji: string }> = {
+  GOALKEEPER: { label: 'Arquero', emoji: '🧤' },
+  DEFENDER: { label: 'Defensor', emoji: '🛡️' },
+  MIDFIELDER: { label: 'Mediocampista', emoji: '🎯' },
+  FORWARD: { label: 'Delantero', emoji: '⚽' },
+};
+
+const positionInfo = profile.preferredPosition
+  ? POSITION_LABEL[profile.preferredPosition]
+  : null;
+
+// ----- Division badge tone -----
+// Division 1 is the strongest tier in this data model → most prominent treatment.
+function divisionTone(division: number): 'gold' | 'orange' | 'blue' {
+  if (division <= 1) return 'gold';
+  if (division <= 3) return 'orange';
+  return 'blue';
+}
+const tone = divisionTone(profile.division);
+
+// ----- Winrate display -----
+const winratePercent = profile.winrate ?? 0;
+const winrateLabel =
+  profile.winrate === null ? '—' : `${profile.winrate.toFixed(2)}%`;
+
+function winrateTone(rate: number | null): 'low' | 'mid' | 'high' {
+  if (rate === null) return 'low';
+  if (rate >= 70) return 'high';
+  if (rate >= 40) return 'mid';
+  return 'low';
+}
+const wrTone = winrateTone(profile.winrate);
+---
+
+<article class="profile-card">
+  <header class="profile-header">
+    <div class={`avatar avatar--${hasAvatar ? 'img' : 'initials'}`}>
+      {hasAvatar ? (
+        <img src={profile.avatarUrl!} alt={`Avatar de ${profile.displayName}`} />
+      ) : (
+        <span>{initials}</span>
+      )}
+      <span class="avatar-ring"></span>
+    </div>
+
+    <div class="identity">
+      <p class="eyebrow">JUGADOR · SUMATE YA</p>
+      <h2 class="name">{profile.displayName}</h2>
+      {positionInfo && (
+        <p class="position">
+          <span class="position-emoji" aria-hidden="true">{positionInfo.emoji}</span>
+          <span>{positionInfo.label}</span>
+        </p>
+      )}
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class={`stat stat--division stat--${tone}`}>
+      <span class="stat-label">División</span>
+      <span class="stat-value">{profile.division}</span>
+    </div>
+
+    <div class="stat">
+      <span class="stat-label">Partidos jugados</span>
+      <span class="stat-value">{profile.matchesPlayed}</span>
+    </div>
+
+    <div class="stat">
+      <span class="stat-label">Partidos ganados</span>
+      <span class="stat-value">{profile.matchesWon}</span>
+    </div>
+
+    <div class={`stat stat--winrate stat--wr-${wrTone}`}>
+      <span class="stat-label">Winrate</span>
+      <span class="stat-value">{winrateLabel}</span>
+      <div class="wr-bar" aria-hidden="true">
+        <div class="wr-bar-fill" style={`width:${winratePercent}%`}></div>
+      </div>
+    </div>
+  </div>
+</article>
+
+<style>
+  .profile-card {
+    max-width: 720px;
+    margin: 0 auto;
+    border-radius: 1rem;
+    background: linear-gradient(
+      180deg,
+      hsl(220 55% 13%) 0%,
+      hsl(220 60% 9%) 100%
+    );
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 0 0 1px rgba(246, 164, 0, 0.05),
+      0 30px 60px -20px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+  }
+
+  /* ---- Header (avatar + identity) ---- */
+  .profile-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem 2rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: radial-gradient(
+      ellipse at top left,
+      hsl(216 85% 18% / 0.35),
+      transparent 60%
+    );
+  }
+
+  .avatar {
+    position: relative;
+    width: 108px;
+    height: 108px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: hsl(220 40% 16%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .avatar--initials span {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5rem;
+    letter-spacing: 0.04em;
+    color: hsl(35 100% 55%);
+  }
+
+  .avatar-ring {
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background:
+      linear-gradient(hsl(220 55% 11%), hsl(220 55% 11%)) padding-box,
+      linear-gradient(135deg, hsl(35 100% 48%), hsl(216 85% 45%)) border-box;
+    pointer-events: none;
+  }
+
+  .identity {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .eyebrow {
+    margin: 0;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: hsl(35 100% 55%);
+    text-transform: uppercase;
+  }
+
+  .name {
+    margin: 0;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.25rem;
+    line-height: 1;
+    letter-spacing: 0.03em;
+    color: hsl(210 20% 96%);
+    word-break: break-word;
+  }
+
+  .position {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.25rem 0 0;
+    padding: 0.2rem 0.6rem;
+    width: fit-content;
+    border-radius: 999px;
+    background: hsl(216 85% 45% / 0.12);
+    border: 1px solid hsl(216 85% 45% / 0.3);
+    color: hsl(216 85% 75%);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .position-emoji {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  /* ---- Stats grid ---- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .stat {
+    padding: 1.25rem 1.5rem;
+    background: hsl(220 55% 10%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .stat-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: hsl(215 20% 55%);
+  }
+
+  .stat-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.85rem;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    color: hsl(210 20% 94%);
+  }
+
+  /* ---- Division tones ---- */
+  .stat--division .stat-value {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.5rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 0.5rem;
+    font-size: 1.75rem;
+    width: fit-content;
+  }
+
+  .stat--gold .stat-value {
+    background: linear-gradient(135deg, hsl(42 100% 55%), hsl(35 100% 48%));
+    color: hsl(220 72% 7%);
+    box-shadow: 0 4px 14px hsl(42 100% 55% / 0.25);
+  }
+
+  .stat--orange .stat-value {
+    background: hsl(35 100% 48% / 0.18);
+    color: hsl(35 100% 65%);
+    border: 1px solid hsl(35 100% 48% / 0.4);
+  }
+
+  .stat--blue .stat-value {
+    background: hsl(216 85% 45% / 0.18);
+    color: hsl(216 85% 70%);
+    border: 1px solid hsl(216 85% 45% / 0.4);
+  }
+
+  /* ---- Winrate (full width row) ---- */
+  .stat--winrate {
+    grid-column: 1 / -1;
+  }
+
+  .wr-bar {
+    margin-top: 0.55rem;
+    height: 8px;
+    width: 100%;
+    background: hsl(220 40% 16%);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .wr-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+
+  .stat--wr-low .wr-bar-fill {
+    background: linear-gradient(90deg, hsl(0 72% 51%), hsl(35 100% 48%));
+  }
+
+  .stat--wr-mid .wr-bar-fill {
+    background: linear-gradient(90deg, hsl(35 100% 48%), hsl(42 100% 55%));
+  }
+
+  .stat--wr-high .wr-bar-fill {
+    background: linear-gradient(90deg, hsl(42 100% 55%), hsl(216 85% 55%));
+  }
+
+  @media (max-width: 560px) {
+    .profile-header {
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 1.5rem 1.25rem;
+    }
+
+    .stats {
+      grid-template-columns: 1fr;
+    }
+
+    .name {
+      font-size: 1.85rem;
+    }
+  }
+</style>

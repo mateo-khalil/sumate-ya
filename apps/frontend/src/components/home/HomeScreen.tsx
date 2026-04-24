@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Users, Trophy, MapPin, Zap, Shield, ArrowRight } from 'lucide-react';
+import { Users, Trophy, MapPin, Zap, Shield, ArrowRight, UserCircle } from 'lucide-react';
 import { MatchList } from '@/components/matches';
 
 /**
@@ -20,6 +20,10 @@ import { MatchList } from '@/components/matches';
  * - The outline-text effect on the hero subtitle uses WebkitTextStroke for dramatic
  *   typographic contrast — a deliberate aesthetic choice tied to the stadium billboard
  *   visual direction.
+ * - Authenticated CTA cluster: "Explorar Partidos" (primary, FIFA orange) →
+ *   "Mi Perfil" (secondary, FIFA blue) → "Cerrar Sesión" (outline). The profile
+ *   link lives here because the home page has no topbar — without it, signed-in users
+ *   had no discoverable entry point to /perfil from the landing.
  * - Previously fixed bugs: none relevant.
  */
 
@@ -121,6 +125,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <a href="/partidos">
                     Explorar Partidos
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </a>
+                </Button>
+                <Button size="lg" variant="secondary" className="gap-2" asChild>
+                  <a href="/perfil">
+                    <UserCircle className="h-4 w-4" />
+                    Mi Perfil
                   </a>
                 </Button>
                 <form method="POST" action="/api/auth/logout">
