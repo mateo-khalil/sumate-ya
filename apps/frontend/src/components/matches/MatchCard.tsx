@@ -32,6 +32,11 @@ export interface Match {
   club: {
     name: string;
     zone: string | null;
+    // Optional coordinates — present when the backend returns them (e.g. map view).
+    // Callers must treat these as nullable; not all clubs have geocoded locations.
+    lat?: number | null;
+    lng?: number | null;
+    address?: string | null;
   } | null;
 }
 

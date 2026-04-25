@@ -97,6 +97,32 @@ export const GET_MATCHES = /* GraphQL */ `
   }
 `;
 
+/**
+ * Extended GET_MATCHES variant that also fetches club coordinates and address.
+ * Used by MatchMap to render geo-markers. Kept separate from GET_MATCHES so the
+ * base list view does not pay the lat/lng egress cost when it doesn't need them.
+ */
+export const GET_MATCHES_WITH_COORDS = /* GraphQL */ `
+  query GetMatchesWithCoords($filters: MatchFilters) {
+    matches(filters: $filters) {
+      id
+      title
+      startTime
+      format
+      totalSlots
+      availableSlots
+      status
+      club {
+        name
+        zone
+        address
+        lat
+        lng
+      }
+    }
+  }
+`;
+
 /** @deprecated Use GET_MATCHES with filters instead */
 export const GET_OPEN_MATCHES = GET_MATCHES;
 

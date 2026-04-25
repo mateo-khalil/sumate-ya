@@ -12,7 +12,7 @@
 export const prerender = false;
 
 import Layout from '../../layouts/Layout.astro';
-import { MatchList } from '../../components/matches';
+import { MatchesView } from '../../components/matches';
 
 const user = Astro.locals.user;
 const isAuthenticated = !!user;
@@ -61,7 +61,7 @@ const nombre = user?.displayName || user?.email;
       </header>
 
       <section class="matches-section">
-        <MatchList client:visible isAuthenticated={isAuthenticated} />
+        <MatchesView client:visible isAuthenticated={isAuthenticated} />
       </section>
     </main>
   </div>
