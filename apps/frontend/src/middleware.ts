@@ -26,11 +26,12 @@ import {
 } from './lib/auth';
 
 /** Rutas que requieren autenticación */
-const PROTECTED_ROUTES: string[] = ['/panel-club', '/perfil'];
+const PROTECTED_ROUTES: string[] = ['/panel-club', '/perfil', '/partidos/crear'];
 
 /** Rutas restringidas por rol: sólo accesibles para el rol indicado */
 const ROLE_RESTRICTED: Record<string, UserRole> = {
   '/panel-club': 'club_admin',
+  '/partidos/crear': 'player',
 };
 
 export const onRequest = defineMiddleware(async ({ cookies, url, redirect, locals }, next) => {

@@ -1,0 +1,184 @@
+---
+/**
+ * /partidos/crear — SSR page for creating a new match (player role required)
+ *
+ * Decision Context:
+ * - SSR (`prerender = false`): the page needs the authenticated user's displayName for
+ *   the navbar and pre-fetches the clubs list so Step 1 of the wizard renders instantly.
+ * - Auth: middleware enforces role='player' for this route — club_admin users are
+ *   redirected to /panel-club. The page trusts Astro.locals.user is always populated.
+ * - Clubs pre-fetch: fetched server-side via the backend GraphQL endpoint using the
+ *   access token cookie. If the fetch fails we pass an empty array and let the wizard
+ *   show the "no clubs available" message rather than crashing the page.
+ * - Redirect on success: `onSuccess` is passed as a prop; the React island calls
+ *   window.location.href so the navigation happens client-side without a full SSR round-trip.
+ * - The wizard layout is a clean centered card (max-width 560px) consistent with the
+ *   profile page design.
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
+import Layout from '../../layouts/Layout.astro';
+import CreateMatchFlow from '@/components/matches/create/CreateMatchFlow';
+import { ACCESS_TOKEN_COOKIE } from '../../lib/auth';
+import { GET_CLUBS, type ClubDetail } from '../../graphql/operations/matches';
+
+const user = Astro.locals.user;
+const displayName = user?.displayName ?? user?.email ?? 'Jugador';
+
+const accessToken = Astro.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
+const backendUrl =
+  import.meta.env.PRIVATE_BACKEND_URL ||
+  (typeof process !== 'undefined' ? process.env.PRIVATE_BACKEND_URL : undefined) ||
+  'http://localhost:4000';
+
+let clubs: ClubDetail[] = [];
+try {
+  const res = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ query: GET_CLUBS }),
+  });
+  const json = await res.json() as { data?: { clubs: ClubDetail[] }; errors?: unknown[] };
+  clubs = json.data?.clubs ?? [];
+} catch (e) {
+  console.error('[partidos/crear] Failed to pre-fetch clubs:', e);
+}
+---
+
+<Layout title="Crear Partido — Sumate Ya">
+  <div class="app-shell">
+    <!-- Navbar -->
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="topbar-ball">⚽</span>
+          <span class="topbar-name">SUMATE YA</span>
+        </div>
+        <div class="topbar-actions">
+          <a href="/partidos" class="nav-link">Partidos</a>
+          <a href="/perfil" class="nav-link">Mi Perfil</a>
+          <span class="user-badge">
+            <span class="user-dot"></span>
+            {displayName}
+          </span>
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="btn-logout">Salir</button>
+          </form>
+        </div>
+      </div>
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <!-- Page content -->
+    <main class="page-content">
+      <header class="section-header">
+        <div class="section-label">ORGANIZÁ</div>
+        <h1 class="section-title">Crear Partido</h1>
+        <p class="section-sub">Seleccioná club, horario y formato para que otros jugadores se sumen</p>
+      </header>
+
+      <section class="wizard-container">
+        <CreateMatchFlow
+          client:load
+          initialClubs={clubs}
+          redirectBase="/partidos/"
+        />
+      </section>
+    </main>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* Navbar — matches /perfil pattern */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(7, 15, 31, 0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .topbar-inner {
+    max-width: 1100px; margin: 0 auto;
+    padding: 0 1.25rem; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 0.5rem; }
+  .topbar-ball { font-size: 1.25rem; line-height: 1; }
+  .topbar-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.35rem; letter-spacing: 0.1em; color: #fff;
+  }
+  .topbar-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .topbar-accent {
+    height: 2px;
+    background: linear-gradient(90deg, hsl(35 100% 48%), hsl(216 85% 45%), transparent);
+  }
+  .nav-link {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem;
+    font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: hsl(215 20% 65%); text-decoration: none;
+    padding: 0.3rem 0.6rem; border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .nav-link:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 94%); }
+  .user-badge {
+    display: flex; align-items: center; gap: 0.4rem;
+    background: rgba(246,164,0,0.12); border: 1px solid rgba(246,164,0,0.25);
+    color: hsl(35 100% 65%); border-radius: 20px;
+    padding: 0.25rem 0.875rem; font-size: 0.8125rem;
+    font-weight: 600; font-family: 'Barlow Condensed', sans-serif;
+    letter-spacing: 0.03em;
+  }
+  .user-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: hsl(35 100% 55%); box-shadow: 0 0 4px hsl(35 100% 55%);
+  }
+  .btn-logout {
+    background: transparent; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.8125rem;
+    font-family: 'Barlow', sans-serif; font-weight: 500;
+    cursor: pointer; color: hsl(215 20% 60%);
+    transition: background 0.15s, color 0.15s;
+  }
+  .btn-logout:hover {
+    background: rgba(255,255,255,0.07); color: hsl(210 20% 90%);
+  }
+
+  /* Page layout */
+  .page-content {
+    flex: 1; max-width: 1100px; width: 100%;
+    margin: 0 auto; padding: 2.5rem 1.25rem;
+  }
+  .section-header {
+    margin-bottom: 2rem; padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem;
+    font-weight: 700; letter-spacing: 0.2em; color: hsl(35 100% 55%);
+    text-transform: uppercase; margin-bottom: 0.5rem;
+  }
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem;
+    font-weight: 400; letter-spacing: 0.04em; color: #fff;
+    margin: 0 0 0.375rem; line-height: 1;
+  }
+  .section-sub {
+    margin: 0; color: hsl(215 20% 50%);
+    font-size: 0.9rem; font-family: 'Barlow', sans-serif;
+  }
+
+  .wizard-container {
+    max-width: 560px;
+    background: hsl(220 55% 11%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 1rem;
+    padding: 1.75rem;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+  }
+</style>

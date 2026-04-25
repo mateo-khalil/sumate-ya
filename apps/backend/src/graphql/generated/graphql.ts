@@ -25,6 +25,61 @@ export type Club = {
   zone?: Maybe<Scalars['String']['output']>;
 };
 
+export type ClubDetail = {
+  __typename?: 'ClubDetail';
+  address: Scalars['String']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  imageUrl?: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  phone?: Maybe<Scalars['String']['output']>;
+  zone: Scalars['String']['output'];
+};
+
+export type ClubSlot = {
+  __typename?: 'ClubSlot';
+  clubId: Scalars['ID']['output'];
+  court: Court;
+  dayOfWeek: Scalars['String']['output'];
+  endTime: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  priceArs?: Maybe<Scalars['Float']['output']>;
+  startTime: Scalars['String']['output'];
+};
+
+export type Court = {
+  __typename?: 'Court';
+  id: Scalars['ID']['output'];
+  isIndoor: Scalars['Boolean']['output'];
+  maxFormat: MatchFormat;
+  name: Scalars['String']['output'];
+  surface: CourtSurface;
+};
+
+export enum CourtSurface {
+  Concrete = 'CONCRETE',
+  Grass = 'GRASS',
+  Indoor = 'INDOOR',
+  Synthetic = 'SYNTHETIC'
+}
+
+export type CreateMatchInput = {
+  capacity: Scalars['Int']['input'];
+  clubId: Scalars['ID']['input'];
+  courtId: Scalars['ID']['input'];
+  date: Scalars['String']['input'];
+  description?: InputMaybe<Scalars['String']['input']>;
+  format: MatchFormat;
+  slotId: Scalars['ID']['input'];
+};
+
+export type CreateMatchResult = {
+  __typename?: 'CreateMatchResult';
+  matchId?: Maybe<Scalars['ID']['output']>;
+  message?: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
 export type Match = {
   __typename?: 'Match';
   availableSlots: Scalars['Int']['output'];
@@ -62,6 +117,16 @@ export enum MatchStatus {
   Open = 'OPEN'
 }
 
+export type Mutation = {
+  __typename?: 'Mutation';
+  createMatch: CreateMatchResult;
+};
+
+
+export type MutationCreateMatchArgs = {
+  input: CreateMatchInput;
+};
+
 export enum PlayerPosition {
   Defender = 'DEFENDER',
   Forward = 'FORWARD',
@@ -84,9 +149,17 @@ export type Profile = {
 
 export type Query = {
   __typename?: 'Query';
+  clubSlots: Array<ClubSlot>;
+  clubs: Array<ClubDetail>;
   match?: Maybe<Match>;
   matches: Array<Match>;
   myProfile: Profile;
+};
+
+
+export type QueryClubSlotsArgs = {
+  clubId: Scalars['ID']['input'];
+  date: Scalars['String']['input'];
 };
 
 
@@ -180,6 +253,12 @@ export type DirectiveResolverFn<TResult = Record<PropertyKey, never>, TParent = 
 export type ResolversTypes = ResolversObject<{
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   Club: ResolverTypeWrapper<Club>;
+  ClubDetail: ResolverTypeWrapper<ClubDetail>;
+  ClubSlot: ResolverTypeWrapper<ClubSlot>;
+  Court: ResolverTypeWrapper<Court>;
+  CourtSurface: CourtSurface;
+  CreateMatchInput: CreateMatchInput;
+  CreateMatchResult: ResolverTypeWrapper<CreateMatchResult>;
   Float: ResolverTypeWrapper<Scalars['Float']['output']>;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
@@ -187,6 +266,7 @@ export type ResolversTypes = ResolversObject<{
   MatchFilters: MatchFilters;
   MatchFormat: MatchFormat;
   MatchStatus: MatchStatus;
+  Mutation: ResolverTypeWrapper<Record<PropertyKey, never>>;
   PlayerPosition: PlayerPosition;
   Profile: ResolverTypeWrapper<Profile>;
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
@@ -198,11 +278,17 @@ export type ResolversTypes = ResolversObject<{
 export type ResolversParentTypes = ResolversObject<{
   Boolean: Scalars['Boolean']['output'];
   Club: Club;
+  ClubDetail: ClubDetail;
+  ClubSlot: ClubSlot;
+  Court: Court;
+  CreateMatchInput: CreateMatchInput;
+  CreateMatchResult: CreateMatchResult;
   Float: Scalars['Float']['output'];
   ID: Scalars['ID']['output'];
   Int: Scalars['Int']['output'];
   Match: Match;
   MatchFilters: MatchFilters;
+  Mutation: Record<PropertyKey, never>;
   Profile: Profile;
   Query: Record<PropertyKey, never>;
   String: Scalars['String']['output'];
@@ -215,6 +301,40 @@ export type ClubResolvers<ContextType = GraphQLContext, ParentType extends Resol
   zone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;
 
+export type ClubDetailResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ClubDetail'] = ResolversParentTypes['ClubDetail']> = ResolversObject<{
+  address?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  description?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  imageUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  phone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  zone?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
+export type ClubSlotResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ClubSlot'] = ResolversParentTypes['ClubSlot']> = ResolversObject<{
+  clubId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  court?: Resolver<ResolversTypes['Court'], ParentType, ContextType>;
+  dayOfWeek?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  endTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  priceArs?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
+export type CourtResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Court'] = ResolversParentTypes['Court']> = ResolversObject<{
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isIndoor?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  maxFormat?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  surface?: Resolver<ResolversTypes['CourtSurface'], ParentType, ContextType>;
+}>;
+
+export type CreateMatchResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['CreateMatchResult'] = ResolversParentTypes['CreateMatchResult']> = ResolversObject<{
+  matchId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  message?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+}>;
+
 export type MatchResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Match'] = ResolversParentTypes['Match']> = ResolversObject<{
   availableSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   club?: Resolver<Maybe<ResolversTypes['Club']>, ParentType, ContextType>;
@@ -225,6 +345,10 @@ export type MatchResolvers<ContextType = GraphQLContext, ParentType extends Reso
   status?: Resolver<ResolversTypes['MatchStatus'], ParentType, ContextType>;
   title?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   totalSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+}>;
+
+export type MutationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
+  createMatch?: Resolver<ResolversTypes['CreateMatchResult'], ParentType, ContextType, RequireFields<MutationCreateMatchArgs, 'input'>>;
 }>;
 
 export type ProfileResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Profile'] = ResolversParentTypes['Profile']> = ResolversObject<{
@@ -240,6 +364,8 @@ export type ProfileResolvers<ContextType = GraphQLContext, ParentType extends Re
 }>;
 
 export type QueryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = ResolversObject<{
+  clubSlots?: Resolver<Array<ResolversTypes['ClubSlot']>, ParentType, ContextType, RequireFields<QueryClubSlotsArgs, 'clubId' | 'date'>>;
+  clubs?: Resolver<Array<ResolversTypes['ClubDetail']>, ParentType, ContextType>;
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType, RequireFields<QueryMatchArgs, 'id'>>;
   matches?: Resolver<Array<ResolversTypes['Match']>, ParentType, ContextType, Partial<QueryMatchesArgs>>;
   myProfile?: Resolver<ResolversTypes['Profile'], ParentType, ContextType>;
@@ -247,7 +373,12 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
 
 export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Club?: ClubResolvers<ContextType>;
+  ClubDetail?: ClubDetailResolvers<ContextType>;
+  ClubSlot?: ClubSlotResolvers<ContextType>;
+  Court?: CourtResolvers<ContextType>;
+  CreateMatchResult?: CreateMatchResultResolvers<ContextType>;
   Match?: MatchResolvers<ContextType>;
+  Mutation?: MutationResolvers<ContextType>;
   Profile?: ProfileResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
 }>;

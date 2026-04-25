@@ -20,6 +20,7 @@
 
 export type MatchFormat = 'FIVE_VS_FIVE' | 'SEVEN_VS_SEVEN' | 'TEN_VS_TEN' | 'ELEVEN_VS_ELEVEN';
 export type MatchStatus = 'OPEN' | 'FULL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type CourtSurface = 'GRASS' | 'SYNTHETIC' | 'CONCRETE' | 'INDOOR';
 
 export interface MatchFilters {
   status?: MatchStatus;
@@ -28,6 +29,50 @@ export interface MatchFilters {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+}
+
+export interface ClubDetail {
+  id: string;
+  name: string;
+  zone: string;
+  address: string;
+  phone: string | null;
+  description: string | null;
+  imageUrl: string | null;
+}
+
+export interface Court {
+  id: string;
+  name: string;
+  maxFormat: MatchFormat;
+  surface: CourtSurface;
+  isIndoor: boolean;
+}
+
+export interface ClubSlot {
+  id: string;
+  clubId: string;
+  court: Court;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  priceArs: number | null;
+}
+
+export interface CreateMatchInput {
+  clubId: string;
+  slotId: string;
+  courtId: string;
+  date: string; // YYYY-MM-DD
+  format: MatchFormat;
+  capacity: number;
+  description?: string;
+}
+
+export interface CreateMatchResult {
+  success: boolean;
+  matchId: string | null;
+  message: string | null;
 }
 
 // =====================================================
@@ -54,6 +99,50 @@ export const GET_MATCHES = /* GraphQL */ `
 
 /** @deprecated Use GET_MATCHES with filters instead */
 export const GET_OPEN_MATCHES = GET_MATCHES;
+
+export const GET_CLUBS = /* GraphQL */ `
+  query GetClubs {
+    clubs {
+      id
+      name
+      zone
+      address
+      phone
+      description
+      imageUrl
+    }
+  }
+`;
+
+export const GET_CLUB_SLOTS = /* GraphQL */ `
+  query GetClubSlots($clubId: ID!, $date: String!) {
+    clubSlots(clubId: $clubId, date: $date) {
+      id
+      clubId
+      dayOfWeek
+      startTime
+      endTime
+      priceArs
+      court {
+        id
+        name
+        maxFormat
+        surface
+        isIndoor
+      }
+    }
+  }
+`;
+
+export const CREATE_MATCH = /* GraphQL */ `
+  mutation CreateMatch($input: CreateMatchInput!) {
+    createMatch(input: $input) {
+      success
+      matchId
+      message
+    }
+  }
+`;
 
 export const GET_MATCH_BY_ID = /* GraphQL */ `
   query GetMatchById($id: ID!) {
