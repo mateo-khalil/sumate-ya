@@ -5,11 +5,13 @@
       "url": "https://mcp.notion.com/mcp"
     },
     "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=getfqjkfsueucoalvtcc",
-      "headers": {
-        "Authorization": "Bearer sbp_02c4c622dc9faa8b26ad8159fb34bc69b819d37e"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--project-ref=getfqjkfsueucoalvtcc",
+        "--access-token=sbp_677007ff7a46a71f082382ac56f6375770b47fce"
+      ]
     }
   }
 }
