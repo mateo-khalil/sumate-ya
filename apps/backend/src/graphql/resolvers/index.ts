@@ -7,6 +7,7 @@
  * - Previously fixed bugs: none relevant.
  */
 
+import { clubResolvers } from './domains/club.js';
 import { matchResolvers } from './domains/match.js';
 import { profileResolvers } from './domains/profile.js';
 
@@ -14,5 +15,9 @@ export const resolvers = {
   Query: {
     ...matchResolvers.Query,
     ...profileResolvers.Query,
+    ...clubResolvers.Query,
+  },
+  Mutation: {
+    ...matchResolvers.Mutation,
   },
 };

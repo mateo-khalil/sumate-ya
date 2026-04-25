@@ -303,10 +303,125 @@ export async function getOpenMatches(client: SupabaseClient = supabase): Promise
   return getMatchesWithFilters({ status: 'open' }, client);
 }
 
+// =====================================================
+// Match Creation Types & Functions
+// =====================================================
+
+export interface CreateMatchInput {
+  organizerId: string;
+  clubId: string;
+  courtId: string;
+  clubSlotId: string;
+  format: string; // DB enum value: '5v5' | '7v7' | '10v10' | '11v11'
+  capacity: number;
+  scheduledAt: string; // ISO 8601 timestamp
+  description?: string | null;
+}
+
+export interface NewMatchRow {
+  id: string;
+  organizerId: string;
+  clubId: string;
+  courtId: string | null;
+  clubSlotId: string | null;
+  format: string;
+  capacity: number;
+  scheduledAt: string;
+  status: string;
+  description: string | null;
+  createdAt: string;
+}
+
+const NEW_MATCH_COLUMNS = `
+  id,
+  "organizerId",
+  "clubId",
+  "courtId",
+  "clubSlotId",
+  format,
+  capacity,
+  "scheduledAt",
+  status,
+  description,
+  "createdAt"
+`;
+
+/**
+ * Insert a new match row.
+ * Must be called with a user-scoped client so the INSERT RLS policy (`organizerId = auth.uid()`)
+ * is satisfied. Using the service-role singleton here would bypass that check.
+ *
+ * Decision Context:
+ * - Why user-scoped: INSERT RLS on matches requires `auth.uid() = organizerId`. If we used
+ *   the service-role singleton the policy would be bypassed — a bug that would allow any
+ *   authenticated user's token to create matches on behalf of any other user.
+ * - `status` defaults to 'open' in the DB; `resultStatus` defaults to 'pending'. We do not
+ *   pass those columns so the DB defaults apply and we don't hard-code enum strings here.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function createMatch(
+  input: CreateMatchInput,
+  client: SupabaseClient = supabase,
+): Promise<NewMatchRow> {
+  const { data, error } = await client
+    .from('matches')
+    .insert({
+      organizerId: input.organizerId,
+      clubId: input.clubId,
+      courtId: input.courtId,
+      clubSlotId: input.clubSlotId,
+      format: input.format,
+      capacity: input.capacity,
+      scheduledAt: input.scheduledAt,
+      description: input.description ?? null,
+    })
+    .select(NEW_MATCH_COLUMNS)
+    .single();
+
+  if (error) {
+    console.error('[matchRepository.createMatch] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return data as unknown as NewMatchRow;
+}
+
+/**
+ * Insert a row into matchParticipants to register a player on a team.
+ * Called immediately after createMatch to add the organizer to team A.
+ *
+ * Decision Context:
+ * - Uses user-scoped client so the INSERT RLS policy on matchParticipants is enforced.
+ * - If this insert fails after the match is already created, the match still exists but has
+ *   0 participants — a recoverable state. We log the error and re-throw so the service can
+ *   surface a clear message. A future improvement could wrap both inserts in a DB transaction.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function createMatchParticipant(
+  matchId: string,
+  playerId: string,
+  team: 'a' | 'b',
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('matchParticipants')
+    .insert({ matchId, playerId, team });
+
+  if (error) {
+    console.error(
+      `[matchRepository.createMatchParticipant] Supabase error matchId=${matchId} playerId=${playerId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
 // Export repository as object for consistency
 export const matchRepository = {
   getMatchesWithFilters,
   getMatchesByStatus,
   getMatchById,
   getOpenMatches,
+  createMatch,
+  createMatchParticipant,
 };

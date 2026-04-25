@@ -1,0 +1,86 @@
+# Schema for club listing, slot queries, and match creation
+#
+# Decision Context:
+# - Why separate file: keeps the existing match.graphql (listing/detail) isolated from
+#   creation concerns. Apollo merges all .graphql files in schema/ automatically.
+# - ClubDetail vs Club: the existing `Club` type in match.graphql is a minimal projection
+#   for embedded use in Match queries (id/name/zone only). ClubDetail is the rich version
+#   for the "select a club" step — adding address, phone, description so the player can
+#   make an informed choice without a second round-trip.
+# - CourtSurface mirrors the `courtSurface` DB enum exactly (grass/synthetic/concrete/indoor).
+# - ClubSlot.dayOfWeek is a String (not a custom enum) so it serialises as "monday"/"tuesday"
+#   etc. — the frontend already converts a Date to a day name for the filter.
+# - CreateMatchInput includes `date: String!` (YYYY-MM-DD) so the resolver can compute
+#   `scheduledAt = date + slot.startTime` without an additional round-trip to read the slot.
+# - `type Mutation` (not `extend`) because this is the first mutation in the schema. If a
+#   second mutation file is added later, it must use `extend type Mutation`.
+# - Previously fixed bugs: none relevant.
+
+enum CourtSurface {
+  GRASS
+  SYNTHETIC
+  CONCRETE
+  INDOOR
+}
+
+# Rich club details used in the "pick a club" wizard step
+type ClubDetail {
+  id: ID!
+  name: String!
+  zone: String!
+  address: String!
+  phone: String
+  description: String
+  imageUrl: String
+}
+
+# Court within a club
+type Court {
+  id: ID!
+  name: String!
+  maxFormat: MatchFormat!
+  surface: CourtSurface!
+  isIndoor: Boolean!
+}
+
+# A recurring weekly time slot at a club
+type ClubSlot {
+  id: ID!
+  clubId: ID!
+  court: Court!
+  dayOfWeek: String!
+  startTime: String!
+  endTime: String!
+  priceArs: Float
+}
+
+# Input for creating a new match
+input CreateMatchInput {
+  clubId: ID!
+  slotId: ID!
+  courtId: ID!
+  # Date of the match in YYYY-MM-DD format — combined with slot.startTime for scheduledAt
+  date: String!
+  format: MatchFormat!
+  capacity: Int!
+  description: String
+}
+
+# Result of createMatch mutation
+type CreateMatchResult {
+  success: Boolean!
+  matchId: ID
+  message: String
+}
+
+extend type Query {
+  # List all clubs (public)
+  clubs: [ClubDetail!]!
+  # Non-blocked slots for a club on a given date (YYYY-MM-DD). Auth required.
+  clubSlots(clubId: ID!, date: String!): [ClubSlot!]!
+}
+
+type Mutation {
+  # Create a new match. Requires authentication and player role.
+  createMatch(input: CreateMatchInput!): CreateMatchResult!
+}
