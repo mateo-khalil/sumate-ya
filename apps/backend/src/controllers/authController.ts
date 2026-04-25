@@ -14,6 +14,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 
 import { authService } from '../services/authService.js';
+import { isInUruguay, URUGUAY_BOUNDS_DESCRIPTION } from '../utils/uruguayBounds.js';
 
 // ---------------------------------------------------------------------------
 // Zod schema for club admin registration
@@ -28,13 +29,35 @@ const RegisterSchema = z
     address: z.string().min(5, 'Dirección requerida'),
     zone: z.string().min(1, 'Zona requerida'),
     phone: z.string().min(6, 'Teléfono requerido'),
+    // lat/lng are optional at registration — can be set later via profile.
+    // When provided, both must be present and within Uruguay.
+    // Decision Context: Uruguay-only validation enforced here (controller layer) so
+    // the DB never receives coordinates that would place markers outside Uruguay on the map.
+    // Previously fixed bugs: seed data with Buenos Aires coords caused all map markers
+    // to render off-screen; this validation prevents recurrence going forward.
     lat: z.number().optional(),
     lng: z.number().optional(),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: 'Las contraseñas no coinciden',
     path: ['confirmPassword'],
-  });
+  })
+  .refine(
+    (d) => {
+      if (d.lat == null && d.lng == null) return true; // both absent — OK
+      if (d.lat != null && d.lng == null) return false; // lat without lng — invalid
+      if (d.lat == null && d.lng != null) return false; // lng without lat — invalid
+      return true;
+    },
+    { message: 'Debés ingresar latitud y longitud juntas', path: ['lat'] },
+  )
+  .refine(
+    (d) => {
+      if (d.lat == null || d.lng == null) return true; // already covered above
+      return isInUruguay(d.lat, d.lng);
+    },
+    { message: URUGUAY_BOUNDS_DESCRIPTION, path: ['lat'] },
+  );
 
 // ---------------------------------------------------------------------------
 // Zod schema for player registration

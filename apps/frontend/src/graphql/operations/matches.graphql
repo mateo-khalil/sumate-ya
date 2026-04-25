@@ -16,6 +16,26 @@ query GetMatches($filters: MatchFilters) {
   }
 }
 
+# Extended variant for the map view — includes club coordinates and address
+query GetMatchesWithCoords($filters: MatchFilters) {
+  matches(filters: $filters) {
+    id
+    title
+    startTime
+    format
+    totalSlots
+    availableSlots
+    status
+    club {
+      name
+      zone
+      address
+      lat
+      lng
+    }
+  }
+}
+
 query GetMatchById($id: ID!) {
   match(id: $id) {
     id

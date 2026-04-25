@@ -97,7 +97,10 @@ function toMatch(row: MatchWithClub): Match {
       ? {
           id: row.clubs.id,
           name: row.clubs.name,
-          zone: row.clubs.zone,
+          zone: row.clubs.zone ?? null,
+          address: row.clubs.address ?? null,
+          lat: row.clubs.lat ?? null,
+          lng: row.clubs.lng ?? null,
         }
       : null,
   };

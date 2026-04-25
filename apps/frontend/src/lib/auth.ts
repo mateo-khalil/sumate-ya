@@ -9,7 +9,8 @@
  * - Previously fixed bugs: none relevant.
  */
 
-import type { AstroCookies, CookieAttributes } from 'astro';
+// CookieAttributes was removed in Astro 6 — the canonical type is AstroCookieSetOptions.
+import type { AstroCookies, AstroCookieSetOptions } from 'astro';
 
 export type UserRole = 'player' | 'club_admin';
 
@@ -36,7 +37,7 @@ export function getRoleRedirect(role: UserRole | undefined): string {
   return role === 'club_admin' ? '/panel-club' : '/';
 }
 
-export function getAuthCookieOptions(isProd: boolean): CookieAttributes {
+export function getAuthCookieOptions(isProd: boolean): AstroCookieSetOptions {
   return {
     httpOnly: true,
     sameSite: 'lax',

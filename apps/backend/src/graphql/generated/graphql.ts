@@ -19,8 +19,11 @@ export type Scalars = {
 
 export type Club = {
   __typename?: 'Club';
+  address?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   imageUrl?: Maybe<Scalars['String']['output']>;
+  lat?: Maybe<Scalars['Float']['output']>;
+  lng?: Maybe<Scalars['Float']['output']>;
   name: Scalars['String']['output'];
   zone?: Maybe<Scalars['String']['output']>;
 };
@@ -295,8 +298,11 @@ export type ResolversParentTypes = ResolversObject<{
 }>;
 
 export type ClubResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Club'] = ResolversParentTypes['Club']> = ResolversObject<{
+  address?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   imageUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  lat?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  lng?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   zone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;

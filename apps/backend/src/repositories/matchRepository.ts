@@ -39,10 +39,15 @@ const MATCH_COLUMNS = `
   "clubId"
 `;
 
+// lat/lng/address added for map view — these were intentionally excluded before
+// to save egress; now they are fetched explicitly so the Club type can expose them.
 const CLUB_COLUMNS = `
   id,
   name,
-  zone
+  zone,
+  address,
+  lat,
+  lng
 `;
 
 // =====================================================
@@ -64,6 +69,9 @@ export interface ClubRow {
   id: string;
   name: string;
   zone: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
 }
 
 export interface MatchWithClub extends MatchRow {

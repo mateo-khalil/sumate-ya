@@ -1,10 +1,21 @@
 # GraphQL Schema: Match and Club types with queries
 
 # Club where matches are played
+#
+# Decision Context:
+# - lat/lng added to support the map view on /partidos. Previously excluded from queries
+#   to save egress; now selectively included when the caller needs location data.
+# - address exposed so the map popup can show the street address without a second round-trip.
+# - Fields remain nullable because legacy club rows may lack coordinates — callers must
+#   filter out clubs where lat/lng are null before rendering markers.
+# - Previously fixed bugs: none relevant.
 type Club {
   id: ID!
   name: String!
   zone: String
+  address: String
+  lat: Float
+  lng: Float
   imageUrl: String
 }
 
