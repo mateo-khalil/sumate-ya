@@ -1,0 +1,15 @@
+# Profile operations — GraphQL source of truth (see matches.graphql pattern)
+
+query GetMyProfile {
+  myProfile {
+    id
+    displayName
+    avatarUrl
+    role
+    preferredPosition
+    division
+    matchesPlayed
+    matchesWon
+    winrate
+  }
+}

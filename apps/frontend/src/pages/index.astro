@@ -1,11 +1,18 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+export const prerender = false;
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+import Layout from '../layouts/Layout.astro';
+import HomeScreen from '../components/home/HomeScreen';
+import { getSessionFromBackend, readAccessToken } from '../lib/auth';
+
+const accessToken = readAccessToken(Astro.cookies);
+const user = accessToken ? await getSessionFromBackend(accessToken) : null;
 ---
 
 <Layout>
-	<Welcome />
+	<HomeScreen
+		client:load
+		isAuthenticated={user !== null}
+		userName={user?.displayName}
+	/>
 </Layout>

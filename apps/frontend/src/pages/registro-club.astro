@@ -1,0 +1,365 @@
+---
+/**
+ * Registro de Club (SSR)
+ *
+ * Decision Context:
+ * - Why SSR: Handles POST form server-side so credentials are never sent via client-side fetch.
+ *   Same progressive-enhancement pattern as login.astro.
+ * - Pattern: All Supabase calls are brokered by the backend via /api/auth/register. The
+ *   frontend only calls the backend REST endpoint.
+ * - Security: Passwords never reach the Astro page's client bundle. Field-level errors come
+ *   from Zod validation on the backend and are mapped back to the form inline.
+ * - Constraints: latitud/longitud are optional — clubs can be added without coordinates initially.
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
+import Layout from '../layouts/Layout.astro';
+import { readAccessToken, getSessionFromBackend, getRoleRedirect, registerClubWithBackend } from '../lib/auth';
+
+// Redirect already-authenticated users
+const accessToken = readAccessToken(Astro.cookies);
+if (accessToken) {
+  const user = await getSessionFromBackend(accessToken);
+  if (user) return Astro.redirect(getRoleRedirect(user.role));
+}
+
+type FieldErrors = Record<string, string>;
+
+let globalError = '';
+let fieldErrors: FieldErrors = {};
+
+let values = {
+  displayName: '', email: '', clubName: '',
+  address: '', zone: '', phone: '', lat: '', lng: '',
+};
+
+if (Astro.request.method === 'POST') {
+  const fd = await Astro.request.formData();
+
+  values = {
+    displayName: fd.get('displayName')?.toString() ?? '',
+    email:       fd.get('email')?.toString() ?? '',
+    clubName:    fd.get('clubName')?.toString() ?? '',
+    address:     fd.get('address')?.toString() ?? '',
+    zone:        fd.get('zone')?.toString() ?? '',
+    phone:       fd.get('phone')?.toString() ?? '',
+    lat:         fd.get('lat')?.toString() ?? '',
+    lng:         fd.get('lng')?.toString() ?? '',
+  };
+
+  const password        = fd.get('password')?.toString() ?? '';
+  const confirmPassword = fd.get('confirmPassword')?.toString() ?? '';
+
+  const result = await registerClubWithBackend({
+    ...values,
+    password,
+    confirmPassword,
+    lat: values.lat ? parseFloat(values.lat) : undefined,
+    lng: values.lng ? parseFloat(values.lng) : undefined,
+  });
+
+  if (result.ok) {
+    return Astro.redirect('/login?registered=1');
+  }
+
+  fieldErrors = result.errors ?? {};
+  globalError = Object.keys(fieldErrors).length === 0 ? (result.message || 'Error al registrar') : '';
+}
+---
+
+<Layout title="Registrar Club — Sumate Ya">
+  <main class="reg-wrapper">
+    <div class="stadium-arc" aria-hidden="true"></div>
+
+    <div class="reg-card">
+      <div class="card-top-stripe"></div>
+
+      <div class="reg-header">
+        <div class="brand-lockup">
+          <span>⚽</span>
+          <h1 class="brand-name">SUMATE YA</h1>
+        </div>
+        <p class="reg-subtitle">Registrá tu club y publicá tus canchas</p>
+      </div>
+
+      {globalError && (
+        <div class="error-banner" role="alert">
+          <span>⚠</span> {globalError}
+        </div>
+      )}
+
+      <form method="POST" novalidate class="reg-form">
+
+        <!-- ── Sección: Admin ─────────────────────────── -->
+        <div class="form-section">
+          <div class="section-label">DATOS DEL ADMINISTRADOR</div>
+
+          <div class="field">
+            <label for="displayName">Nombre completo</label>
+            <input id="displayName" name="displayName" type="text"
+              value={values.displayName} placeholder="Juan Pérez" autocomplete="name" />
+            {fieldErrors.displayName && <span class="field-error">{fieldErrors.displayName}</span>}
+          </div>
+
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email"
+              value={values.email} placeholder="admin@miclub.com" autocomplete="email" />
+            {fieldErrors.email && <span class="field-error">{fieldErrors.email}</span>}
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="password">Contraseña</label>
+              <input id="password" name="password" type="password"
+                placeholder="••••••••" autocomplete="new-password" />
+              {fieldErrors.password && <span class="field-error">{fieldErrors.password}</span>}
+            </div>
+            <div class="field">
+              <label for="confirmPassword">Confirmar contraseña</label>
+              <input id="confirmPassword" name="confirmPassword" type="password"
+                placeholder="••••••••" autocomplete="new-password" />
+              {fieldErrors.confirmPassword && <span class="field-error">{fieldErrors.confirmPassword}</span>}
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Sección: Club ──────────────────────────── -->
+        <div class="form-section">
+          <div class="section-label">DATOS DEL CLUB</div>
+
+          <div class="field">
+            <label for="clubName">Nombre del club</label>
+            <input id="clubName" name="clubName" type="text"
+              value={values.clubName} placeholder="Club Atletico Sur" />
+            {fieldErrors.clubName && <span class="field-error">{fieldErrors.clubName}</span>}
+          </div>
+
+          <div class="field">
+            <label for="address">Dirección</label>
+            <input id="address" name="address" type="text"
+              value={values.address} placeholder="Av. Mitre 1234, Avellaneda" />
+            {fieldErrors.address && <span class="field-error">{fieldErrors.address}</span>}
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="zone">Zona</label>
+              <input id="zone" name="zone" type="text"
+                value={values.zone} placeholder="Sur, Norte, Oeste…" />
+              {fieldErrors.zone && <span class="field-error">{fieldErrors.zone}</span>}
+            </div>
+            <div class="field">
+              <label for="phone">Teléfono</label>
+              <input id="phone" name="phone" type="tel"
+                value={values.phone} placeholder="+54 11 4222-1111" autocomplete="tel" />
+              {fieldErrors.phone && <span class="field-error">{fieldErrors.phone}</span>}
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="lat">Latitud <span class="optional">(opcional)</span></label>
+              <input id="lat" name="lat" type="number" step="any"
+                value={values.lat} placeholder="-34.6037" />
+            </div>
+            <div class="field">
+              <label for="lng">Longitud <span class="optional">(opcional)</span></label>
+              <input id="lng" name="lng" type="number" step="any"
+                value={values.lng} placeholder="-58.3816" />
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-submit">REGISTRAR CLUB</button>
+      </form>
+
+      <p class="login-link">
+        ¿Ya tenés cuenta? <a href="/login">Iniciá sesión</a>
+      </p>
+      <p class="login-link">
+        ¿Sos jugador? <a href="/registro-jugador">Registrate acá</a>
+      </p>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .reg-wrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stadium-arc {
+    position: fixed;
+    bottom: -28vw;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90vw;
+    height: 45vw;
+    border: 2px solid rgba(246, 164, 0, 0.1);
+    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+    pointer-events: none;
+  }
+
+  /* ── Card ── */
+  .reg-card {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 560px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    position: relative;
+    z-index: 1;
+  }
+
+  .card-top-stripe {
+    position: absolute;
+    top: 0; left: 2rem; right: 2rem;
+    height: 3px;
+    background: linear-gradient(90deg, hsl(42 100% 55%), hsl(216 85% 45%));
+    border-radius: 0 0 3px 3px;
+  }
+
+  /* ── Header ── */
+  .reg-header { text-align: center; margin-bottom: 1.75rem; }
+
+  .brand-lockup {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.5rem; margin-bottom: 0.5rem;
+  }
+
+  .brand-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.1rem; font-weight: 400;
+    letter-spacing: 0.06em; color: #fff; margin: 0;
+  }
+
+  .reg-subtitle {
+    margin: 0; color: hsl(215 20% 55%);
+    font-size: 0.875rem; font-family: 'Barlow', sans-serif;
+  }
+
+  /* ── Error banner ── */
+  .error-banner {
+    display: flex; align-items: flex-start; gap: 0.5rem;
+    background: rgba(220, 38, 38, 0.12);
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    color: hsl(0 72% 70%);
+    border-radius: 8px; padding: 0.75rem 1rem;
+    font-size: 0.875rem; margin-bottom: 1.25rem;
+    font-family: 'Barlow', sans-serif;
+  }
+
+  /* ── Form ── */
+  .reg-form { display: flex; flex-direction: column; gap: 1.5rem; }
+
+  .form-section { display: flex; flex-direction: column; gap: 1rem; }
+
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.7rem; font-weight: 700;
+    letter-spacing: 0.18em; color: hsl(42 100% 55%);
+    text-transform: uppercase; padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(246, 164, 0, 0.15);
+  }
+
+  .field { display: flex; flex-direction: column; gap: 0.35rem; }
+
+  .field-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem;
+  }
+
+  @media (max-width: 480px) {
+    .field-row { grid-template-columns: 1fr; }
+  }
+
+  .field label {
+    font-size: 0.78rem; font-weight: 600;
+    color: hsl(215 20% 62%); text-transform: uppercase;
+    letter-spacing: 0.08em; font-family: 'Barlow Condensed', sans-serif;
+  }
+
+  .optional {
+    font-weight: 400; text-transform: none;
+    letter-spacing: 0; color: hsl(215 20% 45%);
+    font-size: 0.75rem;
+  }
+
+  .field input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px; padding: 0.7rem 0.875rem;
+    font-size: 0.9375rem; font-family: 'Barlow', sans-serif;
+    color: hsl(210 20% 94%);
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    outline: none; width: 100%;
+  }
+
+  .field input::placeholder { color: hsl(215 20% 38%); }
+
+  .field input:focus {
+    border-color: hsl(216 85% 55%);
+    background: rgba(27, 105, 224, 0.08);
+    box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.2);
+  }
+
+  .field-error {
+    font-size: 0.78rem; color: hsl(0 72% 65%);
+    font-family: 'Barlow', sans-serif;
+  }
+
+  /* ── Submit ── */
+  .btn-submit {
+    margin-top: 0.25rem; padding: 0.875rem;
+    background: linear-gradient(135deg, hsl(42 100% 55%), hsl(42 100% 46%));
+    color: #fff; border: none; border-radius: 8px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem; letter-spacing: 0.12em;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.15s, filter 0.15s;
+    box-shadow: 0 4px 20px rgba(246, 164, 0, 0.35);
+    position: relative; overflow: hidden;
+  }
+
+  .btn-submit::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+    pointer-events: none;
+  }
+
+  .btn-submit:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 6px 28px rgba(246, 164, 0, 0.5);
+    transform: translateY(-1px);
+  }
+
+  .btn-submit:active { transform: scale(0.98); }
+
+  /* ── Footer link ── */
+  .login-link {
+    margin-top: 0.75rem; text-align: center;
+    font-size: 0.875rem; font-family: 'Barlow', sans-serif;
+    color: hsl(215 20% 50%);
+  }
+
+  .login-link:first-of-type {
+    margin-top: 1.25rem;
+  }
+
+  .login-link a {
+    color: hsl(35 100% 55%); text-decoration: none; font-weight: 600;
+  }
+
+  .login-link a:hover { text-decoration: underline; }
+</style>

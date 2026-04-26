@@ -32,12 +32,19 @@ export interface Match {
   club: {
     name: string;
     zone: string | null;
+    // Optional coordinates — present when the backend returns them (e.g. map view).
+    // Callers must treat these as nullable; not all clubs have geocoded locations.
+    lat?: number | null;
+    lng?: number | null;
+    address?: string | null;
   } | null;
 }
 
 interface MatchCardProps {
   match: Match;
   onJoin?: (matchId: string) => void;
+  /** When false, clicking "Sumarme" redirects to /login instead of joining */
+  isAuthenticated?: boolean;
 }
 
 /**
@@ -77,7 +84,7 @@ function formatDisplay(format: MatchFormat): string {
   return FORMAT_LABELS[format] || format;
 }
 
-export function MatchCard({ match, onJoin }: MatchCardProps) {
+export function MatchCard({ match, onJoin, isAuthenticated = false }: MatchCardProps) {
   const filledSlots = match.totalSlots - match.availableSlots;
   const isFull = match.availableSlots === 0;
 
@@ -123,7 +130,13 @@ export function MatchCard({ match, onJoin }: MatchCardProps) {
           <Button
             size="sm"
             disabled={isFull}
-            onClick={() => onJoin?.(match.id)}
+            onClick={() => {
+              if (!isAuthenticated) {
+                window.location.href = '/login';
+                return;
+              }
+              onJoin?.(match.id);
+            }}
           >
             {isFull ? 'Completo' : 'Sumarme'}
           </Button>

@@ -9,9 +9,11 @@
       "args": [
         "-y",
         "@supabase/mcp-server-supabase@latest",
-        "--project-ref=getfqjkfsueucoalvtcc",
-        "--access-token=sbp_677007ff7a46a71f082382ac56f6375770b47fce"
-      ]
+        "--project-ref=getfqjkfsueucoalvtcc"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "sbp_86fd983ce49a8878376c322747ef8e390a766632"
+      }
     }
   }
 }

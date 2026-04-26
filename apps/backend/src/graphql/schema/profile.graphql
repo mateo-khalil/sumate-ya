@@ -1,0 +1,43 @@
+# GraphQL Schema: Profile type and myProfile query
+#
+# Decision Context:
+# - Why: Player-facing profile page needs a self-scoped query (`myProfile`) instead of a
+#   public `profile(id)` so the resolver can enforce auth + RLS via the caller's JWT.
+# - Why Int for `division`: DB column is smallint; keeping it as Int here avoids exposing
+#   a made-up enum that would drift from the DB default (1) without a migration.
+# - `winrate` is Float? and nullable: a player with 0 matches has no meaningful winrate,
+#   so we surface `null` instead of a misleading 0.0.
+# - Previously fixed bugs: none relevant.
+
+# User role enum (mirrors DB enum "userRole": player | club_admin)
+enum UserRole {
+  PLAYER
+  CLUB_ADMIN
+}
+
+# On-pitch preferred position (mirrors DB enum "playerPosition")
+enum PlayerPosition {
+  GOALKEEPER
+  DEFENDER
+  MIDFIELDER
+  FORWARD
+}
+
+# A player or club-admin profile linked to auth.users
+type Profile {
+  id: ID!
+  displayName: String!
+  avatarUrl: String
+  role: UserRole!
+  preferredPosition: PlayerPosition
+  division: Int!
+  matchesPlayed: Int!
+  matchesWon: Int!
+  # Win percentage 0-100 with 2 decimals, or null when matchesPlayed = 0
+  winrate: Float
+}
+
+extend type Query {
+  # Returns the authenticated user's profile. Auth required.
+  myProfile: Profile!
+}

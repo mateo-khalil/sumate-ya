@@ -19,6 +19,7 @@
  *     then falls back to URL protocol as last resort.
  */
 
+// CookieAttributes was removed in Astro 6 — the canonical type is AstroCookieSetOptions.
 import type { AstroCookies, AstroCookieSetOptions } from 'astro';
 
 export type UserRole = 'player' | 'club_admin';
@@ -60,7 +61,7 @@ export function isProduction(request: Request): boolean {
 }
 
 export function getRoleRedirect(role: UserRole | undefined): string {
-  return role === 'club_admin' ? '/panel-club' : '/partidos';
+  return role === 'club_admin' ? '/panel-club' : '/';
 }
 
 // P2: maxAge param makes the cookie persistent (vs session-only when omitted).
@@ -98,11 +99,17 @@ export async function loginWithBackend(email: string, password: string): Promise
   });
 
   const payload = (await response.json().catch(() => null)) as
-    | { message?: string; accessToken?: string; refreshToken?: string; user?: AuthUser }
+    | { code?: string; message?: string; accessToken?: string; refreshToken?: string; user?: AuthUser }
     | null;
 
   if (!response.ok || !payload?.accessToken || !payload.refreshToken || !payload.user) {
-    throw new Error(payload?.message ?? 'Authentication failed');
+    // Preserve machine-readable code for cases like email_not_confirmed so the
+    // caller can render a specific message without string-matching the display text.
+    const errorMessage =
+      payload?.code === 'email_not_confirmed'
+        ? 'email_not_confirmed'
+        : (payload?.message ?? 'Authentication failed');
+    throw new Error(errorMessage);
   }
 
   return {
@@ -150,6 +157,94 @@ export async function refreshFromBackend(refreshToken: string): Promise<LoginRes
     refreshToken: payload.refreshToken,
     user: payload.user,
   };
+}
+
+export interface RegisterClubInput {
+  displayName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  clubName: string;
+  address: string;
+  zone: string;
+  phone: string;
+  lat?: number;
+  lng?: number;
+}
+
+export interface RegisterFieldErrors {
+  [field: string]: string;
+}
+
+export interface RegisterResult {
+  ok: true;
+  message: string;
+}
+
+export async function registerClubWithBackend(
+  input: RegisterClubInput,
+): Promise<RegisterResult | { ok: false; message: string; errors?: RegisterFieldErrors }> {
+  const response = await fetch(`${backendUrl}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  const payload = (await response.json().catch(() => null)) as {
+    message?: string;
+    errors?: RegisterFieldErrors;
+  } | null;
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: payload?.message ?? 'Error al registrar. Intentá de nuevo.',
+      errors: payload?.errors,
+    };
+  }
+
+  return { ok: true, message: payload?.message ?? 'Registro exitoso' };
+}
+
+export interface RegisterPlayerInput {
+  displayName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
+/**
+ * Player registration frontend helper.
+ *
+ * Decision Context:
+ * - Why: Mirrors registerClubWithBackend() so the Astro page only speaks to the backend
+ *   REST layer. Keeping the shape identical (ok / message / errors) means both
+ *   registration pages can share the same error-rendering logic.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function registerPlayerWithBackend(
+  input: RegisterPlayerInput,
+): Promise<RegisterResult | { ok: false; message: string; errors?: RegisterFieldErrors }> {
+  const response = await fetch(`${backendUrl}/api/auth/register-player`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  const payload = (await response.json().catch(() => null)) as {
+    message?: string;
+    errors?: RegisterFieldErrors;
+  } | null;
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: payload?.message ?? 'Error al registrar. Intentá de nuevo.',
+      errors: payload?.errors,
+    };
+  }
+
+  return { ok: true, message: payload?.message ?? 'Registro exitoso' };
 }
 
 export async function logoutFromBackend(accessToken?: string): Promise<void> {

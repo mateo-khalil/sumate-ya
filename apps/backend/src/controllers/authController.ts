@@ -2,19 +2,89 @@
  * Auth REST controllers
  *
  * Decision Context:
- * - Why: Keep login/session/refresh resolution in backend so Astro only talks to the app API.
+ * - Why: Keep login/session/register resolution in backend so Astro only talks to the app API.
  * - Pattern: Controllers orchestrate HTTP IO, authService encapsulates Supabase calls.
+ *   Zod validation lives here so the service receives pre-validated, typed inputs.
+ * - register(): validates body with Zod, maps field-level errors to a structured JSON response
+ *   so the Astro form can display inline errors without a full page reload.
  * - Previously fixed bugs:
  *   - logout() returned 204 without calling signOut() on Supabase, leaving the JWT valid
- *     server-side until natural expiry. Fixed: createUserClient(token).auth.signOut() is
- *     called best-effort before responding. Best-effort means the frontend always clears
- *     its cookies even if the Supabase call fails (e.g., already-expired token).
+ *     server-side until natural expiry. Fixed: delegated to authService.logout() which calls
+ *     user-scoped signOut() best-effort before responding.
  */
 
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 
-import { createUserClient } from '../config/supabase.js';
 import { authService } from '../services/authService.js';
+import { isInUruguay, URUGUAY_BOUNDS_DESCRIPTION } from '../utils/uruguayBounds.js';
+
+// ---------------------------------------------------------------------------
+// Zod schema for club admin registration
+// ---------------------------------------------------------------------------
+const RegisterSchema = z
+  .object({
+    displayName: z.string().min(2, 'Nombre completo requerido (mínimo 2 caracteres)'),
+    email: z.string().email('Email inválido'),
+    password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+    confirmPassword: z.string().min(1, 'Confirmá tu contraseña'),
+    clubName: z.string().min(2, 'Nombre del club requerido (mínimo 2 caracteres)'),
+    address: z.string().min(5, 'Dirección requerida'),
+    zone: z.string().min(1, 'Zona requerida'),
+    phone: z.string().min(6, 'Teléfono requerido'),
+    // lat/lng are optional at registration — can be set later via profile.
+    // When provided, both must be present and within Uruguay.
+    // Decision Context: Uruguay-only validation enforced here (controller layer) so
+    // the DB never receives coordinates that would place markers outside Uruguay on the map.
+    // Previously fixed bugs: seed data with Buenos Aires coords caused all map markers
+    // to render off-screen; this validation prevents recurrence going forward.
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Las contraseñas no coinciden',
+    path: ['confirmPassword'],
+  })
+  .refine(
+    (d) => {
+      if (d.lat == null && d.lng == null) return true; // both absent — OK
+      if (d.lat != null && d.lng == null) return false; // lat without lng — invalid
+      if (d.lat == null && d.lng != null) return false; // lng without lat — invalid
+      return true;
+    },
+    { message: 'Debés ingresar latitud y longitud juntas', path: ['lat'] },
+  )
+  .refine(
+    (d) => {
+      if (d.lat == null || d.lng == null) return true; // already covered above
+      return isInUruguay(d.lat, d.lng);
+    },
+    { message: URUGUAY_BOUNDS_DESCRIPTION, path: ['lat'] },
+  );
+
+// ---------------------------------------------------------------------------
+// Zod schema for player registration
+//
+// Decision Context:
+// - Why: Player signup is intentionally minimal — only identity + credentials are
+//   captured. Extra fields (phone, position, skill level) belong to a later profile
+//   completion flow, not the initial signup, per product scope.
+// - Password min length: 8 chars (stricter than club admin's 6) because player accounts
+//   are created directly from the public web form without any club-side vetting; the
+//   higher floor reduces trivial credential-stuffing wins.
+// - Previously fixed bugs: none relevant.
+// ---------------------------------------------------------------------------
+const RegisterPlayerSchema = z
+  .object({
+    displayName: z.string().min(2, 'Nombre completo requerido (mínimo 2 caracteres)'),
+    email: z.string().email('Email inválido'),
+    password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+    confirmPassword: z.string().min(1, 'Confirmá tu contraseña'),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Las contraseñas no coinciden',
+    path: ['confirmPassword'],
+  });
 
 export const authController = {
   async login(req: Request, res: Response): Promise<void> {
@@ -31,6 +101,15 @@ export const authController = {
       res.status(200).json(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Authentication failed';
+
+      if (message === 'Email not confirmed') {
+        res.status(403).json({
+          code: 'email_not_confirmed',
+          message: 'Debés confirmar tu email antes de iniciar sesión. Revisá tu casilla de correo.',
+        });
+        return;
+      }
+
       const status = message === 'Invalid login credentials' ? 401 : 400;
       res.status(status).json({ message });
     }
@@ -73,19 +152,144 @@ export const authController = {
     }
   },
 
-  // P4: call signOut() so the JWT is invalidated server-side, not just cleared client-side.
+  /**
+   * Logout endpoint: Invalidates session via Supabase and returns 204.
+   *
+   * Decision Context:
+   * - Why: Ensures JWT is invalidated server-side, not just cleared from client cookies.
+   * - Pattern: Delegates to authService.logout() which uses user-scoped signOut().
+   * - Constraints: Returns 204 even if token is missing/invalid — client clears cookies regardless.
+   * - Previously fixed bugs: none relevant.
+   */
   async logout(req: Request, res: Response): Promise<void> {
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
     if (accessToken) {
       try {
-        await createUserClient(accessToken).auth.signOut();
+        await authService.logout(accessToken);
       } catch {
-        // Best-effort: frontend clears cookies regardless of whether signOut succeeds.
+        // Ignore errors — token may already be expired
       }
     }
 
     res.status(204).send();
+  },
+
+  async register(req: Request, res: Response): Promise<void> {
+    const parsed = RegisterSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      const errors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0];
+        if (typeof field === 'string' && !errors[field]) {
+          errors[field] = issue.message;
+        }
+      }
+      res.status(400).json({ message: 'Datos inválidos', errors });
+      return;
+    }
+
+    try {
+      await authService.register(parsed.data);
+      res.status(201).json({ message: 'Registro exitoso. Ya podés iniciar sesión.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Registration failed';
+
+      // Map known Supabase auth errors to user-friendly messages in Spanish
+      if (message.toLowerCase().includes('already registered') || message.toLowerCase().includes('already been registered')) {
+        res.status(409).json({ message: 'Datos inválidos', errors: { email: 'Este email ya está registrado' } });
+        return;
+      }
+
+      if (message.toLowerCase().includes('rate limit') || message.toLowerCase().includes('too many requests')) {
+        res.status(429).json({ message: 'Demasiados intentos de registro. Esperá unos minutos y volvé a intentarlo.' });
+        return;
+      }
+
+      if (message.toLowerCase().includes('invalid email')) {
+        res.status(400).json({ message: 'Datos inválidos', errors: { email: 'El email ingresado no es válido' } });
+        return;
+      }
+
+      if (message.toLowerCase().includes('password')) {
+        res.status(400).json({ message: 'Datos inválidos', errors: { password: 'La contraseña no cumple los requisitos mínimos' } });
+        return;
+      }
+
+      res.status(400).json({ message: 'Error al registrar. Intentá de nuevo más tarde.' });
+    }
+  },
+
+  /**
+   * Player registration: same shape as register() but routes to authService.registerPlayer
+   * and uses RegisterPlayerSchema (no club fields). Error-mapping mirrors the club flow so
+   * the frontend can use a single error-rendering code path.
+   */
+  async registerPlayer(req: Request, res: Response): Promise<void> {
+    const parsed = RegisterPlayerSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      const errors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0];
+        if (typeof field === 'string' && !errors[field]) {
+          errors[field] = issue.message;
+        }
+      }
+      res.status(400).json({ message: 'Datos inválidos', errors });
+      return;
+    }
+
+    try {
+      await authService.registerPlayer({
+        displayName: parsed.data.displayName,
+        email: parsed.data.email,
+        password: parsed.data.password,
+      });
+      res.status(201).json({ message: 'Registro exitoso. Ya podés iniciar sesión.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Registration failed';
+      console.error('[authController.registerPlayer] Failed:', message);
+
+      if (
+        message.toLowerCase().includes('already registered') ||
+        message.toLowerCase().includes('already been registered')
+      ) {
+        res
+          .status(409)
+          .json({ message: 'Datos inválidos', errors: { email: 'Este email ya está registrado' } });
+        return;
+      }
+
+      if (
+        message.toLowerCase().includes('rate limit') ||
+        message.toLowerCase().includes('too many requests')
+      ) {
+        res.status(429).json({
+          message: 'Demasiados intentos de registro. Esperá unos minutos y volvé a intentarlo.',
+        });
+        return;
+      }
+
+      if (message.toLowerCase().includes('invalid email')) {
+        res.status(400).json({
+          message: 'Datos inválidos',
+          errors: { email: 'El email ingresado no es válido' },
+        });
+        return;
+      }
+
+      if (message.toLowerCase().includes('password')) {
+        res.status(400).json({
+          message: 'Datos inválidos',
+          errors: { password: 'La contraseña no cumple los requisitos mínimos' },
+        });
+        return;
+      }
+
+      res.status(400).json({ message: 'Error al registrar. Intentá de nuevo más tarde.' });
+    }
   },
 };
