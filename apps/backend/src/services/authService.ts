@@ -4,8 +4,9 @@
  * Decision Context:
  * - Why: Frontend must not access Supabase or the database directly. All auth and role
  *   resolution flows are brokered by the backend.
- * - Pattern: Uses anon client for credential login and service-role client (supabase singleton)
- *   for admin operations. Profile and club inserts use the service-role client because the
+ * - Pattern: Uses anon client for credential login and user-scoped clients for session
+ *   and profile resolution so RLS policies are enforced on every profiles read.
+ *   register() and registerPlayer() use the service-role singleton client because the
  *   new user has no active session yet — RLS would block the insert otherwise.
  * - login(): Supabase signInWithPassword returns "Email not confirmed" as a distinct error
  *   message when the user hasn't confirmed their email. This error is preserved and re-thrown
@@ -20,24 +21,29 @@
  *   SMTP/auth-triggered emails, so Resend is the single source of outbound mail. Email failure
  *   is logged but never rolls back registration (user must still be able to sign in).
  * - Previously fixed bugs:
- *   - signUp() rate limit hit during testing → switched to admin.createUser() permanently
- *   - login() masked "Email not confirmed" as generic error → now re-thrown distinctly
+ *   - signUp() rate limit hit during testing → switched to admin.createUser() permanently.
+ *   - login() masked "Email not confirmed" as generic error → now re-thrown distinctly.
+ *   - getUserRole() used the service-role singleton client, bypassing RLS. Fixed: now
+ *     accepts a user-scoped SupabaseClient and enforces RLS on the profiles read.
+ *   - mapAuthenticatedUser() read displayName from user_metadata.nombre instead of
+ *     profiles.displayName. Fixed: getUserProfile() now selects both role and displayName
+ *     from profiles; user_metadata.nombre is kept only as a last-resort fallback.
  */
 
-import type { User } from '@supabase/supabase-js';
+import type { User, SupabaseClient } from '@supabase/supabase-js';
 
 import { createAnonClient, createUserClient, supabase } from '../config/supabase.js';
 import { emailService } from './emailService.js';
 
-const PROFILE_ROLE_COLUMNS = 'role';
+// P3: include displayName so mapAuthenticatedUser reads from profiles, not user_metadata.
+const PROFILE_COLUMNS = 'role, displayName';
 
 /**
- * Resolve display name from Supabase User object
+ * Resolve display name from Supabase User object as last-resort fallback.
  * Priority: user_metadata.displayName > email
  */
 function resolveDisplayName(user: User): string {
-  const displayName = user.user_metadata?.displayName ?? user.email ?? 'Usuario';
-  return displayName;
+  return user.user_metadata?.displayName ?? user.email ?? 'Usuario';
 }
 
 export type AuthUserRole = 'player' | 'club_admin';
@@ -73,42 +79,38 @@ export interface RegisterPlayerInput {
   password: string;
 }
 
-function mapAuthenticatedUser(user: User, role: AuthUserRole): AuthenticatedUser {
+interface UserProfile {
+  role: AuthUserRole;
+  displayName: string;
+}
+
+// P3: profiles.displayName is the authoritative source; user_metadata fallback for edge cases.
+function mapAuthenticatedUser(user: User, profile: UserProfile): AuthenticatedUser {
   return {
     id: user.id,
     email: user.email ?? '',
-    displayName: resolveDisplayName(user),
-    role,
+    displayName: profile.displayName || resolveDisplayName(user),
+    role: profile.role,
   };
 }
 
-async function ensureProfileAndGetRole(user: User): Promise<AuthUserRole> {
-  const { data, error } = await supabase
+// M2: accepts user-scoped client so RLS enforces auth.uid() = id on the profiles read.
+// P3: returns both role and displayName to avoid a second round-trip to profiles.
+async function getUserProfile(userId: string, client: SupabaseClient): Promise<UserProfile> {
+  const { data, error } = await client
     .from('profiles')
-    .select(PROFILE_ROLE_COLUMNS)
-    .eq('id', user.id)
-    .maybeSingle();
+    .select(PROFILE_COLUMNS)
+    .eq('id', userId)
+    .single();
 
-  if (error) {
-    throw new Error(error.message);
+  if (error || !data) {
+    throw new Error(error?.message ?? 'Unable to resolve user profile');
   }
 
-  if (data?.role) {
-    return data.role as AuthUserRole;
-  }
-
-  const defaultRole: AuthUserRole = 'player';
-  const { error: insertError } = await supabase.from('profiles').insert({
-    id: user.id,
-    displayName: resolveDisplayName(user),
-    role: defaultRole,
-  });
-
-  if (insertError) {
-    throw new Error(insertError.message);
-  }
-
-  return defaultRole;
+  return {
+    role: data.role as AuthUserRole,
+    displayName: data.displayName as string,
+  };
 }
 
 export const authService = {
@@ -118,7 +120,8 @@ export const authService = {
 
     if (error) {
       const msg = error.message ?? '';
-      // Preserve email confirmation errors so the frontend can show a helpful message
+      // Preserve email confirmation errors so the frontend can show a helpful message.
+      // All other Supabase errors collapse to the ambiguous fallback to avoid email enumeration.
       if (
         msg.toLowerCase().includes('email not confirmed') ||
         msg.toLowerCase().includes('email_not_confirmed')
@@ -132,12 +135,14 @@ export const authService = {
       throw new Error('Invalid login credentials');
     }
 
-    const role = await ensureProfileAndGetRole(data.user);
+    // M2: use user-scoped client so the profiles SELECT respects RLS.
+    const userClient = createUserClient(data.session.access_token);
+    const profile = await getUserProfile(data.user.id, userClient);
 
     return {
       accessToken: data.session.access_token,
       refreshToken: data.session.refresh_token,
-      user: mapAuthenticatedUser(data.user, role),
+      user: mapAuthenticatedUser(data.user, profile),
     };
   },
 
@@ -152,8 +157,27 @@ export const authService = {
       throw new Error('Invalid or expired token');
     }
 
-    const role = await ensureProfileAndGetRole(user);
-    return mapAuthenticatedUser(user, role);
+    // M2: pass the existing user-scoped client so profiles read respects RLS.
+    const profile = await getUserProfile(user.id, userClient);
+    return mapAuthenticatedUser(user, profile);
+  },
+
+  // P3: exchanges a refresh token for a new session, returns fresh tokens + resolved profile.
+  async refresh(refreshToken: string): Promise<LoginResult> {
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+
+    if (error || !data.session || !data.user) {
+      throw new Error('Invalid or expired refresh token');
+    }
+
+    const userClient = createUserClient(data.session.access_token);
+    const profile = await getUserProfile(data.user.id, userClient);
+
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      user: mapAuthenticatedUser(data.user, profile),
+    };
   },
 
   /**

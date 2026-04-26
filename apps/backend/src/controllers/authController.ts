@@ -7,7 +7,10 @@
  *   Zod validation lives here so the service receives pre-validated, typed inputs.
  * - register(): validates body with Zod, maps field-level errors to a structured JSON response
  *   so the Astro form can display inline errors without a full page reload.
- * - Previously fixed bugs: none relevant.
+ * - Previously fixed bugs:
+ *   - logout() returned 204 without calling signOut() on Supabase, leaving the JWT valid
+ *     server-side until natural expiry. Fixed: delegated to authService.logout() which calls
+ *     user-scoped signOut() best-effort before responding.
  */
 
 import type { Request, Response } from 'express';
@@ -130,13 +133,32 @@ export const authController = {
     }
   },
 
+  // P3: exchanges a refresh token for a new session pair + user payload.
+  async refresh(req: Request, res: Response): Promise<void> {
+    const refreshToken =
+      typeof req.body?.refreshToken === 'string' ? req.body.refreshToken.trim() : '';
+
+    if (!refreshToken) {
+      res.status(400).json({ message: 'Refresh token is required.' });
+      return;
+    }
+
+    try {
+      const result = await authService.refresh(refreshToken);
+      res.status(200).json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Token refresh failed';
+      res.status(401).json({ message });
+    }
+  },
+
   /**
    * Logout endpoint: Invalidates session via Supabase and returns 204.
    *
    * Decision Context:
    * - Why: Ensures JWT is invalidated server-side, not just cleared from client cookies.
-   * - Pattern: Extracts token from Authorization header, calls authService.logout.
-   * - Constraints: Returns 204 even if token is missing/invalid — client should clear cookies regardless.
+   * - Pattern: Delegates to authService.logout() which uses user-scoped signOut().
+   * - Constraints: Returns 204 even if token is missing/invalid — client clears cookies regardless.
    * - Previously fixed bugs: none relevant.
    */
   async logout(req: Request, res: Response): Promise<void> {

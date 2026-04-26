@@ -6,6 +6,7 @@ const router = Router();
 
 router.post('/login', authController.login);
 router.get('/session', authController.session);
+router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 router.post('/register', authController.register);
 router.post('/register-player', authController.registerPlayer);
