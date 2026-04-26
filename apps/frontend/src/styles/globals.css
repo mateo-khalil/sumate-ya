@@ -60,6 +60,15 @@
   --color-surface-glass: rgba(255, 255, 255, 0.05);
   --color-surface-glass-hover: rgba(255, 255, 255, 0.08);
   --color-surface-border: rgba(255, 255, 255, 0.1);
+
+  /* --- Success / voting semantic colors --- */
+  --color-success: hsl(142 72% 50%);
+  --color-success-foreground: hsl(142 72% 65%);
+  --color-success-surface: hsl(142 30% 8%);
+
+  /* --- Typography utilities --- */
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-condensed: 'Barlow Condensed', system-ui, sans-serif;
 }
 
 /* =====================================================

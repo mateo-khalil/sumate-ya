@@ -175,6 +175,31 @@ export type MatchParticipantsData = {
   totalCount: Scalars['Int']['output'];
 };
 
+export type MatchResultSubmission = {
+  __typename?: 'MatchResultSubmission';
+  approveCount: Scalars['Int']['output'];
+  createdAt: Scalars['String']['output'];
+  hasUserVoted: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  matchId: Scalars['ID']['output'];
+  rejectCount: Scalars['Int']['output'];
+  scoreA: Scalars['Int']['output'];
+  scoreB: Scalars['Int']['output'];
+  status: SubmissionStatus;
+  submitter: TeamMember;
+  userVote?: Maybe<VoteValue>;
+  votes: Array<MatchResultVote>;
+  winnerTeam: WinnerTeam;
+};
+
+export type MatchResultVote = {
+  __typename?: 'MatchResultVote';
+  createdAt: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  vote: VoteValue;
+  voter: TeamMember;
+};
+
 export enum MatchStatus {
   Cancelled = 'CANCELLED',
   Completed = 'COMPLETED',
@@ -200,6 +225,8 @@ export type Mutation = {
   createMatch: CreateMatchResult;
   joinMatch: JoinMatchResult;
   leaveMatch: LeaveMatchResult;
+  proposeMatchResult: MatchResultSubmission;
+  voteMatchResult: VoteSubmissionResult;
 };
 
 
@@ -215,6 +242,16 @@ export type MutationJoinMatchArgs = {
 
 export type MutationLeaveMatchArgs = {
   input: LeaveMatchInput;
+};
+
+
+export type MutationProposeMatchResultArgs = {
+  input: ProposeMatchResultInput;
+};
+
+
+export type MutationVoteMatchResultArgs = {
+  input: VoteMatchResultInput;
 };
 
 export enum PlayerPosition {
@@ -237,11 +274,19 @@ export type Profile = {
   winrate?: Maybe<Scalars['Float']['output']>;
 };
 
+export type ProposeMatchResultInput = {
+  matchId: Scalars['ID']['input'];
+  scoreA: Scalars['Int']['input'];
+  scoreB: Scalars['Int']['input'];
+  winnerTeam?: InputMaybe<WinnerTeam>;
+};
+
 export type Query = {
   __typename?: 'Query';
   clubSlots: Array<ClubSlot>;
   clubs: Array<ClubDetail>;
   match?: Maybe<Match>;
+  matchResultSubmissions: Array<MatchResultSubmission>;
   matches: Array<Match>;
   myMatches: MatchHistoryConnection;
   myProfile: Profile;
@@ -259,6 +304,11 @@ export type QueryMatchArgs = {
 };
 
 
+export type QueryMatchResultSubmissionsArgs = {
+  matchId: Scalars['ID']['input'];
+};
+
+
 export type QueryMatchesArgs = {
   filters?: InputMaybe<MatchFilters>;
 };
@@ -268,6 +318,12 @@ export type QueryMyMatchesArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   pageSize?: InputMaybe<Scalars['Int']['input']>;
 };
+
+export enum SubmissionStatus {
+  Confirmed = 'CONFIRMED',
+  Pending = 'PENDING',
+  Rejected = 'REJECTED'
+}
 
 export type TeamMember = {
   __typename?: 'TeamMember';
@@ -280,6 +336,28 @@ export type TeamMember = {
 export enum UserRole {
   ClubAdmin = 'CLUB_ADMIN',
   Player = 'PLAYER'
+}
+
+export type VoteMatchResultInput = {
+  submissionId: Scalars['ID']['input'];
+  vote: VoteValue;
+};
+
+export type VoteSubmissionResult = {
+  __typename?: 'VoteSubmissionResult';
+  statusChanged: Scalars['Boolean']['output'];
+  submission: MatchResultSubmission;
+};
+
+export enum VoteValue {
+  Approve = 'APPROVE',
+  Reject = 'REJECT'
+}
+
+export enum WinnerTeam {
+  A = 'A',
+  B = 'B',
+  Draw = 'DRAW'
 }
 
 export type WithIndex<TObject> = TObject & Record<string, any>;
@@ -377,16 +455,24 @@ export type ResolversTypes = ResolversObject<{
   MatchHistoryConnection: ResolverTypeWrapper<MatchHistoryConnection>;
   MatchHistoryItem: ResolverTypeWrapper<MatchHistoryItem>;
   MatchParticipantsData: ResolverTypeWrapper<MatchParticipantsData>;
+  MatchResultSubmission: ResolverTypeWrapper<MatchResultSubmission>;
+  MatchResultVote: ResolverTypeWrapper<MatchResultVote>;
   MatchStatus: MatchStatus;
   MatchTeam: MatchTeam;
   MatchUserResult: MatchUserResult;
   Mutation: ResolverTypeWrapper<Record<PropertyKey, never>>;
   PlayerPosition: PlayerPosition;
   Profile: ResolverTypeWrapper<Profile>;
+  ProposeMatchResultInput: ProposeMatchResultInput;
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
+  SubmissionStatus: SubmissionStatus;
   TeamMember: ResolverTypeWrapper<TeamMember>;
   UserRole: UserRole;
+  VoteMatchResultInput: VoteMatchResultInput;
+  VoteSubmissionResult: ResolverTypeWrapper<VoteSubmissionResult>;
+  VoteValue: VoteValue;
+  WinnerTeam: WinnerTeam;
 }>;
 
 /** Mapping between all available schema types and the resolvers parents */
@@ -410,11 +496,16 @@ export type ResolversParentTypes = ResolversObject<{
   MatchHistoryConnection: MatchHistoryConnection;
   MatchHistoryItem: MatchHistoryItem;
   MatchParticipantsData: MatchParticipantsData;
+  MatchResultSubmission: MatchResultSubmission;
+  MatchResultVote: MatchResultVote;
   Mutation: Record<PropertyKey, never>;
   Profile: Profile;
+  ProposeMatchResultInput: ProposeMatchResultInput;
   Query: Record<PropertyKey, never>;
   String: Scalars['String']['output'];
   TeamMember: TeamMember;
+  VoteMatchResultInput: VoteMatchResultInput;
+  VoteSubmissionResult: VoteSubmissionResult;
 }>;
 
 export type ClubResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Club'] = ResolversParentTypes['Club']> = ResolversObject<{
@@ -522,10 +613,35 @@ export type MatchParticipantsDataResolvers<ContextType = GraphQLContext, ParentT
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
 }>;
 
+export type MatchResultSubmissionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchResultSubmission'] = ResolversParentTypes['MatchResultSubmission']> = ResolversObject<{
+  approveCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  hasUserVoted?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  matchId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  rejectCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  scoreA?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  scoreB?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['SubmissionStatus'], ParentType, ContextType>;
+  submitter?: Resolver<ResolversTypes['TeamMember'], ParentType, ContextType>;
+  userVote?: Resolver<Maybe<ResolversTypes['VoteValue']>, ParentType, ContextType>;
+  votes?: Resolver<Array<ResolversTypes['MatchResultVote']>, ParentType, ContextType>;
+  winnerTeam?: Resolver<ResolversTypes['WinnerTeam'], ParentType, ContextType>;
+}>;
+
+export type MatchResultVoteResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchResultVote'] = ResolversParentTypes['MatchResultVote']> = ResolversObject<{
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  vote?: Resolver<ResolversTypes['VoteValue'], ParentType, ContextType>;
+  voter?: Resolver<ResolversTypes['TeamMember'], ParentType, ContextType>;
+}>;
+
 export type MutationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
   createMatch?: Resolver<ResolversTypes['CreateMatchResult'], ParentType, ContextType, RequireFields<MutationCreateMatchArgs, 'input'>>;
   joinMatch?: Resolver<ResolversTypes['JoinMatchResult'], ParentType, ContextType, RequireFields<MutationJoinMatchArgs, 'input'>>;
   leaveMatch?: Resolver<ResolversTypes['LeaveMatchResult'], ParentType, ContextType, RequireFields<MutationLeaveMatchArgs, 'input'>>;
+  proposeMatchResult?: Resolver<ResolversTypes['MatchResultSubmission'], ParentType, ContextType, RequireFields<MutationProposeMatchResultArgs, 'input'>>;
+  voteMatchResult?: Resolver<ResolversTypes['VoteSubmissionResult'], ParentType, ContextType, RequireFields<MutationVoteMatchResultArgs, 'input'>>;
 }>;
 
 export type ProfileResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Profile'] = ResolversParentTypes['Profile']> = ResolversObject<{
@@ -544,6 +660,7 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   clubSlots?: Resolver<Array<ResolversTypes['ClubSlot']>, ParentType, ContextType, RequireFields<QueryClubSlotsArgs, 'clubId' | 'date'>>;
   clubs?: Resolver<Array<ResolversTypes['ClubDetail']>, ParentType, ContextType>;
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType, RequireFields<QueryMatchArgs, 'id'>>;
+  matchResultSubmissions?: Resolver<Array<ResolversTypes['MatchResultSubmission']>, ParentType, ContextType, RequireFields<QueryMatchResultSubmissionsArgs, 'matchId'>>;
   matches?: Resolver<Array<ResolversTypes['Match']>, ParentType, ContextType, Partial<QueryMatchesArgs>>;
   myMatches?: Resolver<ResolversTypes['MatchHistoryConnection'], ParentType, ContextType, Partial<QueryMyMatchesArgs>>;
   myProfile?: Resolver<ResolversTypes['Profile'], ParentType, ContextType>;
@@ -554,6 +671,11 @@ export type TeamMemberResolvers<ContextType = GraphQLContext, ParentType extends
   displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   preferredPosition?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+}>;
+
+export type VoteSubmissionResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['VoteSubmissionResult'] = ResolversParentTypes['VoteSubmissionResult']> = ResolversObject<{
+  statusChanged?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  submission?: Resolver<ResolversTypes['MatchResultSubmission'], ParentType, ContextType>;
 }>;
 
 export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
@@ -568,9 +690,12 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   MatchHistoryConnection?: MatchHistoryConnectionResolvers<ContextType>;
   MatchHistoryItem?: MatchHistoryItemResolvers<ContextType>;
   MatchParticipantsData?: MatchParticipantsDataResolvers<ContextType>;
+  MatchResultSubmission?: MatchResultSubmissionResolvers<ContextType>;
+  MatchResultVote?: MatchResultVoteResolvers<ContextType>;
   Mutation?: MutationResolvers<ContextType>;
   Profile?: ProfileResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
   TeamMember?: TeamMemberResolvers<ContextType>;
+  VoteSubmissionResult?: VoteSubmissionResultResolvers<ContextType>;
 }>;
 

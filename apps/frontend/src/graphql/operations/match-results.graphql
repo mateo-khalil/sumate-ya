@@ -1,0 +1,48 @@
+# Frontend GraphQL operations for match result voting
+#
+# Decision Context:
+# - Kept separate from matches.graphql to isolate the result-voting feature domain.
+# - All operations require authentication (enforced server-side via requireAuth).
+# - VoteFragment is reused in both the query and mutation responses to avoid duplication.
+
+fragment VoteFields on MatchResultVote {
+  id
+  voter { id displayName avatarUrl }
+  vote
+  createdAt
+}
+
+fragment SubmissionFields on MatchResultSubmission {
+  id
+  matchId
+  submitter { id displayName avatarUrl }
+  scoreA
+  scoreB
+  winnerTeam
+  status
+  approveCount
+  rejectCount
+  hasUserVoted
+  userVote
+  createdAt
+  votes { ...VoteFields }
+}
+
+query GetMatchResultSubmissions($matchId: ID!) {
+  matchResultSubmissions(matchId: $matchId) {
+    ...SubmissionFields
+  }
+}
+
+mutation ProposeMatchResult($input: ProposeMatchResultInput!) {
+  proposeMatchResult(input: $input) {
+    ...SubmissionFields
+  }
+}
+
+mutation VoteMatchResult($input: VoteMatchResultInput!) {
+  voteMatchResult(input: $input) {
+    statusChanged
+    submission { ...SubmissionFields }
+  }
+}

@@ -648,12 +648,16 @@ export async function deleteMatch(matchId: string): Promise<void> {
 // =====================================================
 
 // Minimal columns selected for the history card — no capacity/createdAt/clubSlotId needed.
+// scoreTeamA/scoreTeamB/winningTeam added once "registrar resultado" US is implemented.
 const MATCH_HISTORY_COLUMNS = `
   id,
   description,
   "scheduledAt",
   format,
-  "organizerId"
+  "organizerId",
+  "scoreTeamA",
+  "scoreTeamB",
+  "winningTeam"
 `;
 
 // Club columns for history — no lat/lng/phone, only display fields needed.
@@ -679,6 +683,9 @@ export interface CompletedMatchRow {
   scheduledAt: string;
   format: string;
   organizerId: string;
+  scoreTeamA: number | null;
+  scoreTeamB: number | null;
+  winningTeam: 'a' | 'b' | 'draw' | null;
   clubs: HistoryClubRow | null;
   matchParticipants: HistoryParticipantRow[];
 }

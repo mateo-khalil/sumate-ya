@@ -664,19 +664,30 @@ export async function createMatch(
  * Convert a completed-match DB row into a MatchHistoryItem GraphQL type.
  *
  * Decision Context:
- * - userResult is always PENDING because scoreA/scoreB/winnerTeam do not exist in the DB yet.
- *   TODO: When "registrar resultado" US is implemented, replace PENDING with:
- *     WON  → winnerTeam && winnerTeam === userTeam.toLowerCase()
- *     LOST → winnerTeam && winnerTeam !== userTeam.toLowerCase() && winnerTeam !== 'draw'
- *     DRAW → winnerTeam === 'draw'
- *   At that point, add scoreA/scoreB/winnerTeam to MATCH_HISTORY_COLUMNS in the repo.
+ * - userResult is derived from winningTeam vs the player's team:
+ *     WON  → winningTeam === userTeam (lowercase)
+ *     LOST → winningTeam is the other team
+ *     DRAW → winningTeam === 'draw'
+ *     PENDING → winningTeam is null (result not yet confirmed)
+ * - scoreA/scoreB map from DB scoreTeamA/scoreTeamB (null until result is confirmed).
  * - isOrganizer is derived from `row.organizerId === userId` (no extra DB round-trip).
  * - matchParticipants[0] always exists because getCompletedMatchesByUser uses !inner
  *   join filtered by playerId — guarantees exactly one participant entry per row.
- * - Previously fixed bugs: none relevant.
+ * - Previously fixed bugs: scoreA/scoreB were always null before "registrar resultado" US.
  */
 function toMatchHistoryItem(row: CompletedMatchRow, userId: string): MatchHistoryItem {
   const userTeam = row.matchParticipants[0]?.team === 'a' ? 'A' : 'B';
+
+  let userResult: MatchUserResult = MatchUserResult.Pending;
+  if (row.winningTeam) {
+    if (row.winningTeam === 'draw') {
+      userResult = MatchUserResult.Draw;
+    } else if (row.winningTeam === userTeam.toLowerCase()) {
+      userResult = MatchUserResult.Won;
+    } else {
+      userResult = MatchUserResult.Lost;
+    }
+  }
 
   return {
     id: row.id,
@@ -687,9 +698,9 @@ function toMatchHistoryItem(row: CompletedMatchRow, userId: string): MatchHistor
       ? { id: row.clubs.id, name: row.clubs.name, zone: row.clubs.zone ?? null }
       : null,
     userTeam,
-    userResult: MatchUserResult.Pending,
-    scoreA: null,
-    scoreB: null,
+    userResult,
+    scoreA: row.scoreTeamA ?? null,
+    scoreB: row.scoreTeamB ?? null,
     isOrganizer: row.organizerId === userId,
   };
 }
