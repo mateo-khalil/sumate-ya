@@ -53,3 +53,55 @@ query GetMatchById($id: ID!) {
     }
   }
 }
+
+# Full match detail including participant lists, counts and auth-context join flags.
+# Used by /partidos/[id] page. Auth token should be forwarded so isCurrentUserJoined
+# and canJoin are populated correctly.
+query GetMatchDetail($id: ID!) {
+  match(id: $id) {
+    id
+    title
+    startTime
+    format
+    totalSlots
+    availableSlots
+    status
+    description
+    createdAt
+    club {
+      id
+      name
+      zone
+      address
+      lat
+      lng
+    }
+    participants {
+      teamA {
+        id
+        displayName
+        avatarUrl
+      }
+      teamB {
+        id
+        displayName
+        avatarUrl
+      }
+      teamACount
+      teamBCount
+      totalCount
+      spotsLeftA
+      spotsLeftB
+    }
+    isCurrentUserJoined
+    canJoin
+  }
+}
+
+# Join a match. Requires auth token in Authorization header.
+mutation JoinMatch($input: JoinMatchInput!) {
+  joinMatch(input: $input) {
+    success
+    message
+  }
+}

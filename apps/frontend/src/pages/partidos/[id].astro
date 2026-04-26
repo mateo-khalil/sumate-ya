@@ -1,59 +1,61 @@
 ---
 /**
- * /partidos/[id] — SSR detalle de un partido
+ * /partidos/[id] — SSR detalle de un partido con equipos y botones de inscripción
  *
  * Decision Context:
- * - SSR: el match puede cambiar de estado (open → full → in_progress) en tiempo real,
- *   así que no se pre-renderiza. El back-end tiene caché de 30 min por entidad, lo cual
- *   es suficiente para esta vista.
- * - Auth: la ruta es pública (cualquiera puede ver el detalle), pero el botón "Sumarme"
- *   solo aparece para usuarios autenticados con role='player'.
- * - Si el match no existe la query GraphQL devuelve null → se muestra un estado de error
- *   con link a /partidos en lugar de lanzar un 500.
- * - startTime es un ISO timestamp (scheduledAt del DB mapeado a `startTime` en el schema).
- *   Se formatea con Intl para mostrar fecha y hora legible en español.
- * - Previously fixed bugs: 404 tras crear un partido porque esta página no existía.
+ * - SSR: el match puede cambiar de estado y sus participantes cambian en tiempo real,
+ *   así que no se pre-renderiza. Cache de 3 min en el backend (DYNAMIC_DATA TTL).
+ * - Auth: la ruta es pública (cualquiera puede ver el detalle). El botón "Sumarme"
+ *   solo aparece para usuarios autenticados con role='player'. El access token se pasa
+ *   como prop al JoinTeamButton (React island) para que pueda autorizar la mutation.
+ * - GET_MATCH_DETAIL incluye participants, isCurrentUserJoined y canJoin. Si el usuario
+ *   no está autenticado, el backend devuelve null para esos flags y el frontend los
+ *   interpreta como "no puede sumarse".
+ * - JoinTeamButton usa client:load para hidratación inmediata (es la CTA principal).
+ * - Después de unirse, el componente hace window.location.reload() para refrescar el SSR.
+ * - Realtime: no implementado — se documenta como TODO. El polling podría agregarse como
+ *   mejora futura, pero la recarga post-join cubre el caso de uso principal.
+ * - Previously fixed bugs:
+ *   - Botón "Sumarme" estaba deshabilitado con "próximamente" — reemplazado con UI de equipos.
+ *   - availableSlots estaba hardcodeado a capacity — ahora viene del backend calculado.
  */
 export const prerender = false;
 
 import Layout from '../../layouts/Layout.astro';
-import { GET_MATCH_BY_ID } from '../../graphql/operations/matches';
-import type { MatchFormat, MatchStatus } from '../../graphql/operations/matches';
+import JoinTeamButton from '../../components/matches/JoinTeamButton.tsx';
+import { GET_MATCH_DETAIL } from '../../graphql/operations/matches';
+import type { MatchDetailData } from '../../graphql/operations/matches';
+import { readAccessToken } from '../../lib/auth';
 
 const { id } = Astro.params;
 const user = Astro.locals.user;
 const isPlayer = user?.role === 'player';
+const accessToken = readAccessToken(Astro.cookies) ?? '';
 
 const backendUrl =
   import.meta.env.PRIVATE_BACKEND_URL ||
   (typeof process !== 'undefined' ? process.env.PRIVATE_BACKEND_URL : undefined) ||
   'http://localhost:4000';
 
-interface MatchDetail {
-  id: string;
-  title: string;
-  startTime: string;
-  format: MatchFormat;
-  totalSlots: number;
-  availableSlots: number;
-  status: MatchStatus;
-  createdAt: string;
-  club: { name: string; zone: string | null; imageUrl: string | null } | null;
-}
-
-let match: MatchDetail | null = null;
+let match: MatchDetailData | null = null;
 let fetchError: string | null = null;
 
 try {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
   const res = await fetch(`${backendUrl}/graphql`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: GET_MATCH_BY_ID, variables: { id } }),
+    headers,
+    body: JSON.stringify({ query: GET_MATCH_DETAIL, variables: { id } }),
   });
-  const json = await res.json() as { data?: { match: MatchDetail | null }; errors?: {message:string}[] };
+  const json = await res.json() as {
+    data?: { match: MatchDetailData | null };
+    errors?: { message: string }[]
+  };
   if (json.errors?.length) fetchError = json.errors[0].message;
   else match = json.data?.match ?? null;
-} catch (e) {
+} catch {
   fetchError = 'Error de red al cargar el partido.';
 }
 
@@ -71,11 +73,23 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('es-AR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
 }
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
+function initial(name: string) {
+  return name.charAt(0).toUpperCase();
+}
+
+const participants = match?.participants;
+const teamAFull = participants ? participants.spotsLeftA === 0 : false;
+const teamBFull = participants ? participants.spotsLeftB === 0 : false;
+const isJoined = match?.isCurrentUserJoined ?? false;
+const canJoin = match?.canJoin ?? false;
+const matchOpen = match?.status === 'OPEN';
 ---
 
 <Layout title={match ? `${match.title} — Sumate Ya` : 'Partido — Sumate Ya'}>
@@ -109,23 +123,25 @@ function fmtTime(iso: string) {
       {(!match && !fetchError) || (!match && fetchError) ? (
         <div class="not-found">
           {fetchError
-            ? <><p class="nf-title">Error al cargar el partido</p><p class="nf-sub">{fetchError}</p></>
+            ? <><p class="nf-title">Error al cargar</p><p class="nf-sub">{fetchError}</p></>
             : <><p class="nf-title">Partido no encontrado</p><p class="nf-sub">Puede que haya sido cancelado o el enlace es incorrecto.</p></>
           }
           <a href="/partidos" class="btn-back">← Volver a partidos</a>
         </div>
       ) : match ? (
         <div class="match-detail">
-          <!-- Back link -->
           <a href="/partidos" class="link-back">← Volver a partidos</a>
 
-          <!-- Header card -->
-          <div class="match-card">
+          <!-- Header info card -->
+          <div class="info-card">
             <div class="match-header">
               <span class="fmt-badge">{FORMAT_LABEL[match.format] ?? match.format}</span>
               <span class="status-badge" style={`color:${STATUS_COLOR[match.status] ?? '#fff'};border-color:${STATUS_COLOR[match.status] ?? '#fff'}40`}>
                 {STATUS_LABEL[match.status] ?? match.status}
               </span>
+              {match.status === 'FULL' && (
+                <span class="full-badge">PARTIDO COMPLETO</span>
+              )}
             </div>
 
             <h1 class="match-title">{match.title}</h1>
@@ -135,10 +151,14 @@ function fmtTime(iso: string) {
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                 {match.club.name}
                 {match.club.zone && <span class="club-zone"> · {match.club.zone}</span>}
+                {match.club.address && <span class="club-address"> — {match.club.address}</span>}
               </p>
             )}
 
-            <!-- Stats row -->
+            {match.description && (
+              <p class="match-desc">{match.description}</p>
+            )}
+
             <div class="stats-row">
               <div class="stat">
                 <span class="stat-icon">📅</span>
@@ -157,30 +177,146 @@ function fmtTime(iso: string) {
               <div class="stat">
                 <span class="stat-icon">👥</span>
                 <div class="stat-info">
-                  <span class="stat-label">Lugares</span>
-                  <span class="stat-value">{match.availableSlots} / {match.totalSlots}</span>
+                  <span class="stat-label">Cupos</span>
+                  <span class="stat-value">
+                    {participants ? `${participants.totalCount} / ${match.totalSlots}` : `0 / ${match.totalSlots}`}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <!-- CTA -->
-            <div class="cta-area">
-              {match.status === 'OPEN' && isPlayer && (
-                <button class="btn-join" disabled title="Próximamente">
-                  Sumarme al partido
-                </button>
-              )}
-              {match.status === 'OPEN' && !user && (
-                <a href="/login" class="btn-join">Iniciá sesión para sumarte</a>
-              )}
-              {match.status === 'FULL' && (
-                <p class="full-msg">Este partido ya está completo.</p>
-              )}
-              {(match.status === 'COMPLETED' || match.status === 'CANCELLED') && (
-                <p class="full-msg">Este partido ya no está disponible.</p>
-              )}
-            </div>
+            {isJoined && (
+              <div class="already-joined-banner" role="status">
+                ✓ Ya estás inscripto en este partido
+              </div>
+            )}
           </div>
+
+          <!-- Teams grid -->
+          {participants ? (
+            <div class="teams-grid">
+              <!-- Team A -->
+              <div class="team-card">
+                <div class="team-header">
+                  <span class="team-label team-a">EQUIPO A</span>
+                  <span class="team-count">{participants.teamACount} / {Math.floor(match.totalSlots / 2)}</span>
+                </div>
+
+                <ul class="player-list" role="list">
+                  {participants.teamA.map((p) => (
+                    <li class="player-row">
+                      <div class="player-avatar">
+                        {p.avatarUrl
+                          ? <img src={p.avatarUrl} alt={p.displayName} class="avatar-img" loading="lazy" />
+                          : <span class="avatar-initial">{initial(p.displayName)}</span>
+                        }
+                      </div>
+                      <span class="player-name">{p.displayName}</span>
+                    </li>
+                  ))}
+                  {participants.spotsLeftA > 0 && Array.from({ length: participants.spotsLeftA }).map((_, i) => (
+                    <li class="player-row player-row--empty">
+                      <div class="player-avatar player-avatar--empty">
+                        <span>+</span>
+                      </div>
+                      <span class="player-name player-name--empty">Lugar disponible</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div class="team-cta">
+                  {!user && matchOpen && (
+                    <a href="/login" class="join-link">Iniciá sesión para sumarte</a>
+                  )}
+                  {user && !isPlayer && (
+                    <p class="join-disabled-msg">Solo jugadores pueden sumarse</p>
+                  )}
+                  {isPlayer && isJoined && (
+                    participants.teamA.some((p) => p.id === user?.id)
+                      ? <p class="in-team-msg">✓ Estás en este equipo</p>
+                      : <p class="join-disabled-msg">Ya estás en el Equipo B</p>
+                  )}
+                  {isPlayer && !isJoined && matchOpen && (
+                    <JoinTeamButton
+                      client:load
+                      matchId={match.id}
+                      team="A"
+                      disabled={teamAFull || !canJoin}
+                      label={teamAFull ? 'Equipo completo' : 'Sumarme al Equipo A'}
+                      backendUrl={backendUrl}
+                      accessToken={accessToken}
+                    />
+                  )}
+                  {!matchOpen && (
+                    <p class="join-disabled-msg">{STATUS_LABEL[match.status] ?? match.status}</p>
+                  )}
+                </div>
+              </div>
+
+              <!-- Team B -->
+              <div class="team-card">
+                <div class="team-header">
+                  <span class="team-label team-b">EQUIPO B</span>
+                  <span class="team-count">{participants.teamBCount} / {Math.floor(match.totalSlots / 2)}</span>
+                </div>
+
+                <ul class="player-list" role="list">
+                  {participants.teamB.map((p) => (
+                    <li class="player-row">
+                      <div class="player-avatar">
+                        {p.avatarUrl
+                          ? <img src={p.avatarUrl} alt={p.displayName} class="avatar-img" loading="lazy" />
+                          : <span class="avatar-initial">{initial(p.displayName)}</span>
+                        }
+                      </div>
+                      <span class="player-name">{p.displayName}</span>
+                    </li>
+                  ))}
+                  {participants.spotsLeftB > 0 && Array.from({ length: participants.spotsLeftB }).map((_, i) => (
+                    <li class="player-row player-row--empty">
+                      <div class="player-avatar player-avatar--empty">
+                        <span>+</span>
+                      </div>
+                      <span class="player-name player-name--empty">Lugar disponible</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div class="team-cta">
+                  {!user && matchOpen && (
+                    <a href="/login" class="join-link">Iniciá sesión para sumarte</a>
+                  )}
+                  {user && !isPlayer && (
+                    <p class="join-disabled-msg">Solo jugadores pueden sumarse</p>
+                  )}
+                  {isPlayer && isJoined && (
+                    participants.teamB.some((p) => p.id === user?.id)
+                      ? <p class="in-team-msg">✓ Estás en este equipo</p>
+                      : <p class="join-disabled-msg">Ya estás en el Equipo A</p>
+                  )}
+                  {isPlayer && !isJoined && matchOpen && (
+                    <JoinTeamButton
+                      client:load
+                      matchId={match.id}
+                      team="B"
+                      disabled={teamBFull || !canJoin}
+                      label={teamBFull ? 'Equipo completo' : 'Sumarme al Equipo B'}
+                      backendUrl={backendUrl}
+                      accessToken={accessToken}
+                    />
+                  )}
+                  {!matchOpen && (
+                    <p class="join-disabled-msg">{STATUS_LABEL[match.status] ?? match.status}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <!-- Fallback: no participant data -->
+            <div class="info-card">
+              <p class="join-disabled-msg">No se pudieron cargar los equipos.</p>
+            </div>
+          )}
         </div>
       ) : null}
     </main>
@@ -212,7 +348,6 @@ function fmtTime(iso: string) {
     transition: color 0.15s, background 0.15s;
   }
   .nav-link:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 94%); }
-
   .btn-crear {
     font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 700;
     letter-spacing: 0.1em; text-transform: uppercase; text-decoration: none;
@@ -220,7 +355,6 @@ function fmtTime(iso: string) {
     background: hsl(35 100% 48%); color: hsl(220 72% 7%); transition: background 0.15s;
   }
   .btn-crear:hover { background: hsl(35 100% 55%); }
-
   .btn-logout {
     background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
     padding: 0.3rem 0.75rem; font-size: 0.8125rem; font-family: 'Barlow', sans-serif;
@@ -231,7 +365,6 @@ function fmtTime(iso: string) {
 
   .page-content { flex: 1; max-width: 1100px; width: 100%; margin: 0 auto; padding: 2.5rem 1.25rem; }
 
-  /* Not found */
   .not-found { text-align: center; padding: 4rem 1rem; }
   .nf-title { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: #fff; margin: 0 0 0.5rem; }
   .nf-sub { font-family: 'Barlow', sans-serif; font-size: 0.95rem; color: hsl(215 20% 50%); margin: 0 0 2rem; }
@@ -239,13 +372,11 @@ function fmtTime(iso: string) {
     font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: 0.1em;
     text-transform: uppercase; font-size: 0.875rem; text-decoration: none;
     color: hsl(35 100% 55%); border: 1px solid hsl(35 100% 48% / 0.4);
-    padding: 0.5rem 1.25rem; border-radius: 6px;
-    transition: background 0.15s;
+    padding: 0.5rem 1.25rem; border-radius: 6px; transition: background 0.15s;
   }
   .btn-back:hover { background: hsl(35 100% 48% / 0.1); }
 
-  /* Detail */
-  .match-detail { display: flex; flex-direction: column; gap: 1rem; max-width: 600px; }
+  .match-detail { display: flex; flex-direction: column; gap: 1.25rem; }
   .link-back {
     font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 600;
     letter-spacing: 0.08em; text-decoration: none; color: hsl(215 20% 55%);
@@ -253,12 +384,13 @@ function fmtTime(iso: string) {
   }
   .link-back:hover { color: hsl(210 20% 90%); }
 
-  .match-card {
+  /* ── Info card ── */
+  .info-card {
     background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 1rem; padding: 2rem;
-    display: flex; flex-direction: column; gap: 1.25rem;
+    border-radius: 1rem; padding: 1.75rem 2rem;
+    display: flex; flex-direction: column; gap: 1rem;
   }
-  .match-header { display: flex; align-items: center; gap: 0.75rem; }
+  .match-header { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
   .fmt-badge {
     font-family: 'Bebas Neue', sans-serif; font-size: 1rem; letter-spacing: 0.08em;
     background: hsl(216 85% 45% / 0.15); color: hsl(216 85% 65%);
@@ -269,39 +401,107 @@ function fmtTime(iso: string) {
     letter-spacing: 0.15em; text-transform: uppercase;
     border: 1px solid; padding: 0.15rem 0.6rem; border-radius: 4px;
   }
+  .full-badge {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    background: hsl(35 100% 48% / 0.15); color: hsl(35 100% 65%);
+    border: 1px solid hsl(35 100% 48% / 0.35); padding: 0.15rem 0.6rem; border-radius: 4px;
+  }
   .match-title {
-    font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.04em;
+    font-family: 'Bebas Neue', sans-serif; font-size: 1.9rem; letter-spacing: 0.04em;
     color: #fff; margin: 0; line-height: 1.1;
   }
   .match-club {
-    display: flex; align-items: center; gap: 0.4rem;
-    font-family: 'Barlow', sans-serif; font-size: 0.9rem; color: hsl(215 20% 60%); margin: 0;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem;
+    font-family: 'Barlow', sans-serif; font-size: 0.875rem; color: hsl(215 20% 60%); margin: 0;
   }
   .club-zone { color: hsl(215 20% 45%); }
+  .club-address { color: hsl(215 20% 40%); font-size: 0.825rem; }
+  .match-desc {
+    font-family: 'Barlow', sans-serif; font-size: 0.9rem; color: hsl(215 20% 65%);
+    margin: 0; line-height: 1.5;
+  }
 
   .stats-row {
     display: flex; gap: 1.5rem; flex-wrap: wrap;
-    padding-top: 1.25rem; border-top: 1px solid rgba(255,255,255,0.06);
+    padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.06);
   }
-  .stat { display: flex; align-items: flex-start; gap: 0.75rem; }
-  .stat-icon { font-size: 1.25rem; line-height: 1; margin-top: 0.1rem; }
-  .stat-info { display: flex; flex-direction: column; gap: 0.15rem; }
+  .stat { display: flex; align-items: flex-start; gap: 0.65rem; }
+  .stat-icon { font-size: 1.1rem; line-height: 1; margin-top: 0.1rem; }
+  .stat-info { display: flex; flex-direction: column; gap: 0.1rem; }
   .stat-label {
-    font-family: 'Barlow Condensed', sans-serif; font-size: 0.68rem;
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.65rem;
     font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: hsl(215 20% 50%);
   }
-  .stat-value { font-family: 'Barlow', sans-serif; font-size: 0.9rem; color: hsl(210 20% 90%); }
+  .stat-value { font-family: 'Barlow', sans-serif; font-size: 0.875rem; color: hsl(210 20% 90%); }
 
-  .cta-area { padding-top: 0.5rem; }
-  .btn-join {
-    display: inline-block; padding: 0.875rem 2rem;
-    background: hsl(35 100% 48%); color: hsl(220 72% 7%);
-    border: none; border-radius: 8px; cursor: pointer;
-    font-family: 'Barlow Condensed', sans-serif; font-size: 1rem;
-    font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-    text-decoration: none; transition: background 0.15s, opacity 0.15s;
+  .already-joined-banner {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: hsl(142 72% 50% / 0.12); border: 1px solid hsl(142 72% 50% / 0.3);
+    color: hsl(142 72% 60%); border-radius: 8px;
+    padding: 0.6rem 1rem; font-size: 0.875rem; font-family: 'Barlow', sans-serif;
   }
-  .btn-join:hover:not(:disabled) { background: hsl(35 100% 55%); }
-  .btn-join:disabled { opacity: 0.4; cursor: not-allowed; }
-  .full-msg { font-family: 'Barlow', sans-serif; font-size: 0.9rem; color: hsl(215 20% 50%); margin: 0; }
+
+  /* ── Teams grid ── */
+  .teams-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+  }
+  @media (max-width: 640px) {
+    .teams-grid { grid-template-columns: 1fr; }
+  }
+
+  .team-card {
+    background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 1rem; padding: 1.25rem 1.5rem;
+    display: flex; flex-direction: column; gap: 1rem;
+  }
+  .team-header { display: flex; align-items: center; justify-content: space-between; }
+  .team-label {
+    font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem;
+    letter-spacing: 0.1em;
+  }
+  .team-a { color: hsl(35 100% 55%); }
+  .team-b { color: hsl(216 85% 65%); }
+  .team-count {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.8rem; font-weight: 700;
+    letter-spacing: 0.05em; color: hsl(215 20% 50%);
+  }
+
+  .player-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+  .player-row { display: flex; align-items: center; gap: 0.75rem; }
+  .player-row--empty { opacity: 0.35; }
+  .player-avatar {
+    width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
+    background: hsl(220 30% 20%); display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .player-avatar--empty {
+    border: 1px dashed hsl(215 20% 35%); background: transparent;
+    color: hsl(215 20% 40%); font-size: 0.875rem;
+  }
+  .avatar-img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar-initial {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.875rem;
+    font-weight: 700; color: hsl(210 20% 85%); line-height: 1;
+  }
+  .player-name {
+    font-family: 'Barlow', sans-serif; font-size: 0.875rem; color: hsl(210 20% 85%);
+  }
+  .player-name--empty { color: hsl(215 20% 40%); font-style: italic; }
+
+  .team-cta { padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06); }
+  .join-link {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.875rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: hsl(35 100% 55%); text-decoration: none;
+  }
+  .join-link:hover { text-decoration: underline; }
+  .join-disabled-msg {
+    font-family: 'Barlow', sans-serif; font-size: 0.825rem;
+    color: hsl(215 20% 45%); margin: 0;
+  }
+  .in-team-msg {
+    font-family: 'Barlow', sans-serif; font-size: 0.825rem;
+    color: hsl(142 72% 55%); margin: 0;
+  }
 </style>

@@ -46,6 +46,9 @@ export const CACHE_PREFIX = {
   MATCHES_LIST: 'matches:list',
   MATCHES_OPEN: 'matches:open',
   MATCH_DETAIL: 'match:',
+  // match:participants:{id} — richer cache entry that includes participant list.
+  // Shorter TTL (DYNAMIC_DATA) than MATCH_DETAIL because team rosters change on every join.
+  MATCH_PARTICIPANTS: 'match:participants:',
   CLUBS_LIST: 'clubs:list',
   CLUB_DETAIL: 'club:',
   // `profile:me:<userId>` — scoped to the owner because RLS differs per-user.
