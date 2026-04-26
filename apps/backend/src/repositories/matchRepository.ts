@@ -312,6 +312,115 @@ export async function getOpenMatches(client: SupabaseClient = supabase): Promise
 }
 
 // =====================================================
+// Match Detail with Participants
+// =====================================================
+
+// Columns for match detail (includes organizerId for ownership context)
+const MATCH_DETAIL_COLUMNS = `
+  id,
+  "organizerId",
+  description,
+  "scheduledAt",
+  format,
+  capacity,
+  status,
+  "createdAt"
+`;
+
+// Participant row joined with the player's profile
+const PARTICIPANT_COLUMNS = `
+  id,
+  team,
+  "joinedAt",
+  profiles(id, "displayName", "avatarUrl")
+`;
+
+export interface ParticipantProfileRow {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface ParticipantRow {
+  id: string;
+  team: 'a' | 'b';
+  joinedAt: string;
+  profiles: ParticipantProfileRow;
+}
+
+export interface MatchDetailRow {
+  id: string;
+  organizerId: string;
+  description: string | null;
+  scheduledAt: string;
+  format: string;
+  capacity: number;
+  status: string;
+  createdAt: string;
+  clubs: ClubRow | null;
+  matchParticipants: ParticipantRow[];
+}
+
+/**
+ * Get a single match with club data AND participant list (profiles included).
+ * Used for the match detail page and after joinMatch to return updated state.
+ *
+ * Decision Context:
+ * - Why: The list query intentionally omits participants to avoid expensive joins.
+ *   This function is only called for the single-match detail route.
+ * - Participant profiles are joined via the matchParticipants.playerId → profiles.id FK.
+ *   PostgREST auto-resolves the FK because it is the only FK from matchParticipants to profiles.
+ * - Result is not cached here — caching happens in the service layer where the key and
+ *   TTL decisions live (backend.md "Cache at the service layer" rule).
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getMatchWithParticipants(
+  id: string,
+  client: SupabaseClient = supabase,
+): Promise<MatchDetailRow | null> {
+  const { data, error } = await client
+    .from('matches')
+    .select(`${MATCH_DETAIL_COLUMNS}, clubs(${CLUB_COLUMNS}), matchParticipants(${PARTICIPANT_COLUMNS})`)
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    console.error(`[matchRepository.getMatchWithParticipants] Supabase error matchId=${id}:`, error.message);
+    throw new Error(error.message);
+  }
+
+  return data as unknown as MatchDetailRow;
+}
+
+/**
+ * Update match status (used to set 'full' when capacity is reached, or 'cancelled', etc.).
+ * Uses the service-role singleton because this is a system-triggered status transition,
+ * not a user action — the player filling the last slot is not the match organizer, so
+ * the organizer-scoped RLS UPDATE policy would reject it.
+ *
+ * Decision Context:
+ * - Why service role: RLS `matches_organizer_update` only allows auth.uid() = organizerId.
+ *   When the last non-organizer player joins, their user-scoped client cannot UPDATE the
+ *   match status. Using service role here is intentional and documented.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function updateMatchStatus(
+  matchId: string,
+  status: 'open' | 'full' | 'in_progress' | 'completed' | 'cancelled',
+): Promise<void> {
+  const { error } = await supabase
+    .from('matches')
+    .update({ status })
+    .eq('id', matchId);
+
+  if (error) {
+    console.error(`[matchRepository.updateMatchStatus] Supabase error matchId=${matchId}:`, error.message);
+    throw new Error(error.message);
+  }
+}
+
+// =====================================================
 // Match Creation Types & Functions
 // =====================================================
 
@@ -430,6 +539,8 @@ export const matchRepository = {
   getMatchesByStatus,
   getMatchById,
   getOpenMatches,
+  getMatchWithParticipants,
+  updateMatchStatus,
   createMatch,
   createMatchParticipant,
 };

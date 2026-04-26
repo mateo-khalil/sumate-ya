@@ -8,6 +8,8 @@
  *   re-exports the same operations as string constants for urql `Client.query()` usage
  *   until frontend codegen is wired up.
  * - Filter support: Added MatchFilters input type for flexible match querying.
+ * - Participant types: TeamMember, MatchParticipantsData, MatchDetailData added to support
+ *   the join-match US. GET_MATCH_DETAIL fetches full roster + auth-context flags.
  * - Keep this file and `matches.graphql` in sync manually for now; when codegen is added,
  *   delete this file and import generated documents instead.
  * - Previously fixed bugs: a prior revision inlined these strings inside `MatchList.tsx`,
@@ -72,6 +74,57 @@ export interface CreateMatchInput {
 export interface CreateMatchResult {
   success: boolean;
   matchId: string | null;
+  message: string | null;
+}
+
+export type MatchTeam = 'A' | 'B';
+
+export interface TeamMember {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface MatchParticipantsData {
+  teamA: TeamMember[];
+  teamB: TeamMember[];
+  teamACount: number;
+  teamBCount: number;
+  totalCount: number;
+  spotsLeftA: number;
+  spotsLeftB: number;
+}
+
+export interface MatchDetailData {
+  id: string;
+  title: string;
+  startTime: string;
+  format: MatchFormat;
+  totalSlots: number;
+  availableSlots: number;
+  status: MatchStatus;
+  description: string | null;
+  createdAt: string;
+  club: {
+    id: string;
+    name: string;
+    zone: string | null;
+    address: string | null;
+    lat: number | null;
+    lng: number | null;
+  } | null;
+  participants: MatchParticipantsData | null;
+  isCurrentUserJoined: boolean | null;
+  canJoin: boolean | null;
+}
+
+export interface JoinMatchInput {
+  matchId: string;
+  team: MatchTeam;
+}
+
+export interface JoinMatchResult {
+  success: boolean;
   message: string | null;
 }
 
@@ -186,6 +239,50 @@ export const GET_MATCH_BY_ID = /* GraphQL */ `
         zone
         imageUrl
       }
+    }
+  }
+`;
+
+export const GET_MATCH_DETAIL = /* GraphQL */ `
+  query GetMatchDetail($id: ID!) {
+    match(id: $id) {
+      id
+      title
+      startTime
+      format
+      totalSlots
+      availableSlots
+      status
+      description
+      createdAt
+      club {
+        id
+        name
+        zone
+        address
+        lat
+        lng
+      }
+      participants {
+        teamA { id displayName avatarUrl }
+        teamB { id displayName avatarUrl }
+        teamACount
+        teamBCount
+        totalCount
+        spotsLeftA
+        spotsLeftB
+      }
+      isCurrentUserJoined
+      canJoin
+    }
+  }
+`;
+
+export const JOIN_MATCH = /* GraphQL */ `
+  mutation JoinMatch($input: JoinMatchInput!) {
+    joinMatch(input: $input) {
+      success
+      message
     }
   }
 `;
