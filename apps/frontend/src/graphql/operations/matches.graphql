@@ -105,3 +105,21 @@ mutation JoinMatch($input: JoinMatchInput!) {
     message
   }
 }
+
+# Leave a match. Requires auth token in Authorization header.
+# matchDeleted is true when the match was auto-deleted (0 participants remaining).
+mutation LeaveMatch($input: LeaveMatchInput!) {
+  leaveMatch(input: $input) {
+    matchDeleted
+    match {
+      id
+      status
+      availableSlots
+      participants {
+        teamACount
+        teamBCount
+        totalCount
+      }
+    }
+  }
+}

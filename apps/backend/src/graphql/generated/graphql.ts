@@ -95,6 +95,16 @@ export type JoinMatchResult = {
   success: Scalars['Boolean']['output'];
 };
 
+export type LeaveMatchInput = {
+  matchId: Scalars['ID']['input'];
+};
+
+export type LeaveMatchResult = {
+  __typename?: 'LeaveMatchResult';
+  match?: Maybe<Match>;
+  matchDeleted: Scalars['Boolean']['output'];
+};
+
 export type Match = {
   __typename?: 'Match';
   availableSlots: Scalars['Int']['output'];
@@ -156,6 +166,7 @@ export type Mutation = {
   __typename?: 'Mutation';
   createMatch: CreateMatchResult;
   joinMatch: JoinMatchResult;
+  leaveMatch: LeaveMatchResult;
 };
 
 
@@ -166,6 +177,11 @@ export type MutationCreateMatchArgs = {
 
 export type MutationJoinMatchArgs = {
   input: JoinMatchInput;
+};
+
+
+export type MutationLeaveMatchArgs = {
+  input: LeaveMatchInput;
 };
 
 export enum PlayerPosition {
@@ -312,6 +328,8 @@ export type ResolversTypes = ResolversObject<{
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
   JoinMatchInput: JoinMatchInput;
   JoinMatchResult: ResolverTypeWrapper<JoinMatchResult>;
+  LeaveMatchInput: LeaveMatchInput;
+  LeaveMatchResult: ResolverTypeWrapper<LeaveMatchResult>;
   Match: ResolverTypeWrapper<Match>;
   MatchFilters: MatchFilters;
   MatchFormat: MatchFormat;
@@ -341,6 +359,8 @@ export type ResolversParentTypes = ResolversObject<{
   Int: Scalars['Int']['output'];
   JoinMatchInput: JoinMatchInput;
   JoinMatchResult: JoinMatchResult;
+  LeaveMatchInput: LeaveMatchInput;
+  LeaveMatchResult: LeaveMatchResult;
   Match: Match;
   MatchFilters: MatchFilters;
   MatchParticipantsData: MatchParticipantsData;
@@ -401,6 +421,11 @@ export type JoinMatchResultResolvers<ContextType = GraphQLContext, ParentType ex
   success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
 }>;
 
+export type LeaveMatchResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['LeaveMatchResult'] = ResolversParentTypes['LeaveMatchResult']> = ResolversObject<{
+  match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType>;
+  matchDeleted?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+}>;
+
 export type MatchResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Match'] = ResolversParentTypes['Match']> = ResolversObject<{
   availableSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   canJoin?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
@@ -430,6 +455,7 @@ export type MatchParticipantsDataResolvers<ContextType = GraphQLContext, ParentT
 export type MutationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
   createMatch?: Resolver<ResolversTypes['CreateMatchResult'], ParentType, ContextType, RequireFields<MutationCreateMatchArgs, 'input'>>;
   joinMatch?: Resolver<ResolversTypes['JoinMatchResult'], ParentType, ContextType, RequireFields<MutationJoinMatchArgs, 'input'>>;
+  leaveMatch?: Resolver<ResolversTypes['LeaveMatchResult'], ParentType, ContextType, RequireFields<MutationLeaveMatchArgs, 'input'>>;
 }>;
 
 export type ProfileResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Profile'] = ResolversParentTypes['Profile']> = ResolversObject<{
@@ -465,6 +491,7 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Court?: CourtResolvers<ContextType>;
   CreateMatchResult?: CreateMatchResultResolvers<ContextType>;
   JoinMatchResult?: JoinMatchResultResolvers<ContextType>;
+  LeaveMatchResult?: LeaveMatchResultResolvers<ContextType>;
   Match?: MatchResolvers<ContextType>;
   MatchParticipantsData?: MatchParticipantsDataResolvers<ContextType>;
   Mutation?: MutationResolvers<ContextType>;

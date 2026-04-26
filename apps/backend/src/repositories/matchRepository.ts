@@ -533,6 +533,99 @@ export async function createMatchParticipant(
   }
 }
 
+// =====================================================
+// Leave Match — remove participant, count, delete
+// =====================================================
+
+/**
+ * Remove a single participant from matchParticipants.
+ * MUST be called with a user-scoped client so the DELETE RLS policy
+ * `participants_player_delete: USING (auth.uid() = "playerId")` is enforced.
+ * Using service-role here would bypass RLS and let any user remove any participant.
+ *
+ * Decision Context:
+ * - Why user-scoped: RLS DELETE requires auth.uid() = playerId. A service-role call would
+ *   silently succeed for any playerId, which is a privilege-escalation risk.
+ * - Returns true when a row was deleted, false when the participant was not found.
+ *   The service uses this to surface "No estás inscripto en este partido".
+ * - Previously fixed bugs: none relevant.
+ */
+export async function removeParticipant(
+  matchId: string,
+  playerId: string,
+  client: SupabaseClient,
+): Promise<boolean> {
+  const { error, count } = await client
+    .from('matchParticipants')
+    .delete({ count: 'exact' })
+    .eq('matchId', matchId)
+    .eq('playerId', playerId);
+
+  if (error) {
+    console.error(
+      `[matchRepository.removeParticipant] Supabase error matchId=${matchId} playerId=${playerId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return (count ?? 0) > 0;
+}
+
+/**
+ * Count the number of remaining participants for a match.
+ * Called after removeParticipant to decide whether to auto-delete or update status.
+ *
+ * Decision Context:
+ * - Uses service-role for a plain count read — no user-specific data is exposed.
+ * - head:true fetches only the count without returning rows (egress prevention).
+ * - Previously fixed bugs: none relevant.
+ */
+export async function countParticipants(matchId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('matchParticipants')
+    .select('id', { count: 'exact', head: true })
+    .eq('matchId', matchId);
+
+  if (error) {
+    console.error(
+      `[matchRepository.countParticipants] Supabase error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return count ?? 0;
+}
+
+/**
+ * Permanently delete a match and all its related rows (cascade).
+ * Uses service-role because there is no DELETE RLS policy on matches — this is
+ * a system-triggered auto-elimination, not a user-initiated delete action.
+ *
+ * Decision Context:
+ * - Why service-role: no DELETE policy exists on matches. This function is only called
+ *   when countParticipants returns 0, so business-logic authorization happens in the
+ *   service before this is invoked.
+ * - Cascade: matchParticipants, matchResultSubmissions, matchResultVotes all cascade
+ *   on match delete (per initial schema migration). Courts and club slots are not deleted.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function deleteMatch(matchId: string): Promise<void> {
+  const { error } = await supabase
+    .from('matches')
+    .delete()
+    .eq('id', matchId);
+
+  if (error) {
+    console.error(
+      `[matchRepository.deleteMatch] Supabase error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
 // Export repository as object for consistency
 export const matchRepository = {
   getMatchesWithFilters,
@@ -541,6 +634,9 @@ export const matchRepository = {
   getOpenMatches,
   getMatchWithParticipants,
   updateMatchStatus,
+  removeParticipant,
+  countParticipants,
+  deleteMatch,
   createMatch,
   createMatchParticipant,
 };
