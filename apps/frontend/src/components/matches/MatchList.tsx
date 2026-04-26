@@ -26,9 +26,11 @@ import { GET_MATCHES, type MatchFilters } from '@/graphql/operations/matches';
 interface MatchListProps {
   /** Initial matches for SSR/SSG hydration (optional) */
   initialMatches?: Match[];
+  /** Whether the current user is authenticated — gates the join action */
+  isAuthenticated?: boolean;
 }
 
-export function MatchList({ initialMatches }: MatchListProps) {
+export function MatchList({ initialMatches, isAuthenticated = false }: MatchListProps) {
   const [matches, setMatches] = useState<Match[]>(initialMatches || []);
   const [loading, setLoading] = useState(!initialMatches);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export function MatchList({ initialMatches }: MatchListProps) {
       {!loading && !error && matches.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {matches.map((match) => (
-            <MatchCard key={match.id} match={match} onJoin={handleJoin} />
+            <MatchCard key={match.id} match={match} onJoin={handleJoin} isAuthenticated={isAuthenticated} />
           ))}
         </div>
       )}

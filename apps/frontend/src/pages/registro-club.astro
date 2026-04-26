@@ -199,6 +199,9 @@ if (Astro.request.method === 'POST') {
       <p class="login-link">
         ¿Ya tenés cuenta? <a href="/login">Iniciá sesión</a>
       </p>
+      <p class="login-link">
+        ¿Sos jugador? <a href="/registro-jugador">Registrate acá</a>
+      </p>
     </div>
   </main>
 </Layout>
@@ -366,9 +369,13 @@ if (Astro.request.method === 'POST') {
 
   /* ── Footer link ── */
   .login-link {
-    margin-top: 1.25rem; text-align: center;
+    margin-top: 0.75rem; text-align: center;
     font-size: 0.875rem; font-family: 'Barlow', sans-serif;
     color: hsl(215 20% 50%);
+  }
+
+  .login-link:first-of-type {
+    margin-top: 1.25rem;
   }
 
   .login-link a {

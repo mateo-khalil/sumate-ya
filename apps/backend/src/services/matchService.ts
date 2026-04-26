@@ -21,10 +21,12 @@
  *   those were left from initial scaffolding and polluted prod logs.
  */
 
-import { cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
+import { cacheDelete, cacheDeletePattern, cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
 import {
   MatchFormat,
   MatchStatus,
+  type CreateMatchInput,
+  type CreateMatchResult,
   type Match,
   type MatchFilters,
 } from '../graphql/generated/graphql.js';
@@ -33,6 +35,9 @@ import {
   type MatchWithClub,
   type MatchFilterOptions,
 } from '../repositories/matchRepository.js';
+import { clubSlotRepository } from '../repositories/clubSlotRepository.js';
+import { profileRepository } from '../repositories/profileRepository.js';
+import { dateToDayOfWeek } from './clubService.js';
 import type { ServiceContext } from '../types/context.js';
 
 // =====================================================
@@ -92,7 +97,10 @@ function toMatch(row: MatchWithClub): Match {
       ? {
           id: row.clubs.id,
           name: row.clubs.name,
-          zone: row.clubs.zone,
+          zone: row.clubs.zone ?? null,
+          address: row.clubs.address ?? null,
+          lat: row.clubs.lat ?? null,
+          lng: row.clubs.lng ?? null,
         }
       : null,
   };
@@ -186,9 +194,147 @@ export async function getMatchById(_ctx: ServiceContext, id: string): Promise<Ma
   return match ? toMatch(match) : null;
 }
 
+// =====================================================
+// Format Validation Helpers
+// =====================================================
+
+/** Numeric ordering for format comparison (lower = smaller pitch) */
+const FORMAT_ORDER: Record<string, number> = {
+  '5v5': 1,
+  '7v7': 2,
+  '10v10': 3,
+  '11v11': 4,
+};
+
+/** Default capacity per format (both teams combined) */
+const FORMAT_CAPACITY: Record<MatchFormat, number> = {
+  [MatchFormat.FiveVsFive]: 10,
+  [MatchFormat.SevenVsSeven]: 14,
+  [MatchFormat.TenVsTen]: 20,
+  [MatchFormat.ElevenVsEleven]: 22,
+};
+
+// =====================================================
+// createMatch
+// =====================================================
+
+/**
+ * Create a new match and register the organizer as the first participant (team A).
+ *
+ * Decision Context:
+ * - Why: Central service function orchestrates all business-rule checks before any write
+ *   so that no partial state is committed when a validation fails.
+ * - Validation order (fail-fast):
+ *   1. Role check — profile must be 'player' (fetched with service-role client to avoid
+ *      an extra RLS policy on profile reads).
+ *   2. Slot check — slot must exist and not be blocked (re-validated at write time to
+ *      guard against the race condition where the slot was open during the list query
+ *      but gets blocked before the mutation).
+ *   3. Court/format check — the chosen format must fit the court's maxFormat.
+ *   4. Capacity check — must be >= 2 and <= the format's maximum.
+ *   5. Date/day check — the given date's day of week must match the slot's dayOfWeek.
+ * - scheduledAt is computed as "${date}T${startTime}" — the DB interprets this in its
+ *   configured timezone. For a future improvement, append the club's explicit UTC offset.
+ * - Cache invalidation: the open-match list is invalidated so the new match appears
+ *   immediately in the /partidos listing.
+ * - Uses ctx.supabase (user-scoped) for writes so RLS policies on matches and
+ *   matchParticipants can verify auth.uid() == organizerId / playerId.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function createMatch(
+  input: CreateMatchInput,
+  ctx: ServiceContext,
+): Promise<CreateMatchResult> {
+  if (!ctx.userId) {
+    throw new Error('Authentication required');
+  }
+
+  const db = ctx.supabase;
+  if (!db) throw new Error('User-scoped client required for write operations');
+
+  // 1. Role check: only players can create matches
+  const profile = await profileRepository.getProfileById(ctx.userId);
+  if (!profile) throw new Error('Perfil no encontrado');
+  if (profile.role !== 'player') {
+    throw new Error('Solo los jugadores pueden crear partidos');
+  }
+
+  // 2. Slot check (re-validated at write time for race-condition safety)
+  const slot = await clubSlotRepository.getSlotById(input.slotId);
+  if (!slot) throw new Error('El horario seleccionado no existe');
+  if (slot.isBlocked) throw new Error('El horario ya está bloqueado. Elegí otro horario.');
+  if (slot.clubId !== input.clubId) {
+    throw new Error('El horario no pertenece al club seleccionado');
+  }
+  if (slot.courtId !== input.courtId) {
+    throw new Error('La cancha no corresponde al horario seleccionado');
+  }
+
+  // 3. Format compatibility check
+  const dbFormat = FORMAT_TO_DB[input.format];
+  if (!dbFormat) throw new Error('Formato de partido inválido');
+
+  const courtMaxFormat = slot.courts.maxFormat;
+  if ((FORMAT_ORDER[dbFormat] ?? 0) > (FORMAT_ORDER[courtMaxFormat] ?? 0)) {
+    throw new Error(
+      `Esta cancha soporta hasta ${courtMaxFormat}. El formato ${dbFormat} no es compatible.`,
+    );
+  }
+
+  // 4. Capacity check
+  const maxCapacity = FORMAT_CAPACITY[input.format];
+  if (input.capacity < 2 || input.capacity > maxCapacity) {
+    throw new Error(
+      `La capacidad para ${dbFormat} debe estar entre 2 y ${maxCapacity} jugadores.`,
+    );
+  }
+
+  // 5. Date/day-of-week check (guard against frontend sending mismatched date)
+  const expectedDay = dateToDayOfWeek(input.date);
+  if (slot.dayOfWeek !== expectedDay) {
+    throw new Error(
+      `El horario seleccionado es para ${slot.dayOfWeek}, pero la fecha elegida es ${expectedDay}`,
+    );
+  }
+
+  // 6. Compute scheduledAt = "YYYY-MM-DDTHH:MM:SS"
+  const scheduledAt = `${input.date}T${slot.startTime}`;
+
+  // 7. Insert match (user-scoped client enforces INSERT RLS: organizerId = auth.uid())
+  console.info(
+    `[matchService.createMatch] userId=${ctx.userId} format=${dbFormat} scheduledAt=${scheduledAt}`,
+  );
+
+  const newMatch = await matchRepository.createMatch(
+    {
+      organizerId: ctx.userId,
+      clubId: input.clubId,
+      courtId: input.courtId,
+      clubSlotId: input.slotId,
+      format: dbFormat,
+      capacity: input.capacity,
+      scheduledAt,
+      description: input.description,
+    },
+    db,
+  );
+
+  // 8. Register organizer as first participant on team A
+  await matchRepository.createMatchParticipant(newMatch.id, ctx.userId, 'a', db);
+
+  console.info(`[matchService.createMatch] Match created matchId=${newMatch.id}`);
+
+  // 9. Invalidate open match list cache so new match is visible immediately
+  await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+  await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+
+  return { success: true, matchId: newMatch.id, message: null };
+}
+
 export const matchService = {
   listMatches,
   listOpenMatches,
   listMatchesByStatus,
   getMatchById,
+  createMatch,
 };

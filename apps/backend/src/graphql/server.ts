@@ -3,8 +3,15 @@
  *
  * Decision Context:
  * - Why: Integrates Apollo Server 5 with Express as per tech stack requirements.
- * - Pattern: Context extracts JWT from Authorization header for user-scoped operations.
- * - Previously fixed bugs: Fixed import path - AS5 uses manual middleware integration.
+ * - Pattern: Context extracts and verifies JWT via Supabase getUser() for user-scoped ops.
+ *   Returns null user for unauthenticated requests (public queries still work; resolvers
+ *   that require auth call requireAuth() which throws if user is null).
+ * - Previously fixed bugs:
+ *   - Fixed import path — AS5 uses manual middleware integration.
+ *   - extractUserFromToken() decoded the JWT with base64 without cryptographic verification,
+ *     allowing any structurally valid but forged token to pass. Fixed: now calls
+ *     createUserClient(token).auth.getUser() which validates the token signature against
+ *     Supabase. Forgeries are rejected with a null user.
  */
 
 import { ApolloServer, HeaderMap } from '@apollo/server';
@@ -16,6 +23,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { resolvers } from './resolvers/index.js';
+import { createUserClient } from '../config/supabase.js';
 import type { GraphQLContext } from '../types/context.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,23 +41,24 @@ function loadSchema() {
 }
 
 /**
- * Extract user from JWT token (simplified - production should verify JWT)
+ * Verify the Bearer token against Supabase and return the authenticated user.
+ * Returns null for missing, malformed, or invalid tokens so public resolvers
+ * still work; resolvers that require auth call requireAuth() to gate access.
  */
-function extractUserFromToken(authHeader?: string): { id: string; email: string } | null {
+async function extractUserFromToken(
+  authHeader?: string,
+): Promise<{ id: string; email: string } | null> {
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
   }
-
   const token = authHeader.slice(7);
-
-  // TODO: Verify JWT with Supabase/jsonwebtoken
-  // For now, decode without verification for development
   try {
-    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-    return {
-      id: payload.sub,
-      email: payload.email,
-    };
+    const {
+      data: { user },
+      error,
+    } = await createUserClient(token).auth.getUser();
+    if (error || !user) return null;
+    return { id: user.id, email: user.email ?? '' };
   } catch {
     return null;
   }
@@ -85,7 +94,7 @@ export async function applyApolloMiddleware(app: Express): Promise<void> {
   // Manual Express integration for Apollo Server 5
   app.use('/graphql', async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
-    const user = extractUserFromToken(authHeader);
+    const user = await extractUserFromToken(authHeader);
 
     const contextValue: GraphQLContext = {
       user,

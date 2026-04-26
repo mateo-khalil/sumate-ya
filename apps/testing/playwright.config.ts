@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -5,8 +6,30 @@ import { defineConfig, devices } from '@playwright/test';
  * https://github.com/motdotla/dotenv
  */
 // import dotenv from 'dotenv';
-// import path from 'path';
 // dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+/**
+ * Decision Context:
+ * - `screenshot: 'only-on-failure'` captures a PNG of the failing page into the
+ *   HTML report / test-results dir. Cheaper than `on` (no overhead when green)
+ *   and exactly the forensic artifact we want when a flow breaks in CI or locally.
+ * - `webServer` boots `npm run dev` from the monorepo root (two levels up from
+ *   `apps/testing`) so Playwright brings up frontend + backend (turbo dev) before
+ *   any spec runs. The frontend serves on :4321 — we wait on that URL because the
+ *   tests hit it directly (see matches-list.spec.ts FRONTEND_URL).
+ * - `reuseExistingServer: !CI` keeps local iteration fast (if `pnpm dev` is already
+ *   up, we don't double-boot); CI always gets a fresh stack.
+ * - `timeout: 180_000` — turbo dev cold-start (install + codegen + Astro + Apollo)
+ *   can take well over a minute on first run; the default 60s was flaky.
+ * - Single `chrome` project (channel: 'chrome') — we intentionally target only
+ *   Google Chrome. Firefox/WebKit were dropped because our user base runs Chrome
+ *   and cross-browser runs tripled CI time without catching real regressions.
+ *   Using `channel: 'chrome'` pins the real Chrome build rather than bare
+ *   chromium, so what CI tests matches what users actually run.
+ * - Previously fixed bugs: none relevant.
+ */
+
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -30,50 +53,27 @@ export default defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+
+    /* Capture a screenshot whenever a test fails (saved with the HTML report). */
+    screenshot: 'only-on-failure',
   },
 
-  /* Configure projects for major browsers */
+  /* Run tests only in Google Chrome. */
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'chrome',
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
-
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
   ],
 
-  /* Run your local dev server before starting the tests */
-  // webServer: {
-  //   command: 'npm run start',
-  //   url: 'http://localhost:3000',
-  //   reuseExistingServer: !process.env.CI,
-  // },
+  /* Boot the full monorepo dev stack (turbo dev) from the repo root before tests run. */
+  webServer: {
+    command: 'npm run dev',
+    cwd: REPO_ROOT,
+    url: 'http://localhost:4321',
+    reuseExistingServer: !process.env.CI,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 180_000,
+  },
 });

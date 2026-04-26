@@ -1,0 +1,42 @@
+---
+interface Props {
+  displayName: string;
+  avatarUrl?: string | null;
+}
+const { displayName, avatarUrl } = Astro.props;
+const placeholder = '/img/avatar-placeholder.svg'; // Asegúrate de que este placeholder exista en public/img/
+---
+<div class="player-item" title={displayName}>
+  <img
+    class="player-avatar"
+    src={avatarUrl || placeholder}
+    alt={`Avatar de ${displayName}`}
+    width="40"
+    height="40"
+    loading="lazy"
+  />
+  <span class="player-name">{displayName}</span>
+</div>
+
+<style>
+  .player-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 999px;
+  }
+  .player-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+  }
+  .player-name {
+    font-family: 'Barlow', sans-serif;
+    font-weight: 500;
+    color: hsl(210 20% 90%);
+  }
+</style>
