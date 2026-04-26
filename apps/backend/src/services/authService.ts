@@ -5,27 +5,34 @@
  * - Why: Frontend must not access Supabase or the database directly. All auth and role
  *   resolution flows are brokered by the backend.
  * - Pattern: Uses anon client for credential login and service-role client (supabase singleton)
- *   for admin operations. Profile and club inserts use the service-role client because the
+ *   for admin operations (register). Profile and club inserts use service-role because the
  *   new user has no active session yet — RLS would block the insert otherwise.
- * - login(): Supabase signInWithPassword returns "Email not confirmed" as a distinct error
- *   message when the user hasn't confirmed their email. This error is preserved and re-thrown
- *   so authController can return 403 with a clear Spanish message. All other auth failures
- *   remain ambiguous ("Invalid login credentials") to avoid email enumeration.
+ * - login(): Supabase signInWithPassword returns "Email not confirmed" as a distinct error.
+ *   This is preserved and re-thrown so authController can return 403 with a clear message.
+ *   All other auth failures remain ambiguous to avoid email enumeration.
  * - register(): Uses admin.createUser() with email_confirm: true so the user is immediately
- *   active without email verification. This bypasses Supabase's per-IP rate limit (~30/hr on
- *   the free tier) that auth.signUp() is subject to — critical because the backend's single IP
- *   would exhaust that limit quickly. Profile and club rows are created in the same request;
- *   orphaned auth users are cleaned up if either insert fails.
+ *   active. Bypasses the per-IP rate limit (~30/hr on the free tier) that auth.signUp() hits.
+ *   Profile and club rows are created in the same request; orphaned auth users are cleaned up
+ *   if either insert fails.
  * - Previously fixed bugs:
- *   - signUp() rate limit hit during testing → switched to admin.createUser() permanently
- *   - login() masked "Email not confirmed" as generic error → now re-thrown distinctly
+ *   - signUp() rate limit hit during testing → switched to admin.createUser() permanently.
+ *   - login() masked "Email not confirmed" as generic error → now re-thrown distinctly.
+ *   - getUserRole() used the service-role singleton, bypassing RLS for profile reads. Fixed:
+ *     renamed to getUserProfile(), now accepts a user-scoped SupabaseClient so RLS enforces
+ *     auth.uid() = id on every profiles read.
+ *   - mapAuthenticatedUser() read displayName from user_metadata.nombre instead of
+ *     profiles.displayName. Fixed: PROFILE_COLUMNS now includes displayName; user_metadata
+ *     is kept only as a last-resort fallback.
+ *   - register() rollback blocks were silently swallowing cleanup errors (P5 audit). Fixed:
+ *     all cleanup failures now logged with console.error so orphaned rows are detectable.
  */
 
-import type { User } from '@supabase/supabase-js';
+import type { User, SupabaseClient } from '@supabase/supabase-js';
 
 import { createAnonClient, createUserClient, supabase } from '../config/supabase.js';
 
-const PROFILE_ROLE_COLUMNS = 'role';
+// P8: include displayName so mapAuthenticatedUser reads from profiles, not user_metadata.
+const PROFILE_COLUMNS = 'role, displayName';
 
 export type AuthUserRole = 'player' | 'club_admin';
 
@@ -50,34 +57,46 @@ export interface RegisterInput {
   address: string;
   zone: string;
   phone: string;
-  lat?: number;
-  lng?: number;
+  lat: number;
+  lng: number;
 }
 
-function mapAuthenticatedUser(user: User, role: AuthUserRole): AuthenticatedUser {
+interface UserProfile {
+  role: AuthUserRole;
+  displayName: string;
+}
+
+// P8: profiles.displayName is authoritative; user_metadata.nombre is last-resort fallback.
+function mapAuthenticatedUser(user: User, profile: UserProfile): AuthenticatedUser {
   return {
     id: user.id,
     email: user.email ?? '',
     displayName:
-      typeof user.user_metadata?.nombre === 'string'
+      profile.displayName ||
+      (typeof user.user_metadata?.nombre === 'string'
         ? user.user_metadata.nombre
-        : user.email ?? 'Usuario',
-    role,
+        : user.email ?? 'Usuario'),
+    role: profile.role,
   };
 }
 
-async function getUserRole(userId: string): Promise<AuthUserRole> {
-  const { data, error } = await supabase
+// P7: accepts user-scoped client so RLS enforces auth.uid() = id on the profiles read.
+// P8: returns both role and displayName in a single round-trip.
+async function getUserProfile(userId: string, client: SupabaseClient): Promise<UserProfile> {
+  const { data, error } = await client
     .from('profiles')
-    .select(PROFILE_ROLE_COLUMNS)
+    .select(PROFILE_COLUMNS)
     .eq('id', userId)
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message ?? 'Unable to resolve user role');
+    throw new Error(error?.message ?? 'Unable to resolve user profile');
   }
 
-  return data.role as AuthUserRole;
+  return {
+    role: data.role as AuthUserRole,
+    displayName: data.displayName as string,
+  };
 }
 
 export const authService = {
@@ -87,7 +106,6 @@ export const authService = {
 
     if (error) {
       const msg = error.message ?? '';
-      // Preserve email confirmation errors so the frontend can show a helpful message
       if (
         msg.toLowerCase().includes('email not confirmed') ||
         msg.toLowerCase().includes('email_not_confirmed')
@@ -101,12 +119,14 @@ export const authService = {
       throw new Error('Invalid login credentials');
     }
 
-    const role = await getUserRole(data.user.id);
+    // P7: use user-scoped client so the profiles SELECT respects RLS.
+    const userClient = createUserClient(data.session.access_token);
+    const profile = await getUserProfile(data.user.id, userClient);
 
     return {
       accessToken: data.session.access_token,
       refreshToken: data.session.refresh_token,
-      user: mapAuthenticatedUser(data.user, role),
+      user: mapAuthenticatedUser(data.user, profile),
     };
   },
 
@@ -121,17 +141,36 @@ export const authService = {
       throw new Error('Invalid or expired token');
     }
 
-    const role = await getUserRole(user.id);
-    return mapAuthenticatedUser(user, role);
+    // P7: pass the existing user-scoped client so profiles read respects RLS.
+    const profile = await getUserProfile(user.id, userClient);
+    return mapAuthenticatedUser(user, profile);
+  },
+
+  // P3: exchanges a refresh token for a new session pair + resolved user profile.
+  async refresh(refreshToken: string): Promise<LoginResult> {
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+
+    if (error || !data.session || !data.user) {
+      throw new Error('Invalid or expired refresh token');
+    }
+
+    const userClient = createUserClient(data.session.access_token);
+    const profile = await getUserProfile(data.user.id, userClient);
+
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      user: mapAuthenticatedUser(data.user, profile),
+    };
   },
 
   /**
    * Logout: Invalidates the user's session via Supabase Auth.
    *
    * Decision Context:
-   * - Why: Explicitly invalidates the JWT with Supabase so it cannot be reused.
+   * - Why: Explicitly invalidates the JWT so it cannot be reused after the user logs out.
    * - Pattern: Uses user-scoped client to sign out the specific session.
-   * - Constraints: If accessToken is invalid/expired, signOut may fail silently — that's acceptable
+   * - Constraints: If the token is already invalid/expired, signOut fails silently — acceptable
    *   because the token is already unusable.
    * - Previously fixed bugs: none relevant.
    */
@@ -140,7 +179,6 @@ export const authService = {
     const { error } = await userClient.auth.signOut();
 
     if (error) {
-      // Log but don't throw — session may already be invalid
       console.warn('[authService.logout] signOut error:', error.message);
     }
   },
@@ -148,9 +186,7 @@ export const authService = {
   async register(input: RegisterInput): Promise<void> {
     // Step 1: Create user via admin API (service role).
     // admin.createUser() bypasses Supabase's per-IP rate limit that auth.signUp() is subject
-    // to (~30/hr on the free tier). With the backend as a single IP origin, signUp() would
-    // exhaust that limit quickly under normal load. email_confirm: true makes the user
-    // immediately active — no email verification step required.
+    // to (~30/hr on the free tier). email_confirm: true makes the user immediately active.
     const { data, error: createError } = await supabase.auth.admin.createUser({
       email: input.email,
       password: input.password,
@@ -189,7 +225,12 @@ export const authService = {
     });
 
     if (profileError) {
-      await supabase.auth.admin.deleteUser(userId).catch(() => undefined);
+      console.error(`[authService.register] Profile insert failed for userId=${userId}:`, profileError.message);
+      // P5: log cleanup attempts so orphaned auth users are detectable in production logs.
+      await supabase.auth.admin.deleteUser(userId).catch((cleanupErr: unknown) => {
+        const msg = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+        console.error(`[authService.register] Cleanup deleteUser failed for userId=${userId}:`, msg);
+      });
       throw new Error(`Error al crear el perfil: ${profileError.message}`);
     }
 
@@ -200,16 +241,21 @@ export const authService = {
       address: input.address,
       zone: input.zone,
       phone: input.phone,
-      lat: input.lat ?? null,
-      lng: input.lng ?? null,
+      lat: input.lat,
+      lng: input.lng,
     });
 
     if (clubError) {
-      await supabase.from('profiles').delete().eq('id', userId).then(
-        () => undefined,
-        () => undefined,
-      );
-      await supabase.auth.admin.deleteUser(userId).catch(() => undefined);
+      console.error(`[authService.register] Club insert failed for userId=${userId}:`, clubError.message);
+      // P5: log each cleanup step so partial-rollback failures surface in logs.
+      const { error: delProfileErr } = await supabase.from('profiles').delete().eq('id', userId);
+      if (delProfileErr) {
+        console.error(`[authService.register] Cleanup deleteProfile failed for userId=${userId}:`, delProfileErr.message);
+      }
+      await supabase.auth.admin.deleteUser(userId).catch((cleanupErr: unknown) => {
+        const msg = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+        console.error(`[authService.register] Cleanup deleteUser failed for userId=${userId}:`, msg);
+      });
       throw new Error(`Error al crear el club: ${clubError.message}`);
     }
   },

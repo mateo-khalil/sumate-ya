@@ -2,12 +2,19 @@
  * Auth REST controllers
  *
  * Decision Context:
- * - Why: Keep login/session/register resolution in backend so Astro only talks to the app API.
- * - Pattern: Controllers orchestrate HTTP IO, authService encapsulates Supabase calls.
+ * - Why: Keep login/session/register/refresh resolution in backend so Astro only talks to the API.
+ * - Pattern: Controllers orchestrate HTTP IO; authService encapsulates Supabase calls.
  *   Zod validation lives here so the service receives pre-validated, typed inputs.
- * - register(): validates body with Zod, maps field-level errors to a structured JSON response
+ * - register() is mounted at POST /api/auth/register-club (renamed from /register — P3 audit).
+ *   Validates body with Zod, maps field-level errors to a structured JSON response
  *   so the Astro form can display inline errors without a full page reload.
- * - Previously fixed bugs: none relevant.
+ * - Previously fixed bugs:
+ *   - password min was 6 chars — raised to 8 for stronger account security (P5).
+ *   - lat/lng were optional with no range check — made required with -90/90 and -180/180
+ *     bounds to prevent impossible coordinates from reaching the DB (P2, P6).
+ *   - email-duplicate error revealed that the specific email existed ("Este email ya está
+ *     registrado") — changed to a neutral message to avoid account enumeration (P9).
+ *   - phone had only min(6) with no format check — added regex to reject non-phone strings (P4).
  */
 
 import type { Request, Response } from 'express';
@@ -22,14 +29,29 @@ const RegisterSchema = z
   .object({
     displayName: z.string().min(2, 'Nombre completo requerido (mínimo 2 caracteres)'),
     email: z.string().email('Email inválido'),
-    password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+    // P5: raised from 6 to 8 chars for stronger account security.
+    password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
     confirmPassword: z.string().min(1, 'Confirmá tu contraseña'),
     clubName: z.string().min(2, 'Nombre del club requerido (mínimo 2 caracteres)'),
     address: z.string().min(5, 'Dirección requerida'),
     zone: z.string().min(1, 'Zona requerida'),
-    phone: z.string().min(6, 'Teléfono requerido'),
-    lat: z.number().optional(),
-    lng: z.number().optional(),
+    // P4: regex ensures only phone-like strings pass — digits, spaces, dashes, parens, and +.
+    // Minimum 8 chars gives enough room for short local formats while blocking garbage input.
+    phone: z
+      .string()
+      .min(1, 'Teléfono requerido')
+      .regex(/^[+]?[\d\s\-()+]{8,}$/, 'Formato de teléfono inválido (ej: +54 11 4222-1111)'),
+    // P2, P6: lat/lng are now required and range-validated so the map never receives
+    // impossible coordinates. Clubs without a location cannot be registered.
+    // Zod v4 note: required_error/invalid_type_error removed; range messages cover most cases.
+    lat: z
+      .number()
+      .min(-90, 'Latitud inválida (debe estar entre -90 y 90)')
+      .max(90, 'Latitud inválida (debe estar entre -90 y 90)'),
+    lng: z
+      .number()
+      .min(-180, 'Longitud inválida (debe estar entre -180 y 180)')
+      .max(180, 'Longitud inválida (debe estar entre -180 y 180)'),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: 'Las contraseñas no coinciden',
@@ -83,13 +105,32 @@ export const authController = {
     }
   },
 
+  // P3: exchanges a refresh token for a new session pair + user payload.
+  async refresh(req: Request, res: Response): Promise<void> {
+    const refreshToken =
+      typeof req.body?.refreshToken === 'string' ? req.body.refreshToken.trim() : '';
+
+    if (!refreshToken) {
+      res.status(400).json({ message: 'Refresh token is required.' });
+      return;
+    }
+
+    try {
+      const result = await authService.refresh(refreshToken);
+      res.status(200).json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Token refresh failed';
+      res.status(401).json({ message });
+    }
+  },
+
   /**
    * Logout endpoint: Invalidates session via Supabase and returns 204.
    *
    * Decision Context:
    * - Why: Ensures JWT is invalidated server-side, not just cleared from client cookies.
-   * - Pattern: Extracts token from Authorization header, calls authService.logout.
-   * - Constraints: Returns 204 even if token is missing/invalid — client should clear cookies regardless.
+   * - Pattern: Delegates to authService.logout() which uses user-scoped signOut().
+   * - Constraints: Returns 204 regardless — the frontend clears cookies in any case.
    * - Previously fixed bugs: none relevant.
    */
   async logout(req: Request, res: Response): Promise<void> {
@@ -128,24 +169,40 @@ export const authController = {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Registration failed';
 
-      // Map known Supabase auth errors to user-friendly messages in Spanish
-      if (message.toLowerCase().includes('already registered') || message.toLowerCase().includes('already been registered')) {
-        res.status(409).json({ message: 'Datos inválidos', errors: { email: 'Este email ya está registrado' } });
+      if (
+        message.toLowerCase().includes('already registered') ||
+        message.toLowerCase().includes('already been registered')
+      ) {
+        // P9: neutral message — does not confirm whether the specific email exists.
+        res.status(409).json({
+          message: 'No se pudo completar el registro. Si el email ya está registrado, intentá iniciar sesión.',
+        });
         return;
       }
 
-      if (message.toLowerCase().includes('rate limit') || message.toLowerCase().includes('too many requests')) {
-        res.status(429).json({ message: 'Demasiados intentos de registro. Esperá unos minutos y volvé a intentarlo.' });
+      if (
+        message.toLowerCase().includes('rate limit') ||
+        message.toLowerCase().includes('too many requests')
+      ) {
+        res.status(429).json({
+          message: 'Demasiados intentos de registro. Esperá unos minutos y volvé a intentarlo.',
+        });
         return;
       }
 
       if (message.toLowerCase().includes('invalid email')) {
-        res.status(400).json({ message: 'Datos inválidos', errors: { email: 'El email ingresado no es válido' } });
+        res.status(400).json({
+          message: 'Datos inválidos',
+          errors: { email: 'El email ingresado no es válido' },
+        });
         return;
       }
 
       if (message.toLowerCase().includes('password')) {
-        res.status(400).json({ message: 'Datos inválidos', errors: { password: 'La contraseña no cumple los requisitos mínimos' } });
+        res.status(400).json({
+          message: 'Datos inválidos',
+          errors: { password: 'La contraseña no cumple los requisitos mínimos' },
+        });
         return;
       }
 
