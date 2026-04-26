@@ -643,6 +643,105 @@ export async function deleteMatch(matchId: string): Promise<void> {
   }
 }
 
+// =====================================================
+// Match History — completed matches for a specific player
+// =====================================================
+
+// Minimal columns selected for the history card — no capacity/createdAt/clubSlotId needed.
+const MATCH_HISTORY_COLUMNS = `
+  id,
+  description,
+  "scheduledAt",
+  format,
+  "organizerId"
+`;
+
+// Club columns for history — no lat/lng/phone, only display fields needed.
+const CLUB_HISTORY_COLUMNS = `
+  id,
+  name,
+  zone
+`;
+
+export interface HistoryClubRow {
+  id: string;
+  name: string;
+  zone: string | null;
+}
+
+export interface HistoryParticipantRow {
+  team: 'a' | 'b';
+}
+
+export interface CompletedMatchRow {
+  id: string;
+  description: string | null;
+  scheduledAt: string;
+  format: string;
+  organizerId: string;
+  clubs: HistoryClubRow | null;
+  matchParticipants: HistoryParticipantRow[];
+}
+
+export interface CompletedMatchesResult {
+  rows: CompletedMatchRow[];
+  total: number;
+}
+
+/**
+ * Get paginated completed matches for a specific player.
+ * Queries from the `matches` side so we can order by scheduledAt DESC.
+ * The !inner join on matchParticipants filters to only matches where the player participated.
+ *
+ * Decision Context:
+ * - Why from `matches` (not `matchParticipants`): querying from the `matches` side lets us
+ *   ORDER BY "scheduledAt" DESC directly, which gives the user their history newest-first.
+ *   Querying from `matchParticipants` would only allow ordering by `joinedAt`, which is a
+ *   proxy for scheduledAt but not exact.
+ * - !inner on matchParticipants: ensures the outer WHERE clause (status = 'completed') and
+ *   the join filter (matchParticipants.playerId = userId) are both applied as INNER JOIN
+ *   conditions, so only matches the player participated in appear.
+ * - matchParticipants result array: with the !inner + playerId filter, PostgREST returns
+ *   only the participant row for this specific player — exactly one item per match.
+ * - count: 'exact' adds a Content-Range header with the total rows (pre-pagination).
+ *   Used by the service to compute hasMore.
+ * - Service-role client: reads are safe with service-role since match history is auth-gated
+ *   at the resolver layer. The user-scoped client could also be used but is not required.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getCompletedMatchesByUser(
+  userId: string,
+  page: number,
+  pageSize: number,
+  client: SupabaseClient = supabase,
+): Promise<CompletedMatchesResult> {
+  const offset = (page - 1) * pageSize;
+
+  const { data, error, count } = await client
+    .from('matches')
+    .select(
+      `${MATCH_HISTORY_COLUMNS}, clubs(${CLUB_HISTORY_COLUMNS}), matchParticipants!inner(team)`,
+      { count: 'exact' },
+    )
+    .eq('status', 'completed')
+    .eq('matchParticipants.playerId', userId)
+    .order('scheduledAt', { ascending: false })
+    .range(offset, offset + pageSize - 1);
+
+  if (error) {
+    console.error(
+      `[matchRepository.getCompletedMatchesByUser] Supabase error userId=${userId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return {
+    rows: (data as unknown as CompletedMatchRow[]) ?? [],
+    total: count ?? 0,
+  };
+}
+
 // Export repository as object for consistency
 export const matchRepository = {
   getMatchesWithFilters,
@@ -656,4 +755,5 @@ export const matchRepository = {
   deleteMatch,
   createMatch,
   createMatchParticipant,
+  getCompletedMatchesByUser,
 };

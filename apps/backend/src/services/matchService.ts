@@ -26,6 +26,7 @@ import {
   MatchFormat,
   MatchStatus,
   MatchTeam,
+  MatchUserResult,
   type CreateMatchInput,
   type CreateMatchResult,
   type JoinMatchInput,
@@ -34,12 +35,15 @@ import {
   type LeaveMatchResult,
   type Match,
   type MatchFilters,
+  type MatchHistoryConnection,
+  type MatchHistoryItem,
 } from '../graphql/generated/graphql.js';
 import {
   matchRepository,
   type MatchDetailRow,
   type MatchWithClub,
   type MatchFilterOptions,
+  type CompletedMatchRow,
 } from '../repositories/matchRepository.js';
 import { clubSlotRepository } from '../repositories/clubSlotRepository.js';
 import { profileRepository } from '../repositories/profileRepository.js';
@@ -652,6 +656,86 @@ export async function createMatch(
   return { success: true, matchId: newMatch.id, message: null };
 }
 
+// =====================================================
+// Match History
+// =====================================================
+
+/**
+ * Convert a completed-match DB row into a MatchHistoryItem GraphQL type.
+ *
+ * Decision Context:
+ * - userResult is always PENDING because scoreA/scoreB/winnerTeam do not exist in the DB yet.
+ *   TODO: When "registrar resultado" US is implemented, replace PENDING with:
+ *     WON  → winnerTeam && winnerTeam === userTeam.toLowerCase()
+ *     LOST → winnerTeam && winnerTeam !== userTeam.toLowerCase() && winnerTeam !== 'draw'
+ *     DRAW → winnerTeam === 'draw'
+ *   At that point, add scoreA/scoreB/winnerTeam to MATCH_HISTORY_COLUMNS in the repo.
+ * - isOrganizer is derived from `row.organizerId === userId` (no extra DB round-trip).
+ * - matchParticipants[0] always exists because getCompletedMatchesByUser uses !inner
+ *   join filtered by playerId — guarantees exactly one participant entry per row.
+ * - Previously fixed bugs: none relevant.
+ */
+function toMatchHistoryItem(row: CompletedMatchRow, userId: string): MatchHistoryItem {
+  const userTeam = row.matchParticipants[0]?.team === 'a' ? 'A' : 'B';
+
+  return {
+    id: row.id,
+    title: row.description ?? 'Partido sin título',
+    startTime: row.scheduledAt,
+    format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
+    club: row.clubs
+      ? { id: row.clubs.id, name: row.clubs.name, zone: row.clubs.zone ?? null }
+      : null,
+    userTeam,
+    userResult: MatchUserResult.Pending,
+    scoreA: null,
+    scoreB: null,
+    isOrganizer: row.organizerId === userId,
+  };
+}
+
+/**
+ * Return the authenticated player's completed match history, paginated.
+ *
+ * Decision Context:
+ * - Caching: keyed by userId + page + pageSize with USER_DATA TTL (5 min).
+ *   Per-user key prevents cross-user cache pollution. The 5-min TTL balances
+ *   freshness (match completions happen infrequently) against repeated queries.
+ * - Cache invalidation: currently not wired to the "completed" transition because
+ *   there is no explicit "mark completed" mutation yet. When that mutation is added,
+ *   invalidate `${CACHE_PREFIX.USER_MATCHES}${userId}*` for all participants.
+ * - hasMore: computed as offset + pageSize < total, which is the total count of
+ *   ALL matching rows returned by the count query (pre-pagination).
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getMyMatches(
+  ctx: ServiceContext,
+  page: number,
+  pageSize: number,
+): Promise<MatchHistoryConnection> {
+  if (!ctx.userId) throw new Error('Authentication required');
+
+  const offset = (page - 1) * pageSize;
+  const cacheKey = `${CACHE_PREFIX.USER_MATCHES}${ctx.userId}:page:${page}:size:${pageSize}`;
+  const userId = ctx.userId;
+
+  return cacheGetOrSet(
+    cacheKey,
+    async () => {
+      const result = await matchRepository.getCompletedMatchesByUser(userId, page, pageSize);
+      const items = result.rows.map((row) => toMatchHistoryItem(row, userId));
+      return {
+        items,
+        total: result.total,
+        page,
+        pageSize,
+        hasMore: offset + pageSize < result.total,
+      };
+    },
+    CACHE_TTL.USER_DATA,
+  );
+}
+
 export const matchService = {
   listMatches,
   listOpenMatches,
@@ -661,4 +745,5 @@ export const matchService = {
   joinMatch,
   leaveMatch,
   createMatch,
+  getMyMatches,
 };

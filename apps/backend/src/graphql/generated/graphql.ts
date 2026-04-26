@@ -141,6 +141,29 @@ export enum MatchFormat {
   TenVsTen = 'TEN_VS_TEN'
 }
 
+export type MatchHistoryConnection = {
+  __typename?: 'MatchHistoryConnection';
+  hasMore: Scalars['Boolean']['output'];
+  items: Array<MatchHistoryItem>;
+  page: Scalars['Int']['output'];
+  pageSize: Scalars['Int']['output'];
+  total: Scalars['Int']['output'];
+};
+
+export type MatchHistoryItem = {
+  __typename?: 'MatchHistoryItem';
+  club?: Maybe<Club>;
+  format: MatchFormat;
+  id: Scalars['ID']['output'];
+  isOrganizer: Scalars['Boolean']['output'];
+  scoreA?: Maybe<Scalars['Int']['output']>;
+  scoreB?: Maybe<Scalars['Int']['output']>;
+  startTime: Scalars['String']['output'];
+  title: Scalars['String']['output'];
+  userResult: MatchUserResult;
+  userTeam: Scalars['String']['output'];
+};
+
 export type MatchParticipantsData = {
   __typename?: 'MatchParticipantsData';
   spotsLeftA: Scalars['Int']['output'];
@@ -163,6 +186,13 @@ export enum MatchStatus {
 export enum MatchTeam {
   A = 'A',
   B = 'B'
+}
+
+export enum MatchUserResult {
+  Draw = 'DRAW',
+  Lost = 'LOST',
+  Pending = 'PENDING',
+  Won = 'WON'
 }
 
 export type Mutation = {
@@ -213,6 +243,7 @@ export type Query = {
   clubs: Array<ClubDetail>;
   match?: Maybe<Match>;
   matches: Array<Match>;
+  myMatches: MatchHistoryConnection;
   myProfile: Profile;
 };
 
@@ -230,6 +261,12 @@ export type QueryMatchArgs = {
 
 export type QueryMatchesArgs = {
   filters?: InputMaybe<MatchFilters>;
+};
+
+
+export type QueryMyMatchesArgs = {
+  page?: InputMaybe<Scalars['Int']['input']>;
+  pageSize?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type TeamMember = {
@@ -337,9 +374,12 @@ export type ResolversTypes = ResolversObject<{
   Match: ResolverTypeWrapper<Match>;
   MatchFilters: MatchFilters;
   MatchFormat: MatchFormat;
+  MatchHistoryConnection: ResolverTypeWrapper<MatchHistoryConnection>;
+  MatchHistoryItem: ResolverTypeWrapper<MatchHistoryItem>;
   MatchParticipantsData: ResolverTypeWrapper<MatchParticipantsData>;
   MatchStatus: MatchStatus;
   MatchTeam: MatchTeam;
+  MatchUserResult: MatchUserResult;
   Mutation: ResolverTypeWrapper<Record<PropertyKey, never>>;
   PlayerPosition: PlayerPosition;
   Profile: ResolverTypeWrapper<Profile>;
@@ -367,6 +407,8 @@ export type ResolversParentTypes = ResolversObject<{
   LeaveMatchResult: LeaveMatchResult;
   Match: Match;
   MatchFilters: MatchFilters;
+  MatchHistoryConnection: MatchHistoryConnection;
+  MatchHistoryItem: MatchHistoryItem;
   MatchParticipantsData: MatchParticipantsData;
   Mutation: Record<PropertyKey, never>;
   Profile: Profile;
@@ -449,6 +491,27 @@ export type MatchResolvers<ContextType = GraphQLContext, ParentType extends Reso
   totalSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
 }>;
 
+export type MatchHistoryConnectionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchHistoryConnection'] = ResolversParentTypes['MatchHistoryConnection']> = ResolversObject<{
+  hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  items?: Resolver<Array<ResolversTypes['MatchHistoryItem']>, ParentType, ContextType>;
+  page?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  pageSize?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  total?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+}>;
+
+export type MatchHistoryItemResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchHistoryItem'] = ResolversParentTypes['MatchHistoryItem']> = ResolversObject<{
+  club?: Resolver<Maybe<ResolversTypes['Club']>, ParentType, ContextType>;
+  format?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isOrganizer?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  scoreA?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  scoreB?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  title?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  userResult?: Resolver<ResolversTypes['MatchUserResult'], ParentType, ContextType>;
+  userTeam?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
 export type MatchParticipantsDataResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchParticipantsData'] = ResolversParentTypes['MatchParticipantsData']> = ResolversObject<{
   spotsLeftA?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   spotsLeftB?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -482,6 +545,7 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   clubs?: Resolver<Array<ResolversTypes['ClubDetail']>, ParentType, ContextType>;
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType, RequireFields<QueryMatchArgs, 'id'>>;
   matches?: Resolver<Array<ResolversTypes['Match']>, ParentType, ContextType, Partial<QueryMatchesArgs>>;
+  myMatches?: Resolver<ResolversTypes['MatchHistoryConnection'], ParentType, ContextType, Partial<QueryMyMatchesArgs>>;
   myProfile?: Resolver<ResolversTypes['Profile'], ParentType, ContextType>;
 }>;
 
@@ -501,6 +565,8 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   JoinMatchResult?: JoinMatchResultResolvers<ContextType>;
   LeaveMatchResult?: LeaveMatchResultResolvers<ContextType>;
   Match?: MatchResolvers<ContextType>;
+  MatchHistoryConnection?: MatchHistoryConnectionResolvers<ContextType>;
+  MatchHistoryItem?: MatchHistoryItemResolvers<ContextType>;
   MatchParticipantsData?: MatchParticipantsDataResolvers<ContextType>;
   Mutation?: MutationResolvers<ContextType>;
   Profile?: ProfileResolvers<ContextType>;
