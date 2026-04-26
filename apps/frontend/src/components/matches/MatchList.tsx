@@ -60,10 +60,10 @@ export function MatchList({ initialMatches, isAuthenticated = false }: MatchList
   }, [fetchMatches]);
 
   const handleJoin = (matchId: string) => {
-    // TODO: Implement join match mutation against the backend once the
-    // matchPlayers table + RLS policies are in place (see backend.md rule
-    // "NEVER write to a new table without adding RLS policies").
-    alert(`Próximamente: unirse al partido ${matchId}`);
+    // Navigate to the match detail page where team selection + JoinTeamButton
+    // handle the full join flow (auth, team A/B choice, mutation, reload).
+    // Previously fixed bugs: was a placeholder alert() — replaced with navigation.
+    window.location.href = `/partidos/${matchId}`;
   };
 
   return (
