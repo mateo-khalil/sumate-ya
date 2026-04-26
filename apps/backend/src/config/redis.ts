@@ -54,6 +54,9 @@ export const CACHE_PREFIX = {
   // `profile:me:<userId>` — scoped to the owner because RLS differs per-user.
   // Invalidate on profile mutations (updatePosition, stat recompute, etc.).
   PROFILE_ME: 'profile:me:',
+  // `user:matches:<userId>:page:<page>:size:<pageSize>` — per-user history pagination.
+  // Invalidate when a match this user participated in transitions to 'completed'.
+  USER_MATCHES: 'user:matches:',
 } as const;
 
 // =====================================================

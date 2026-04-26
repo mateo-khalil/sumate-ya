@@ -13,3 +13,30 @@ query GetMyProfile {
     winrate
   }
 }
+
+# Paginated match history for the authenticated player.
+# scoreA/scoreB are always null until "registrar resultado" US is implemented.
+query GetMyMatches($page: Int, $pageSize: Int) {
+  myMatches(page: $page, pageSize: $pageSize) {
+    items {
+      id
+      title
+      startTime
+      format
+      userTeam
+      userResult
+      scoreA
+      scoreB
+      isOrganizer
+      club {
+        id
+        name
+        zone
+      }
+    }
+    total
+    page
+    pageSize
+    hasMore
+  }
+}

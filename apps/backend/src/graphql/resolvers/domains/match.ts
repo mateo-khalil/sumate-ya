@@ -13,6 +13,7 @@
  *   (thrown from the service) so the client receives a clean Spanish message. The result
  *   type always has matchDeleted to tell the frontend whether to redirect or reload.
  * - createMatch: unchanged from previous implementation.
+ * - myMatches: auth-required, Zod-validated pagination, delegates to getMyMatches service.
  * - Previously fixed bugs:
  *   - match(id) used getMatchById which returned no participant data — upgraded to
  *     getMatchDetail so the detail page can show team rosters and join buttons.
@@ -20,12 +21,23 @@
  *     DB round-trip on obviously invalid IDs (e.g., "abc", "undefined").
  */
 
+import { z } from 'zod';
 import { createUserClient } from '../../../config/supabase.js';
 import { matchService } from '../../../services/matchService.js';
 import { requireAuth } from '../../../types/context.js';
 import type { MutationResolvers, QueryResolvers } from '../../generated/graphql.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const myMatchesArgsSchema = z.object({
+  page: z.number().int().min(1, { message: 'La página debe ser 1 o mayor' }).default(1),
+  pageSize: z
+    .number()
+    .int()
+    .min(1, { message: 'El tamaño de página debe ser al menos 1' })
+    .max(50, { message: 'El tamaño de página no puede superar 50' })
+    .default(10),
+});
 
 const Query: QueryResolvers = {
   /**
@@ -34,6 +46,26 @@ const Query: QueryResolvers = {
    */
   matches: async (_parent, args, _ctx) => {
     return matchService.listMatches({}, args.filters);
+  },
+
+  /**
+   * Returns the authenticated player's completed match history.
+   *
+   * Decision Context:
+   * - requireAuth: history is personal — unauthenticated requests must not leak any data.
+   * - Zod validation: page and pageSize default to 1 and 10 respectively so the query is
+   *   always well-formed even if the client omits them. Max pageSize = 50 caps egress.
+   * - User-scoped client not needed for reads (no RLS on SELECT for completed matches in
+   *   the current policy set), but we keep the pattern consistent by passing userId.
+   * - Previously fixed bugs: none relevant.
+   */
+  myMatches: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const { page, pageSize } = myMatchesArgsSchema.parse({
+      page: args.page ?? 1,
+      pageSize: args.pageSize ?? 10,
+    });
+    return matchService.getMyMatches({ userId: user.id }, page, pageSize);
   },
 
   /**

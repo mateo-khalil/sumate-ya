@@ -1,6 +1,5 @@
 ---
 /**
- * [MODIFIED] Added avatar upload modal and trigger.
  * Perfil — SSR (auth required)
  *
  * Decision Context:
@@ -11,12 +10,15 @@
  *   file runs, so the accessToken cookie is guaranteed to be present. We re-read the
  *   cookie here only to forward it to the backend GraphQL endpoint.
  * - Fetch: native fetch instead of urqlClient because urql-client.ts reads the token
- *   from localStorage (client-side only). The user asked us not to modify lib/supabase.ts
- *   — we intentionally also leave urql-client.ts untouched and use fetch directly so the
- *   SSR token flow stays isolated to this page.
- * - Error UX: any GraphQL error is rendered inline instead of throwing a 500. The most
- *   common case is an expired token; the page still renders the navbar so the user can
- *   hit "Salir" and re-login without losing the session hint.
+ *   from localStorage (client-side only). We use fetch directly so the SSR token flow
+ *   stays isolated to this page.
+ * - Match history: the first page (page=1, pageSize=10) is fetched SSR alongside the
+ *   profile so the historial section renders with content immediately. Subsequent pages
+ *   are loaded by the MatchHistoryList.tsx React island via "Cargar más". We gracefully
+ *   degrade: if the history fetch fails, we pass an empty initialData and the island
+ *   shows the empty state without breaking the profile card above it.
+ * - MatchHistoryList uses client:visible (hydrated when scrolled into view) because
+ *   the "Cargar más" button is below the fold and does not need immediate interactivity.
  * - Previously fixed bugs: none relevant.
  */
 export const prerender = false;
@@ -24,8 +26,14 @@ export const prerender = false;
 import Layout from '../layouts/Layout.astro';
 import ProfileCard from '@/components/profile/ProfileCard.astro';
 import AvatarUpload from '@/components/profile/AvatarUpload.tsx';
+import { MatchHistoryList } from '@/components/profile/MatchHistoryList.tsx';
 import { ACCESS_TOKEN_COOKIE } from '../lib/auth';
-import { GET_MY_PROFILE, type Profile } from '../graphql/operations/profile';
+import {
+  GET_MY_PROFILE,
+  GET_MY_MATCHES,
+  type Profile,
+  type MatchHistoryConnection,
+} from '../graphql/operations/profile';
 
 const backendUrl =
   import.meta.env.PRIVATE_BACKEND_URL ||
@@ -40,28 +48,37 @@ const user = Astro.locals.user;
 const accessToken = Astro.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
 const displayName = user?.displayName || user?.email || 'Jugador';
 
+const EMPTY_HISTORY: MatchHistoryConnection = {
+  items: [], total: 0, page: 1, pageSize: 10, hasMore: false,
+};
+
 let profile: Profile | null = null;
 let errorMessage: string | null = null;
+let historyData: MatchHistoryConnection = EMPTY_HISTORY;
 
 if (!accessToken) {
   // Middleware already redirects on this path, but we keep a defensive guard.
   errorMessage = 'Sesión inválida. Iniciá sesión nuevamente.';
 } else {
-  try {
-    const response = await fetch(graphqlUrl, {
+  // Fetch profile and first page of history in parallel
+  const [profileResponse, historyResponse] = await Promise.allSettled([
+    fetch(graphqlUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ query: GET_MY_PROFILE }),
-    });
+    }),
+    fetch(graphqlUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ query: GET_MY_MATCHES, variables: { page: 1, pageSize: 10 } }),
+    }),
+  ]);
 
-    const result = (await response.json().catch(() => null)) as
+  if (profileResponse.status === 'fulfilled') {
+    const result = (await profileResponse.value.json().catch(() => null)) as
       | { data?: { myProfile: Profile | null }; errors?: Array<{ message: string }> }
       | null;
-
-    if (!response.ok || !result) {
+    if (!result || !profileResponse.value.ok) {
       errorMessage = 'No pudimos cargar tu perfil. Intentá de nuevo en unos segundos.';
     } else if (result.errors?.length) {
       errorMessage = result.errors[0]?.message || 'Error al cargar tu perfil.';
@@ -70,8 +87,18 @@ if (!accessToken) {
     } else {
       errorMessage = 'Tu perfil no está disponible todavía.';
     }
-  } catch (e) {
-    errorMessage = e instanceof Error ? e.message : 'Error de red al cargar el perfil';
+  } else {
+    errorMessage = 'Error de red al cargar el perfil';
+  }
+
+  if (historyResponse.status === 'fulfilled') {
+    const histJson = (await historyResponse.value.json().catch(() => null)) as
+      | { data?: { myMatches?: MatchHistoryConnection }; errors?: Array<{ message: string }> }
+      | null;
+    if (histJson?.data?.myMatches) {
+      historyData = histJson.data.myMatches;
+    }
+    // Graceful degradation: if history fails, historyData stays EMPTY_HISTORY
   }
 }
 ---
@@ -126,6 +153,25 @@ if (!accessToken) {
           </div>
         )}
       </section>
+
+      <!-- Match history section -->
+      {profile && (
+        <section class="history-section">
+          <header class="history-header">
+            <div class="section-label">ACTIVIDAD</div>
+            <h2 class="history-title">Historial de partidos</h2>
+            <p class="history-sub">
+              Tus partidos completados — {historyData.total > 0 ? `${historyData.total} en total` : 'sin partidos aún'}
+            </p>
+          </header>
+          <MatchHistoryList
+            client:visible
+            initialData={historyData}
+            backendUrl={backendUrl}
+            accessToken={accessToken ?? ''}
+          />
+        </section>
+      )}
     </main>
 
     <!-- Avatar Upload Modal -->
@@ -530,5 +576,33 @@ if (!accessToken) {
     width: 100%;
     padding: 0.75rem;
     font-size: 0.9rem;
+  }
+
+  /* ---- Match history section ---- */
+  .history-section {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .history-header {
+    margin-bottom: 1.5rem;
+  }
+
+  .history-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.75rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    margin: 0 0 0.25rem;
+    line-height: 1;
+  }
+
+  .history-sub {
+    margin: 0;
+    color: hsl(215 20% 50%);
+    font-size: 0.875rem;
+    font-family: 'Barlow', sans-serif;
   }
 </style>

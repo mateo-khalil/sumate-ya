@@ -741,3 +741,179 @@ Ejecutar tras levantar backend y frontend con `pnpm dev`.
 - **Organizer FK sin participante**: Si el organizador se salió del partido, `match.organizerId` apunta a un usuario que ya no está en `matchParticipants`. El badge "Org." no aparecerá en ningún jugador en ese caso. Esto es correcto e intencional (ver Decision Context de `matchService.leaveMatch`).
 - **preferredPosition raw**: El backend retorna el valor literal de la DB (ej: `'goalkeeper'`). El componente `PlayerCard.astro` mapea tanto mayúsculas como minúsculas para mayor robustez.
 - **phone en clubs legacy**: Clubs sin teléfono configurado simplemente no muestran esa fila en `ClubLocationCard`.
+
+---
+
+# Testing Manual — User Story: Historial de partidos jugados
+
+## Contexto
+
+Rama: `historial-de-partidos`  
+Query: `myMatches(page: Int, pageSize: Int): MatchHistoryConnection!`  
+Página: `/perfil` — sección "Historial de partidos" (debajo del ProfileCard)  
+Componentes: `MatchHistoryCard.tsx`, `MatchHistoryList.tsx`
+
+**Nota:** `userResult` siempre es `PENDING` hasta que se implemente la US "registrar resultado" (campos `scoreA/scoreB/winnerTeam` no existen aún en la DB).  
+Ejecutar tras levantar backend y frontend con `pnpm dev`.
+
+---
+
+## Test 1 — Usuario sin partidos completados (empty state)
+
+**Pasos:**
+1. Iniciar sesión como un jugador nuevo que no participó en ningún partido completado
+2. Navegar a `/perfil`
+
+**Resultado esperado:**
+- La sección "Historial de partidos" muestra "sin partidos aún" en el subtítulo
+- El componente muestra el empty state: ícono 🏟️, texto "Aún no tenés partidos jugados"
+- No hay tarjetas de partido ni botón "Cargar más"
+
+---
+
+## Test 2 — Usuario con 1 partido completado
+
+**Pasos:**
+1. Usar un jugador que tenga exactamente 1 partido con `status = 'completed'` en `matchParticipants`
+2. Navegar a `/perfil`
+
+**Resultado esperado:**
+- Sección muestra "1 en total" en el subtítulo
+- Aparece 1 tarjeta con fecha en español, nombre del club, formato (5v5/7v7/etc.), equipo (A o B)
+- Badge de resultado: gris "Sin resultado" (PENDING)
+- No aparece el botón "Cargar más"
+- "Mostrando todos tus partidos (1)" al final
+
+---
+
+## Test 3 — Paginación con más de 10 partidos
+
+**Pasos:**
+1. Usar un jugador con 15+ partidos completados
+2. Navegar a `/perfil`
+
+**Resultado esperado:**
+- Se muestran 10 tarjetas iniciales (primer page SSR)
+- Aparece botón "Cargar más" al final
+- Click en "Cargar más" → muestra un spinner/texto "Cargando…" → aparecen los siguientes partidos
+- Si quedan menos de 10, el botón desaparece y aparece "Mostrando todos tus partidos (X)"
+- El total en el subtítulo muestra el número correcto
+
+---
+
+## Test 4 — Partido WON (futuro, cuando se implemente resultado)
+
+> **Pendiente:** requiere la US "registrar resultado"
+
+**Resultado esperado cuando esté implementado:**
+- Badge verde "Ganado"
+- Score visible (ej: "3 — 2")
+- `userResult = WON` cuando `winnerTeam === userTeam.toLowerCase()`
+
+---
+
+## Test 5 — Partido LOST (futuro)
+
+> **Pendiente:** requiere la US "registrar resultado"
+
+**Resultado esperado cuando esté implementado:**
+- Badge rojo "Perdido"
+- Score visible
+
+---
+
+## Test 6 — Partido DRAW (futuro)
+
+> **Pendiente:** requiere la US "registrar resultado"
+
+**Resultado esperado cuando esté implementado:**
+- Badge ámbar "Empate"
+- Score visible (ej: "2 — 2")
+
+---
+
+## Test 7 — Badge "Sin resultado" (estado actual)
+
+**Pasos:**
+1. Ver cualquier partido completado en el historial
+
+**Resultado esperado:**
+- Badge gris "Sin resultado" visible en la fila de resultado
+- Sin score visible (scoreA/scoreB son null)
+
+---
+
+## Test 8 — Badge "Organizador" en partido creado por el usuario
+
+**Pasos:**
+1. Usar un jugador que creó al menos un partido que quedó completado
+2. Navegar a `/perfil`
+
+**Resultado esperado:**
+- En la tarjeta de ese partido aparece el badge naranja "Organizador"
+- En partidos donde no fue organizador, el badge no aparece
+
+---
+
+## Test 9 — Partidos cancelled NO aparecen en el historial
+
+**Pasos:**
+1. Usar un jugador inscripto en un partido que fue cancelado (`status = 'cancelled'`)
+2. Navegar a `/perfil`
+
+**Resultado esperado:**
+- Ese partido NO aparece en el historial
+- Solo aparecen partidos con `status = 'completed'`
+
+---
+
+## Test 10 — Cache Redis se usa en segunda request
+
+> Requiere `REDIS_URL` configurado en el backend
+
+**Pasos:**
+1. Navegar a `/perfil` con el historial → primera carga (cache MISS)
+2. Navegar a `/perfil` nuevamente dentro de los 5 minutos
+
+**Resultado esperado en logs del backend:**
+```
+[Redis] Cache MISS: user:matches:<userId>:page:1:size:10
+# (primer acceso)
+
+[Redis] Cache HIT: user:matches:<userId>:page:1:size:10
+# (segundo acceso, dentro de 5 minutos)
+```
+
+---
+
+## Test 11 — Cargar más y volver: datos consistentes
+
+**Pasos:**
+1. Cargar más de una página de historial
+2. Navegar a otra página y volver a `/perfil`
+
+**Resultado esperado:**
+- Al volver, se muestra solo la primera página (page 1) — el estado SSR reinicia
+- La segunda carga usa cache (si Redis está activo) y es rápida
+- No hay duplicados ni datos inconsistentes
+
+---
+
+## Test 12 — hasMore = false con 0 items restantes
+
+**Pasos:**
+1. Llegar al final del historial (cargar todas las páginas disponibles)
+
+**Resultado esperado:**
+- El botón "Cargar más" desaparece
+- Aparece el texto "Mostrando todos tus partidos (X)"
+- No hay llamadas a la API al no haber botón
+
+---
+
+## Notas de implementación
+
+- **Option B (sin resultado):** Los campos `scoreA/scoreB/winnerTeam` no existen en la DB. `userResult` siempre es `PENDING`. La arquitectura está preparada: cuando "registrar resultado" se implemente, solo hay que agregar las columnas vía MCP, actualizar `MATCH_HISTORY_COLUMNS` en el repository y reemplazar la lógica en `toMatchHistoryItem`.
+- **Ordering:** Los partidos se ordenan por `scheduledAt DESC` (fecha del partido, no de inscripción).
+- **TTL de cache:** 5 minutos (`USER_DATA`). Si se registra un resultado en esos 5 minutos, el historial no se actualiza hasta que expira el cache. Esto es aceptable para la frecuencia de uso prevista.
+- **client:visible:** La isla React se hidrata cuando el usuario hace scroll hasta la sección del historial, no al cargar la página.
