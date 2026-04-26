@@ -398,3 +398,155 @@ Migración aplicada el 2026-04-25 via `mcp__supabase__apply_migration`. Las tres
 | Usuario puede leer su propio perfil | SELECT | `USING (auth.uid() = id)` |
 | Usuario puede crear su propio perfil | INSERT | `WITH CHECK (auth.uid() = id)` |
 | Usuario puede actualizar su propio perfil | UPDATE | `USING + WITH CHECK (auth.uid() = id)` |
+
+---
+
+# Testing Manual — User Story: Salirse de un partido
+
+## Contexto
+
+Rama: `abandonar-partido`  
+Mutation: `leaveMatch(input: LeaveMatchInput!): LeaveMatchResult!`  
+Página: `/partidos/[id]` (botón "Salirme del partido" visible cuando `isCurrentUserJoined = true`)
+
+Backend: `matchService.leaveMatch()` → `matchRepository.removeParticipant()`  
+Ejecutar tras levantar backend y frontend con `pnpm dev`.
+
+---
+
+## Test 1 — Salida exitosa (happy path)
+
+**Pasos:**
+1. Iniciar sesión como player inscripto en un partido
+2. Navegar a `/partidos/[id]` del partido
+3. Verificar que aparece el banner verde "✓ Ya estás inscripto" y el botón "Salirme del partido"
+4. Click → diálogo de confirmación → "Sí, salirme"
+
+**Resultado esperado:**
+- HTTP 200 con `{ leaveMatch: { matchDeleted: false, match: { ... } } }`
+- Página recarga mostrando el lugar liberado
+- El usuario ya no aparece en ningún equipo
+- `matchParticipants` no tiene fila con ese `playerId` + `matchId`
+
+---
+
+## Test 2 — Player no inscripto intenta salirse
+
+**Pasos:**
+1. Iniciar sesión como player que NO está en el partido
+2. Llamar directamente: `POST /graphql` → `leaveMatch({ matchId: "<id>" })`
+
+**Resultado esperado:**
+- `errors[0].message === "No estás inscripto en este partido"`
+- `matchParticipants` sin cambios
+
+---
+
+## Test 3 — Partido cancelado
+
+**Pasos:**
+1. Usar un partido con `status = 'cancelled'`
+2. Intentar salirse
+
+**Resultado esperado:**
+- `errors[0].message === "El partido ya fue cancelado"`
+
+---
+
+## Test 4 — Único jugador se sale → auto-eliminación
+
+**Pasos:**
+1. Crear un partido como player_A → player_A queda inscripto en equipo A
+2. Player_A se sale del partido
+
+**Resultado esperado:**
+- `{ leaveMatch: { matchDeleted: true, match: null } }`
+- Redirect a `/partidos` (el botón navega a la lista)
+- El partido ya no aparece en la lista
+- `matches` no tiene fila con ese id
+- `matchParticipants` no tiene filas con ese `matchId`
+
+---
+
+## Test 5 — Partido full → vuelve a open
+
+**Pasos:**
+1. Tener un partido con `status = 'full'` (todos los cupos ocupados)
+2. Un player inscripto se sale
+
+**Resultado esperado:**
+- `{ leaveMatch: { matchDeleted: false, match: { status: 'OPEN', ... } } }`
+- `matches.status` cambió de `'full'` a `'open'`
+- El partido vuelve a aparecer en el listado de partidos abiertos
+- `availableSlots` es 1 (o más, según cuántos quedaron)
+
+---
+
+## Test 6 — Confirmación con menos de 1 hora
+
+**Pasos:**
+1. Inscribirse en un partido cuyo `startTime` es menos de 60 minutos en el futuro
+2. Click en "Salirme del partido"
+
+**Resultado esperado:**
+- Diálogo de confirmación muestra aviso naranja: "⚠ Falta menos de 1 hora para el partido"
+- El botón "Sí, salirme" sigue disponible (no bloqueado)
+- Al confirmar, la salida procede normalmente
+
+---
+
+## Test 7 — Confirmación normal (más de 1 hora)
+
+**Pasos:**
+1. Inscribirse en un partido cuyo `startTime` es más de 60 minutos en el futuro
+2. Click en "Salirme del partido"
+
+**Resultado esperado:**
+- Diálogo de confirmación sin aviso de urgencia
+- Texto: "¿Querés salirte del partido? Tu lugar quedará disponible."
+
+---
+
+## Test 8 — Organizador se sale (Caso A)
+
+**Pasos:**
+1. El organizador del partido (el jugador que lo creó) navega al detalle
+2. Observa que está en el Equipo A (fue inscripto automáticamente)
+3. Click "Salirme" → confirmar
+
+**Resultado esperado:**
+- Si quedan otros participantes: partido sigue existiendo, `organizerId` en `matches` sigue apuntando al ex-organizador (el FK no se borra), pero el usuario ya no aparece en `matchParticipants`
+- La UI muestra los equipos sin el organizador
+- No hay error ni transferencia de rol
+- **Nota**: el `organizerId` queda como referencia histórica. Esta decisión está documentada en el Decision Context del service — cambiar el organizador requeriría una migración o un flujo "transferir rol" fuera del scope de esta US.
+
+---
+
+## Test 9 — Cache Redis (solo si REDIS_URL está configurado)
+
+**Pasos:**
+1. Con Redis activo, observar logs del backend antes y después de salirse
+
+**Resultado esperado en logs:**
+```
+[Redis] Deleted key: match:participants:<id>
+[Redis] Deleted key: match:<id>
+```
+Si el partido se volvió open o fue eliminado, también:
+```
+[Redis] Deleted key: matches:open
+```
+
+---
+
+## Test 10 — Race condition: dos players se salen cuando queda uno solo
+
+**Pasos:**
+1. Partido con 2 jugadores: A y B
+2. Usando dos sesiones simultáneas, ambos A y B hacen `leaveMatch` al mismo tiempo
+
+**Resultado esperado:**
+- Uno de los dos ve `matchDeleted: true` (el que leyó count=0 después de su DELETE)
+- El otro puede ver `matchDeleted: false` con 1 participante restante, o también `matchDeleted: true` si el match ya fue eliminado
+- No hay error ni duplicado — `deleteMatch` con `DELETE WHERE id=x` sobre fila ya eliminada devuelve 0 filas sin error (idempotente en PostgreSQL)
+- El partido queda eliminado o con 1 participante, nunca inconsistente

@@ -9,6 +9,9 @@
  *   Public callers (no token) still get the match data; flags are null.
  * - joinMatch: requires authentication + player role (enforced in service). Returns the
  *   updated Match with participants so the frontend can re-render without a second query.
+ * - leaveMatch: requires authentication. Errors are returned via Apollo's errors array
+ *   (thrown from the service) so the client receives a clean Spanish message. The result
+ *   type always has matchDeleted to tell the frontend whether to redirect or reload.
  * - createMatch: unchanged from previous implementation.
  * - Previously fixed bugs:
  *   - match(id) used getMatchById which returned no participant data — upgraded to
@@ -95,6 +98,28 @@ const Mutation: MutationResolvers = {
       console.error(`[matchResolver.joinMatch] Failed for userId=${user.id}:`, error);
       return { success: false, message, match: null };
     }
+  },
+  /**
+   * leaveMatch mutation resolver.
+   *
+   * Decision Context:
+   * - Auth required: requireAuth throws for unauthenticated requests.
+   * - User-scoped client: passed to service so DELETE on matchParticipants satisfies
+   *   the RLS policy (auth.uid() = playerId). The service-role singleton is used internally
+   *   for the auto-delete and status update operations that require bypassing RLS.
+   * - Errors are re-thrown (not caught into a result shape) so Apollo wraps them in the
+   *   `errors` array. LeaveMatchResult only carries data, not error state — this keeps
+   *   the schema cleaner and avoids a parallel success/message pattern.
+   * - Previously fixed bugs: none relevant.
+   */
+  leaveMatch: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const userClient = ctx.accessToken ? createUserClient(ctx.accessToken) : undefined;
+
+    return await matchService.leaveMatch(args.input, {
+      userId: user.id,
+      supabase: userClient,
+    });
   },
 };
 

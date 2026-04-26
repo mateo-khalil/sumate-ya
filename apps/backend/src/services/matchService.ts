@@ -30,6 +30,8 @@ import {
   type CreateMatchResult,
   type JoinMatchInput,
   type JoinMatchResult,
+  type LeaveMatchInput,
+  type LeaveMatchResult,
   type Match,
   type MatchFilters,
 } from '../graphql/generated/graphql.js';
@@ -370,6 +372,125 @@ export async function joinMatch(
 }
 
 // =====================================================
+// leaveMatch
+// =====================================================
+
+/** Basic UUID format check — avoids a round-trip for obviously invalid IDs. */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Leave a match as a player, with optional auto-deletion when the last participant exits.
+ *
+ * Decision Context:
+ * - Validation order (fail-fast):
+ *   1. Auth + user-scoped client — user identity and RLS client must both be present.
+ *   2. UUID format — catch malformed IDs before a DB round-trip (Spanish error message).
+ *   3. Match existence — clear 404-style message.
+ *   4. Status check — 'cancelled' matches block further participant changes to preserve
+ *      audit history. 'completed', 'in_progress', 'full', and 'open' matches allow leaving:
+ *      leaving a 'full' match re-opens it, which is intentional (frees a spot).
+ *   5. Membership check — explicit "not enrolled" error instead of a silent 0-row DELETE.
+ *   6. DELETE via user-scoped client — RLS enforces auth.uid() = playerId.
+ *   7. Count remaining participants.
+ *   8. If 0 → deleteMatch() via service-role (auto-elimination); invalidate list caches.
+ *   9. If was 'full' → updateMatchStatus('open') via service-role + invalidate list caches.
+ *  10. Invalidate participant + detail caches regardless.
+ *  11. Return { match: null, matchDeleted: true } or { match: updatedMatch, matchDeleted: false }.
+ *
+ * Caso A — organizador se sale:
+ *   The match keeps the organizerId FK pointing to the player who left, but they no longer
+ *   appear in matchParticipants. This is intentional: removing organizerId would require a
+ *   schema migration or a "transfer organizer" flow that is out of scope for this US.
+ *   The match remains playable; the organizerId is used for UPDATE RLS only.
+ *
+ * Caso B — último participante:
+ *   countParticipants() reads after the DELETE to get the authoritative count.
+ *   Race condition: two players leaving simultaneously when each is the last would both
+ *   read count=0; deleteMatch is idempotent (DELETE WHERE id=x on missing row returns 0
+ *   rows without error in PostgreSQL). At most one spurious no-op call to deleteMatch.
+ *
+ * Caso C — partido full → open:
+ *   The service-role update is required because the organizer-scoped RLS UPDATE policy
+ *   would reject updates by a non-organizer player.
+ *
+ * Caso D — menos de 1 hora para el partido:
+ *   Not blocked server-side — the UI shows a warning dialog but leaving is always allowed.
+ *   Blocking at the API level would require timezone-aware slot queries that are out of scope.
+ *
+ * Previously fixed bugs: none relevant.
+ */
+export async function leaveMatch(
+  input: LeaveMatchInput,
+  ctx: ServiceContext,
+): Promise<LeaveMatchResult> {
+  if (!ctx.userId) throw new Error('Authentication required');
+  const db = ctx.supabase;
+  if (!db) throw new Error('User-scoped client required for write operations');
+
+  // 1. UUID validation
+  if (!UUID_REGEX.test(input.matchId)) {
+    throw new Error('ID de partido inválido');
+  }
+
+  // 2. Fetch match with participants
+  const matchRow = await matchRepository.getMatchWithParticipants(input.matchId);
+  if (!matchRow) throw new Error('Partido no encontrado');
+
+  // 3. Status check — cancelled matches are locked
+  if (matchRow.status === 'cancelled') {
+    throw new Error('El partido ya fue cancelado');
+  }
+
+  // 4. Membership check — must be enrolled before we can leave
+  const isEnrolled = matchRow.matchParticipants.some((p) => p.profiles.id === ctx.userId);
+  if (!isEnrolled) {
+    throw new Error('No estás inscripto en este partido');
+  }
+
+  const wasFull = matchRow.status === 'full';
+
+  // 5. DELETE participant (user-scoped → RLS: auth.uid() = playerId)
+  await matchRepository.removeParticipant(input.matchId, ctx.userId, db);
+  console.info(
+    `[matchService.leaveMatch] userId=${ctx.userId} left matchId=${input.matchId}`,
+  );
+
+  // 6. Count remaining participants
+  const remaining = await matchRepository.countParticipants(input.matchId);
+
+  // 7. Auto-delete if no participants left (Caso B)
+  if (remaining === 0) {
+    await matchRepository.deleteMatch(input.matchId);
+    await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${input.matchId}`);
+    await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${input.matchId}`);
+    await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+    await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+    console.info(
+      `[matchService.leaveMatch] matchId=${input.matchId} auto-deleted (0 participants)`,
+    );
+    return { match: null, matchDeleted: true };
+  }
+
+  // 8. Re-open if was full (Caso C)
+  if (wasFull) {
+    await matchRepository.updateMatchStatus(input.matchId, 'open');
+    await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+    await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+    console.info(
+      `[matchService.leaveMatch] matchId=${input.matchId} re-opened (was full, now ${remaining} participants)`,
+    );
+  }
+
+  // 9. Invalidate participant + detail caches
+  await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${input.matchId}`);
+  await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${input.matchId}`);
+
+  // 10. Return updated match
+  const updatedMatch = await getMatchDetail({ userId: ctx.userId }, input.matchId);
+  return { match: updatedMatch ?? null, matchDeleted: false };
+}
+
+// =====================================================
 // Format Validation Helpers
 // =====================================================
 
@@ -513,5 +634,6 @@ export const matchService = {
   getMatchById,
   getMatchDetail,
   joinMatch,
+  leaveMatch,
   createMatch,
 };

@@ -23,6 +23,7 @@ export const prerender = false;
 
 import Layout from '../../layouts/Layout.astro';
 import JoinTeamButton from '../../components/matches/JoinTeamButton.tsx';
+import LeaveMatchButton from '../../components/matches/LeaveMatchButton.tsx';
 import { GET_MATCH_DETAIL } from '../../graphql/operations/matches';
 import type { MatchDetailData } from '../../graphql/operations/matches';
 import { readAccessToken } from '../../lib/auth';
@@ -186,8 +187,19 @@ const matchOpen = match?.status === 'OPEN';
             </div>
 
             {isJoined && (
-              <div class="already-joined-banner" role="status">
-                ✓ Ya estás inscripto en este partido
+              <div class="already-joined-row">
+                <div class="already-joined-banner" role="status">
+                  ✓ Ya estás inscripto en este partido
+                </div>
+                {isPlayer && (
+                  <LeaveMatchButton
+                    client:load
+                    matchId={match.id}
+                    matchDateTime={match.startTime}
+                    backendUrl={backendUrl}
+                    accessToken={accessToken}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -434,6 +446,11 @@ const matchOpen = match?.status === 'OPEN';
     font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: hsl(215 20% 50%);
   }
   .stat-value { font-family: 'Barlow', sans-serif; font-size: 0.875rem; color: hsl(210 20% 90%); }
+
+  .already-joined-row {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 0.75rem;
+  }
 
   .already-joined-banner {
     display: inline-flex; align-items: center; gap: 0.5rem;

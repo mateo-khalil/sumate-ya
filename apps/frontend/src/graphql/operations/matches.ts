@@ -128,6 +128,20 @@ export interface JoinMatchResult {
   message: string | null;
 }
 
+export interface LeaveMatchInput {
+  matchId: string;
+}
+
+export interface LeaveMatchResult {
+  matchDeleted: boolean;
+  match: {
+    id: string;
+    status: MatchStatus;
+    availableSlots: number;
+    participants: { teamACount: number; teamBCount: number; totalCount: number } | null;
+  } | null;
+}
+
 // =====================================================
 // GraphQL Operations
 // =====================================================
@@ -283,6 +297,24 @@ export const JOIN_MATCH = /* GraphQL */ `
     joinMatch(input: $input) {
       success
       message
+    }
+  }
+`;
+
+export const LEAVE_MATCH = /* GraphQL */ `
+  mutation LeaveMatch($input: LeaveMatchInput!) {
+    leaveMatch(input: $input) {
+      matchDeleted
+      match {
+        id
+        status
+        availableSlots
+        participants {
+          teamACount
+          teamBCount
+          totalCount
+        }
+      }
     }
   }
 `;
