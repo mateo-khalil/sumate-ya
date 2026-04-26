@@ -9,10 +9,11 @@
       "args": [
         "-y",
         "@supabase/mcp-server-supabase@latest",
-        "--project-ref=getfqjkfsueucoalvtcc"
+        "--project-ref=getfqjkfsueucoalvtcc",
+        "--access-token=sbp_b2c758b17c54968c866d088cc0be15dca21afbfd"
       ],
       "env": {
-        "SUPABASE_ACCESS_TOKEN": "sbp_86fd983ce49a8878376c322747ef8e390a766632"
+        "SUPABASE_ACCESS_TOKEN": "sbp_b2c758b17c54968c866d088cc0be15dca21afbfd"
       }
     }
   }

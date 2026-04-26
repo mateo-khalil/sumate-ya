@@ -40,6 +40,7 @@ import LeaveMatchButton from '../../components/matches/LeaveMatchButton.tsx';
 import MatchInfoCard from '../../components/matches/MatchInfoCard.astro';
 import ClubLocationCard from '../../components/matches/ClubLocationCard.astro';
 import PlayerCard from '../../components/matches/PlayerCard.astro';
+import MatchResultsSection from '../../components/matches/MatchResultsSection.tsx';
 import { GET_MATCH_DETAIL } from '../../graphql/operations/matches';
 import type { MatchDetailData } from '../../graphql/operations/matches';
 import { readAccessToken } from '../../lib/auth';
@@ -99,6 +100,17 @@ const matchCancelled = match?.status === 'CANCELLED';
 const matchInProgress = match?.status === 'IN_PROGRESS';
 const matchCompleted = match?.status === 'COMPLETED';
 const currentUserTeam = match?.currentUserTeam ?? null;
+
+// Show result section when the match has already taken place:
+// - status is COMPLETED or IN_PROGRESS, OR
+// - match start time is in the past (slot already happened)
+// Only visible to participants of non-cancelled matches.
+// Previously fixed bugs: P1 audit — cancelled matches with past startTime were showing
+// the section; the !matchCancelled guard prevents proposals/votes on cancelled matches.
+const matchStarted = match
+  ? matchCompleted || matchInProgress || new Date(match.startTime) < new Date()
+  : false;
+const showResultSection = matchStarted && isJoined && isPlayer && !matchCancelled;
 
 const allParticipants = [...teamA, ...teamB];
 const organizerParticipant = match?.organizerId
@@ -245,7 +257,18 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
             </div>
           )}
 
-          <!-- Section 4: Teams -->
+          <!-- Section 4: Result voting — only after match has started, only for participants -->
+          {showResultSection && (
+            <MatchResultsSection
+              client:visible
+              matchId={match.id}
+              isParticipant={isJoined}
+              backendUrl={backendUrl}
+              accessToken={accessToken}
+            />
+          )}
+
+          <!-- Section 5: Teams -->
           {participants ? (
             <div class="teams-grid">
 

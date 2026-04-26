@@ -1,0 +1,93 @@
+# GraphQL Schema: Match result voting
+#
+# Decision Context:
+# - Why this exists: players who participated in a match can propose the final score and
+#   vote to approve or reject each proposal. A submission is confirmed when it reaches a
+#   simple majority of participant votes.
+# - Column name mapping: DB uses scoreTeamA/scoreTeamB/winningTeam/submissionStatus;
+#   GraphQL exposes scoreA/scoreB/winnerTeam/status to align with the spec contract and
+#   keep the API clean regardless of the underlying schema.
+# - winnerTeam enum: DB has winnerTeamValue (a/b/draw); GraphQL exposes WinnerTeam (A/B/DRAW).
+# - SubmissionStatus: DB uses matchSubmissionStatus enum (pending/confirmed/rejected);
+#   isConfirmed boolean kept for backward compat but submissionStatus is authoritative.
+# - No DELETE policies: submissions and votes are immutable audit records.
+#   Service-role client is used for system-side UPDATE (confirm/reject) which bypasses RLS.
+# - Previously fixed bugs: none relevant.
+
+enum WinnerTeam {
+  A
+  B
+  DRAW
+}
+
+enum SubmissionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum VoteValue {
+  APPROVE
+  REJECT
+}
+
+type MatchResultVote {
+  id: ID!
+  voter: TeamMember!
+  vote: VoteValue!
+  createdAt: String!
+}
+
+type MatchResultSubmission {
+  id: ID!
+  matchId: ID!
+  submitter: TeamMember!
+  scoreA: Int!
+  scoreB: Int!
+  winnerTeam: WinnerTeam!
+  status: SubmissionStatus!
+  votes: [MatchResultVote!]!
+  approveCount: Int!
+  rejectCount: Int!
+  # True when the authenticated user already cast a vote on this submission
+  hasUserVoted: Boolean!
+  # The authenticated user's current vote — null if they haven't voted
+  userVote: VoteValue
+  createdAt: String!
+}
+
+type VoteSubmissionResult {
+  submission: MatchResultSubmission!
+  # True when this vote caused the submission to transition to CONFIRMED
+  statusChanged: Boolean!
+}
+
+input ProposeMatchResultInput {
+  matchId: ID!
+  scoreA: Int!
+  scoreB: Int!
+  # If omitted the resolver derives it automatically from the scores
+  winnerTeam: WinnerTeam
+}
+
+input VoteMatchResultInput {
+  submissionId: ID!
+  vote: VoteValue!
+}
+
+extend type Query {
+  # Returns all submissions for a match, newest first.
+  # Requires authentication. Caller must be a participant of the match.
+  matchResultSubmissions(matchId: ID!): [MatchResultSubmission!]!
+}
+
+extend type Mutation {
+  # Create a new result proposal for a match.
+  # Requires authentication. Caller must be a participant.
+  proposeMatchResult(input: ProposeMatchResultInput!): MatchResultSubmission!
+
+  # Cast or change a vote on an existing submission.
+  # Requires authentication. Caller must be a participant.
+  # Uses UPSERT — calling again with a different vote changes the existing vote.
+  voteMatchResult(input: VoteMatchResultInput!): VoteSubmissionResult!
+}
