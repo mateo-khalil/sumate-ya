@@ -56,7 +56,7 @@ if (Astro.request.method === 'POST') {
       const result = await loginWithBackend(emailValue, password);
       const isProd = isProduction(Astro.request);
 
-      // P2: separate maxAge — short-lived access token, long-lived refresh token.
+      // Separate maxAge — short-lived access token, long-lived refresh token.
       Astro.cookies.set(
         ACCESS_TOKEN_COOKIE,
         result.accessToken,

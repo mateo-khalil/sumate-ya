@@ -8,6 +8,7 @@
  *   for session validation on SSR requests. The refresh token is stored separately with a
  *   longer maxAge (30 days) so sessions survive browser restarts and access token expiry.
  * - Previously fixed bugs:
+ *   - CookieAttributes was removed in Astro 6; replaced with AstroCookieSetOptions.
  *   - getAuthCookieOptions() returned no maxAge, making cookies session-only (cleared on
  *     browser close). Fixed: access token gets 1 h maxAge, refresh token gets 30 days.
  *   - refreshFromBackend() did not exist, so expired access tokens always caused a /login
@@ -17,6 +18,7 @@
  *     proxies (Nginx, Vercel, Cloudflare), causing secure:false on production cookies.
  *     Fixed: isProduction() checks PRIVATE_IS_PROD env var first, then X-Forwarded-Proto,
  *     then falls back to URL protocol as last resort.
+ *   - registerClubWithBackend() called /api/auth/register — renamed to /register-club (P3 audit).
  */
 
 // CookieAttributes was removed in Astro 6 — the canonical type is AstroCookieSetOptions.
@@ -40,7 +42,7 @@ export interface LoginResponse {
 export const ACCESS_TOKEN_COOKIE = 'sumateya-access-token';
 export const REFRESH_TOKEN_COOKIE = 'sumateya-refresh-token';
 
-// P2: separate TTLs — access token is short-lived, refresh token survives 30 days.
+// Separate TTLs — access token is short-lived, refresh token survives 30 days.
 export const ACCESS_TOKEN_MAX_AGE = 60 * 60; // 1 hour (seconds)
 export const REFRESH_TOKEN_MAX_AGE = 60 * 60 * 24 * 30; // 30 days (seconds)
 
@@ -61,10 +63,10 @@ export function isProduction(request: Request): boolean {
 }
 
 export function getRoleRedirect(role: UserRole | undefined): string {
-  return role === 'club_admin' ? '/panel-club' : '/';
+  return role === 'club_admin' ? '/panel-club' : '/partidos';
 }
 
-// P2: maxAge param makes the cookie persistent (vs session-only when omitted).
+// maxAge param makes the cookie persistent (vs session-only when omitted).
 export function getAuthCookieOptions(isProd: boolean, maxAge?: number): AstroCookieSetOptions {
   return {
     httpOnly: true,
@@ -84,7 +86,7 @@ export function readAccessToken(cookies: AstroCookies): string | undefined {
   return cookies.get(ACCESS_TOKEN_COOKIE)?.value;
 }
 
-// P3: read the refresh token cookie for silent session renewal.
+// Read the refresh token cookie for silent session renewal.
 export function readRefreshToken(cookies: AstroCookies): string | undefined {
   return cookies.get(REFRESH_TOKEN_COOKIE)?.value;
 }
@@ -103,8 +105,6 @@ export async function loginWithBackend(email: string, password: string): Promise
     | null;
 
   if (!response.ok || !payload?.accessToken || !payload.refreshToken || !payload.user) {
-    // Preserve machine-readable code for cases like email_not_confirmed so the
-    // caller can render a specific message without string-matching the display text.
     const errorMessage =
       payload?.code === 'email_not_confirmed'
         ? 'email_not_confirmed'
@@ -184,7 +184,8 @@ export interface RegisterResult {
 export async function registerClubWithBackend(
   input: RegisterClubInput,
 ): Promise<RegisterResult | { ok: false; message: string; errors?: RegisterFieldErrors }> {
-  const response = await fetch(`${backendUrl}/api/auth/register`, {
+  // P3: renamed from /register to /register-club for REST clarity (club-admin-only endpoint).
+  const response = await fetch(`${backendUrl}/api/auth/register-club`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -213,15 +214,6 @@ export interface RegisterPlayerInput {
   confirmPassword: string;
 }
 
-/**
- * Player registration frontend helper.
- *
- * Decision Context:
- * - Why: Mirrors registerClubWithBackend() so the Astro page only speaks to the backend
- *   REST layer. Keeping the shape identical (ok / message / errors) means both
- *   registration pages can share the same error-rendering logic.
- * - Previously fixed bugs: none relevant.
- */
 export async function registerPlayerWithBackend(
   input: RegisterPlayerInput,
 ): Promise<RegisterResult | { ok: false; message: string; errors?: RegisterFieldErrors }> {
