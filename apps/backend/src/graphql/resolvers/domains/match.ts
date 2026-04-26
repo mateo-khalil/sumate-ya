@@ -16,12 +16,16 @@
  * - Previously fixed bugs:
  *   - match(id) used getMatchById which returned no participant data — upgraded to
  *     getMatchDetail so the detail page can show team rosters and join buttons.
+ *   - match(id) had no UUID validation — added UUID_REGEX guard to avoid wasting a
+ *     DB round-trip on obviously invalid IDs (e.g., "abc", "undefined").
  */
 
 import { createUserClient } from '../../../config/supabase.js';
 import { matchService } from '../../../services/matchService.js';
 import { requireAuth } from '../../../types/context.js';
 import type { MutationResolvers, QueryResolvers } from '../../generated/graphql.js';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const Query: QueryResolvers = {
   /**
@@ -35,8 +39,13 @@ const Query: QueryResolvers = {
   /**
    * Get a single match by ID with full participant data.
    * Public endpoint — auth context is optional; if present, populates isCurrentUserJoined.
+   * UUID validation prevents an unnecessary DB round-trip for obviously invalid IDs.
    */
   match: async (_parent, args, ctx) => {
+    if (!UUID_REGEX.test(args.id)) {
+      console.warn(`[matchResolver.match] Invalid UUID format: ${args.id}`);
+      return null;
+    }
     return matchService.getMatchDetail(
       {
         userId: ctx.user?.id,

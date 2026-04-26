@@ -550,3 +550,194 @@ Si el partido se volvió open o fue eliminado, también:
 - El otro puede ver `matchDeleted: false` con 1 participante restante, o también `matchDeleted: true` si el match ya fue eliminado
 - No hay error ni duplicado — `deleteMatch` con `DELETE WHERE id=x` sobre fila ya eliminada devuelve 0 filas sin error (idempotente en PostgreSQL)
 - El partido queda eliminado o con 1 participante, nunca inconsistente
+
+---
+
+# Testing Manual — User Story: Detalle completo de un partido
+
+## Contexto
+
+Rama: `detalle-de-partido`  
+Página: `/partidos/[id]` (SSR)  
+Componentes nuevos: `PlayerCard.astro`, `MatchInfoCard.astro`, `ClubLocationCard.astro`  
+Campos nuevos en GraphQL: `organizerId`, `currentUserTeam`, `TeamMember.preferredPosition`, `Club.phone`
+
+Ejecutar tras levantar backend y frontend con `pnpm dev`.
+
+---
+
+## Test 1 — Partido abierto con cupos en ambos equipos (usuario no autenticado)
+
+**Pasos:**
+1. Abrir ventana de incógnito (sin sesión)
+2. Navegar a `/partidos/[id]` de un partido con `status = 'OPEN'` y cupos disponibles
+
+**Resultado esperado:**
+- La página carga con la topbar, `MatchInfoCard`, `ClubLocationCard` (si el club existe), y la grilla de equipos
+- Se muestra la fecha formateada en español (ej: "sábado 5 de abril · 18:00")
+- El formato aparece como badge (ej: "7v7")
+- El badge de estado es verde "Abierto"
+- El banner inferior muestra: "🔑 Iniciá sesión para sumarte a este partido"
+- Los botones "Sumarme al Equipo A/B" no aparecen (solo el link de login en el CTA de cada equipo)
+
+---
+
+## Test 2 — Partido completo (`status = 'FULL'`)
+
+**Pasos:**
+1. Navegar a `/partidos/[id]` de un partido con todos los cupos ocupados
+
+**Resultado esperado:**
+- Badge "Completo" en naranja
+- Badge extra "PARTIDO COMPLETO" visible
+- Banner "🔒 Este partido está completo"
+- Botones "Sumarme" reemplazados por texto "Completo" en cada equipo
+
+---
+
+## Test 3 — Partido cancelado (`status = 'CANCELLED'`)
+
+**Pasos:**
+1. Navegar a `/partidos/[id]` de un partido con `status = 'CANCELLED'`
+
+**Resultado esperado:**
+- Badge "Cancelado" en rojo
+- Banner rojo: "❌ Este partido fue cancelado"
+- Botones de join muestran "Cancelado" en cada equipo
+
+---
+
+## Test 4 — Usuario inscripto ve su estado correcto
+
+**Pasos:**
+1. Iniciar sesión como jugador inscripto en un partido
+2. Navegar al detalle de ese partido
+
+**Resultado esperado:**
+- Banner verde "✓ Ya estás anotado en Equipo A" (o B según corresponda)
+- El botón "Salirme del partido" aparece dentro del banner
+- En el equipo correspondiente aparece "✓ Estás en este equipo"
+- En el otro equipo aparece "Ya estás en el Equipo A" (o B)
+- NO aparecen botones "Sumarme" en ningún equipo
+
+---
+
+## Test 5 — Usuario player no inscripto ve botones de "Sumarme"
+
+**Pasos:**
+1. Iniciar sesión como jugador sin inscripción en el partido
+2. Navegar al detalle de un partido abierto con cupos
+
+**Resultado esperado:**
+- Banner azul: "⚽ Hay X cupos disponibles. Elegí tu equipo abajo."
+- Botones "Sumarme al Equipo A" y "Sumarme al Equipo B" visibles y activos
+- Al hacer click en "Sumarme al Equipo A" → el botón muestra spinner → si exitoso, la página recarga mostrando el jugador en el Equipo A
+
+---
+
+## Test 6 — Badge "Organizador" en la tarjeta del organizador
+
+**Pasos:**
+1. Navegar al detalle de un partido como cualquier usuario
+2. Observar la lista de jugadores en el equipo donde está el organizador
+
+**Resultado esperado:**
+- El jugador que creó el partido tiene el badge naranja "Org." junto a su nombre
+- Los demás jugadores NO tienen ese badge
+
+---
+
+## Test 7 — Botón "Ver en mapa" abre Google Maps
+
+**Pasos:**
+1. Navegar al detalle de un partido cuyo club tiene `lat` y `lng` configurados
+2. Click en el botón "🗺️ Ver en mapa" en la card de ubicación
+
+**Resultado esperado:**
+- Se abre una nueva pestaña apuntando a `https://www.google.com/maps?q=<lat>,<lng>`
+- Las coordenadas son las del club (verificar que coincidan con las de la DB)
+
+---
+
+## Test 8 — Club sin coordenadas: ocultar botón de mapa
+
+**Pasos:**
+1. Navegar al detalle de un partido cuyo club tiene `lat = null` o `lng = null`
+
+**Resultado esperado:**
+- La `ClubLocationCard` muestra nombre, dirección y zona del club
+- El botón "Ver en mapa" NO aparece
+- No hay errores ni elementos vacíos
+
+---
+
+## Test 9 — ID inválido (no UUID) redirige a /partidos
+
+**Pasos:**
+1. Navegar a `/partidos/abc-no-es-uuid`
+2. Navegar a `/partidos/undefined`
+3. Navegar a `/partidos/12345`
+
+**Resultado esperado:**
+- En todos los casos: redirect inmediato a `/partidos` (sin un 404 o página en blanco)
+
+---
+
+## Test 10 — Fecha y hora en español
+
+**Pasos:**
+1. Navegar al detalle de un partido con fecha conocida (ej: 2026-05-16T18:00:00)
+
+**Resultado esperado:**
+- En la `MatchInfoCard` se muestra la fecha capitalizada y en español: "sábado 16 de mayo de 2026 · 18:00"
+- No aparece el mes o día en inglés
+- La hora usa formato de 24 horas con 2 dígitos (ej: "08:00", no "8:00 AM")
+
+---
+
+## Test 11 — Posición preferida de los jugadores
+
+**Pasos:**
+1. Navegar al detalle de un partido donde algún jugador tiene `preferredPosition` configurado
+
+**Resultado esperado:**
+- Bajo el nombre del jugador se muestra su posición en español con ícono:
+  - `goalkeeper` → "🧤 Arquero"
+  - `defender` → "🛡️ Defensor"
+  - `midfielder` → "⚡ Mediocampista"
+  - `forward` → "⚽ Delantero"
+- Jugadores sin posición configurada no muestran esa línea
+
+---
+
+## Test 12 — Responsive mobile (equipos en una columna)
+
+**Pasos:**
+1. Abrir el detalle de un partido en un viewport de 375px de ancho (DevTools → Device Toolbar)
+
+**Resultado esperado:**
+- Los dos equipos aparecen uno abajo del otro (una sola columna)
+- Todos los elementos son legibles y no se cortan
+- Los botones de join son de ancho completo
+
+---
+
+## Test 13 — club_admin ve el detalle sin botones de join
+
+**Pasos:**
+1. Iniciar sesión como usuario con `role = 'club_admin'`
+2. Navegar al detalle de cualquier partido abierto
+
+**Resultado esperado:**
+- La página carga correctamente con todos los datos del partido
+- En el CTA de cada equipo aparece "Solo jugadores pueden sumarse"
+- No aparece el banner de "Hay X cupos disponibles"
+- No aparece el botón "Salirme del partido"
+
+---
+
+## Notas de implementación
+
+- **Organizer FK sin participante**: Si el organizador se salió del partido, `match.organizerId` apunta a un usuario que ya no está en `matchParticipants`. El badge "Org." no aparecerá en ningún jugador en ese caso. Esto es correcto e intencional (ver Decision Context de `matchService.leaveMatch`).
+- **preferredPosition raw**: El backend retorna el valor literal de la DB (ej: `'goalkeeper'`). El componente `PlayerCard.astro` mapea tanto mayúsculas como minúsculas para mayor robustez.
+- **phone en clubs legacy**: Clubs sin teléfono configurado simplemente no muestran esa fila en `ClubLocationCard`.
