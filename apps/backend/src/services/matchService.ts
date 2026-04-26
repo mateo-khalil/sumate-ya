@@ -107,6 +107,7 @@ function toMatch(row: MatchWithClub): Match {
           address: row.clubs.address ?? null,
           lat: row.clubs.lat ?? null,
           lng: row.clubs.lng ?? null,
+          // phone is not fetched by CLUB_COLUMNS (list path) — omitted intentionally.
         }
       : null,
   };
@@ -215,22 +216,43 @@ export async function getMatchById(_ctx: ServiceContext, id: string): Promise<Ma
  * - userId is optional — when null (unauthenticated), isCurrentUserJoined = false, canJoin = false.
  * - canJoin does NOT check player role: that check belongs in the joinMatch mutation so the
  *   flag stays accurate even before the user authenticates. The mutation enforces role server-side.
- * - Previously fixed bugs: none relevant.
+ * - canJoin requires !!userId so unauthenticated callers always get false (P2 audit fix).
+ *   Without this, open matches with available spots returned canJoin=true for anonymous users,
+ *   which was semantically incorrect per the field's documented contract.
+ * - Previously fixed bugs:
+ *   - canJoin returned true for unauthenticated users — fixed by adding !!userId guard.
  */
 function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
   const teamA = row.matchParticipants
     .filter((p) => p.team === 'a')
-    .map((p) => ({ id: p.profiles.id, displayName: p.profiles.displayName, avatarUrl: p.profiles.avatarUrl ?? null }));
+    .map((p) => ({
+      id: p.profiles.id,
+      displayName: p.profiles.displayName,
+      avatarUrl: p.profiles.avatarUrl ?? null,
+      preferredPosition: p.profiles.preferredPosition ?? null,
+    }));
 
   const teamB = row.matchParticipants
     .filter((p) => p.team === 'b')
-    .map((p) => ({ id: p.profiles.id, displayName: p.profiles.displayName, avatarUrl: p.profiles.avatarUrl ?? null }));
+    .map((p) => ({
+      id: p.profiles.id,
+      displayName: p.profiles.displayName,
+      avatarUrl: p.profiles.avatarUrl ?? null,
+      preferredPosition: p.profiles.preferredPosition ?? null,
+    }));
 
   const spotsPerTeam = Math.floor(row.capacity / 2);
   const totalCount = teamA.length + teamB.length;
   const isCurrentUserJoined = userId
     ? row.matchParticipants.some((p) => p.profiles.id === userId)
     : false;
+
+  const userParticipant = userId
+    ? row.matchParticipants.find((p) => p.profiles.id === userId)
+    : null;
+  const currentUserTeam = userParticipant
+    ? (userParticipant.team === 'a' ? MatchTeam.A : MatchTeam.B)
+    : null;
 
   return {
     id: row.id,
@@ -242,6 +264,8 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
     status: DB_TO_STATUS[row.status] ?? MatchStatus.Open,
     createdAt: row.createdAt,
     description: row.description ?? null,
+    organizerId: row.organizerId ?? null,
+    currentUserTeam,
     club: row.clubs
       ? {
           id: row.clubs.id,
@@ -250,6 +274,7 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
           address: row.clubs.address ?? null,
           lat: row.clubs.lat ?? null,
           lng: row.clubs.lng ?? null,
+          phone: row.clubs.phone ?? null,
         }
       : null,
     participants: {
@@ -262,7 +287,7 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
       spotsLeftB: Math.max(0, spotsPerTeam - teamB.length),
     },
     isCurrentUserJoined,
-    canJoin: row.status === 'open' && !isCurrentUserJoined && totalCount < row.capacity,
+    canJoin: !!userId && row.status === 'open' && !isCurrentUserJoined && totalCount < row.capacity,
   };
 }
 

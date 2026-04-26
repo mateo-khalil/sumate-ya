@@ -11,7 +11,17 @@
 #   without any extra DB round-trips or N+1 joins.
 # - isCurrentUserJoined / canJoin are resolver-computed from the GraphQL context user and
 #   the participant list; they are null when no auth context is present.
-# - Previously fixed bugs: none relevant.
+# - organizerId added for the detail-page US so the frontend can badge the organizer player
+#   without a separate profile query. It is intentionally nullable so list queries can
+#   omit it without any schema change.
+# - currentUserTeam added so the detail page can show "Ya estás anotado en Equipo X"
+#   without having to scan the participant list on the client side.
+# - phone added to Club for the location card on the detail page.
+# - preferredPosition added to TeamMember as a raw String (not the PlayerPosition enum)
+#   so it passes through the DB value without a separate enum-mapping layer in this query
+#   path. Display mapping happens in the frontend PlayerCard component.
+# - Previously fixed bugs:
+#   - Botón "Sumarme" mostraba alert placeholder — replaced by navigation to detail page.
 
 type Club {
   id: ID!
@@ -21,6 +31,7 @@ type Club {
   lat: Float
   lng: Float
   imageUrl: String
+  phone: String
 }
 
 # Minimal player info shown inside a team list
@@ -28,6 +39,7 @@ type TeamMember {
   id: ID!
   displayName: String!
   avatarUrl: String
+  preferredPosition: String
 }
 
 # Participants split by team with counts and available spots
@@ -60,6 +72,10 @@ type Match {
   # Auth-context flags: null when user is not authenticated
   isCurrentUserJoined: Boolean
   canJoin: Boolean
+  # ID of the player who created the match — null on list queries that skip this field
+  organizerId: ID
+  # Team the current user is enrolled in — null when not joined or unauthenticated
+  currentUserTeam: MatchTeam
 }
 
 enum MatchFormat {

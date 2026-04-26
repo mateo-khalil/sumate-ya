@@ -1,0 +1,163 @@
+---
+/**
+ * PlayerCard — Static display of a single team member
+ *
+ * Decision Context:
+ * - Why Astro (not React): purely presentational — no interactivity, no state. Using
+ *   Astro avoids shipping any JS for this component and prevents unnecessary hydration.
+ * - preferredPosition is a raw DB string (e.g. 'goalkeeper') so we map it to Spanish
+ *   labels here. Using String on the GraphQL side avoids a separate enum-mapping layer
+ *   in the service and keeps the contract flexible if positions are extended.
+ * - The "Organizador" badge is shown when isOrganizer=true. The caller derives this by
+ *   comparing player.id against match.organizerId. Text shows the full word "Organizador"
+ *   at all breakpoints — the badge uses a small font (0.6rem) so it fits alongside the
+ *   player name even on narrow screens without truncation.
+ * - Avatar fallback: shows the first letter of displayName when avatarUrl is null.
+ * - Previously fixed bugs: none relevant.
+ */
+
+export interface PlayerCardPlayer {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: string | null;
+}
+
+interface Props {
+  player: PlayerCardPlayer;
+  isOrganizer: boolean;
+}
+
+const { player, isOrganizer } = Astro.props;
+
+const POSITION_LABEL: Record<string, string> = {
+  goalkeeper: 'Arquero',
+  defender: 'Defensor',
+  midfielder: 'Mediocampista',
+  forward: 'Delantero',
+  GOALKEEPER: 'Arquero',
+  DEFENDER: 'Defensor',
+  MIDFIELDER: 'Mediocampista',
+  FORWARD: 'Delantero',
+};
+
+const POSITION_ICON: Record<string, string> = {
+  goalkeeper: '🧤',
+  defender: '🛡️',
+  midfielder: '⚡',
+  forward: '⚽',
+  GOALKEEPER: '🧤',
+  DEFENDER: '🛡️',
+  MIDFIELDER: '⚡',
+  FORWARD: '⚽',
+};
+
+const posLabel = player.preferredPosition
+  ? (POSITION_LABEL[player.preferredPosition] ?? player.preferredPosition)
+  : null;
+const posIcon = player.preferredPosition
+  ? (POSITION_ICON[player.preferredPosition] ?? '')
+  : '';
+
+function initial(name: string) {
+  return name.charAt(0).toUpperCase();
+}
+---
+
+<li class="player-card">
+  <div class="player-avatar">
+    {player.avatarUrl
+      ? <img src={player.avatarUrl} alt={player.displayName} class="avatar-img" loading="lazy" />
+      : <span class="avatar-initial">{initial(player.displayName)}</span>
+    }
+  </div>
+  <div class="player-info">
+    <div class="player-name-row">
+      <span class="player-name">{player.displayName}</span>
+      {isOrganizer && <span class="badge-organizer">Organizador</span>}
+    </div>
+    {posLabel && (
+      <span class="player-position">{posIcon} {posLabel}</span>
+    )}
+  </div>
+</li>
+
+<style>
+  .player-card {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.5rem 0;
+  }
+
+  .player-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: hsl(220 30% 20%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .avatar-initial {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: hsl(210 20% 80%);
+    line-height: 1;
+  }
+
+  .player-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .player-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .player-name {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: hsl(210 20% 90%);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .badge-organizer {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: hsl(35 100% 55%);
+    background: hsl(35 100% 48% / 0.15);
+    border: 1px solid hsl(35 100% 48% / 0.35);
+    border-radius: 4px;
+    padding: 0.05rem 0.4rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .player-position {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.72rem;
+    color: hsl(215 20% 50%);
+  }
+</style>

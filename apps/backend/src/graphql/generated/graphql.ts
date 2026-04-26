@@ -25,6 +25,7 @@ export type Club = {
   lat?: Maybe<Scalars['Float']['output']>;
   lng?: Maybe<Scalars['Float']['output']>;
   name: Scalars['String']['output'];
+  phone?: Maybe<Scalars['String']['output']>;
   zone?: Maybe<Scalars['String']['output']>;
 };
 
@@ -111,10 +112,12 @@ export type Match = {
   canJoin?: Maybe<Scalars['Boolean']['output']>;
   club?: Maybe<Club>;
   createdAt: Scalars['String']['output'];
+  currentUserTeam?: Maybe<MatchTeam>;
   description?: Maybe<Scalars['String']['output']>;
   format: MatchFormat;
   id: Scalars['ID']['output'];
   isCurrentUserJoined?: Maybe<Scalars['Boolean']['output']>;
+  organizerId?: Maybe<Scalars['ID']['output']>;
   participants?: Maybe<MatchParticipantsData>;
   startTime: Scalars['String']['output'];
   status: MatchStatus;
@@ -234,6 +237,7 @@ export type TeamMember = {
   avatarUrl?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
   id: Scalars['ID']['output'];
+  preferredPosition?: Maybe<Scalars['String']['output']>;
 };
 
 export enum UserRole {
@@ -378,6 +382,7 @@ export type ClubResolvers<ContextType = GraphQLContext, ParentType extends Resol
   lat?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   lng?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  phone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   zone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;
 
@@ -431,10 +436,12 @@ export type MatchResolvers<ContextType = GraphQLContext, ParentType extends Reso
   canJoin?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
   club?: Resolver<Maybe<ResolversTypes['Club']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  currentUserTeam?: Resolver<Maybe<ResolversTypes['MatchTeam']>, ParentType, ContextType>;
   description?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   format?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   isCurrentUserJoined?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
+  organizerId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   participants?: Resolver<Maybe<ResolversTypes['MatchParticipantsData']>, ParentType, ContextType>;
   startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   status?: Resolver<ResolversTypes['MatchStatus'], ParentType, ContextType>;
@@ -482,6 +489,7 @@ export type TeamMemberResolvers<ContextType = GraphQLContext, ParentType extends
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  preferredPosition?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;
 
 export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{

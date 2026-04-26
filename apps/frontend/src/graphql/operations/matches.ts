@@ -83,6 +83,7 @@ export interface TeamMember {
   id: string;
   displayName: string;
   avatarUrl: string | null;
+  preferredPosition: string | null;
 }
 
 export interface MatchParticipantsData {
@@ -105,6 +106,10 @@ export interface MatchDetailData {
   status: MatchStatus;
   description: string | null;
   createdAt: string;
+  /** ID of the match organizer — used to badge their PlayerCard as "Organizador" */
+  organizerId: string | null;
+  /** Team the current user is enrolled in — null when not joined or not authenticated */
+  currentUserTeam: MatchTeam | null;
   club: {
     id: string;
     name: string;
@@ -112,6 +117,7 @@ export interface MatchDetailData {
     address: string | null;
     lat: number | null;
     lng: number | null;
+    phone: string | null;
   } | null;
   participants: MatchParticipantsData | null;
   isCurrentUserJoined: boolean | null;
@@ -269,6 +275,8 @@ export const GET_MATCH_DETAIL = /* GraphQL */ `
       status
       description
       createdAt
+      organizerId
+      currentUserTeam
       club {
         id
         name
@@ -276,10 +284,11 @@ export const GET_MATCH_DETAIL = /* GraphQL */ `
         address
         lat
         lng
+        phone
       }
       participants {
-        teamA { id displayName avatarUrl }
-        teamB { id displayName avatarUrl }
+        teamA { id displayName avatarUrl preferredPosition }
+        teamB { id displayName avatarUrl preferredPosition }
         teamACount
         teamBCount
         totalCount

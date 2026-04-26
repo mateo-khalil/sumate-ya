@@ -39,8 +39,7 @@ const MATCH_COLUMNS = `
   "clubId"
 `;
 
-// lat/lng/address added for map view — these were intentionally excluded before
-// to save egress; now they are fetched explicitly so the Club type can expose them.
+// Used by list queries (matches, search) — omits phone to keep egress minimal.
 const CLUB_COLUMNS = `
   id,
   name,
@@ -48,6 +47,18 @@ const CLUB_COLUMNS = `
   address,
   lat,
   lng
+`;
+
+// Used only by the detail query — adds phone for the ClubLocationCard.
+// Kept separate so list queries don't pay the phone egress cost.
+const CLUB_DETAIL_COLUMNS = `
+  id,
+  name,
+  zone,
+  address,
+  lat,
+  lng,
+  phone
 `;
 
 // =====================================================
@@ -72,6 +83,11 @@ export interface ClubRow {
   address: string | null;
   lat: number | null;
   lng: number | null;
+}
+
+/** Extended club row used only in detail queries — includes phone. */
+export interface ClubDetailRow extends ClubRow {
+  phone: string | null;
 }
 
 export interface MatchWithClub extends MatchRow {
@@ -332,13 +348,14 @@ const PARTICIPANT_COLUMNS = `
   id,
   team,
   "joinedAt",
-  profiles(id, "displayName", "avatarUrl")
+  profiles(id, "displayName", "avatarUrl", "preferredPosition")
 `;
 
 export interface ParticipantProfileRow {
   id: string;
   displayName: string;
   avatarUrl: string | null;
+  preferredPosition: string | null;
 }
 
 export interface ParticipantRow {
@@ -357,7 +374,7 @@ export interface MatchDetailRow {
   capacity: number;
   status: string;
   createdAt: string;
-  clubs: ClubRow | null;
+  clubs: ClubDetailRow | null;
   matchParticipants: ParticipantRow[];
 }
 
@@ -380,7 +397,7 @@ export async function getMatchWithParticipants(
 ): Promise<MatchDetailRow | null> {
   const { data, error } = await client
     .from('matches')
-    .select(`${MATCH_DETAIL_COLUMNS}, clubs(${CLUB_COLUMNS}), matchParticipants(${PARTICIPANT_COLUMNS})`)
+    .select(`${MATCH_DETAIL_COLUMNS}, clubs(${CLUB_DETAIL_COLUMNS}), matchParticipants(${PARTICIPANT_COLUMNS})`)
     .eq('id', id)
     .single();
 

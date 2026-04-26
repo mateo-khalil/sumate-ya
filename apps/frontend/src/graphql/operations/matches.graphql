@@ -54,9 +54,9 @@ query GetMatchById($id: ID!) {
   }
 }
 
-# Full match detail including participant lists, counts and auth-context join flags.
-# Used by /partidos/[id] page. Auth token should be forwarded so isCurrentUserJoined
-# and canJoin are populated correctly.
+# Full match detail including participant lists, counts, organizer and auth-context flags.
+# Used by /partidos/[id] page. Auth token should be forwarded so isCurrentUserJoined,
+# canJoin and currentUserTeam are populated correctly.
 query GetMatchDetail($id: ID!) {
   match(id: $id) {
     id
@@ -68,6 +68,8 @@ query GetMatchDetail($id: ID!) {
     status
     description
     createdAt
+    organizerId
+    currentUserTeam
     club {
       id
       name
@@ -75,17 +77,20 @@ query GetMatchDetail($id: ID!) {
       address
       lat
       lng
+      phone
     }
     participants {
       teamA {
         id
         displayName
         avatarUrl
+        preferredPosition
       }
       teamB {
         id
         displayName
         avatarUrl
+        preferredPosition
       }
       teamACount
       teamBCount
