@@ -64,6 +64,31 @@ export interface RegisterPlayerInput {
   password: string;
 }
 
+/**
+ * Resolves a user-friendly display name from the Supabase user record.
+ *
+ * Decision Context:
+ * - Why: register() stores the chosen display name under `user_metadata.nombre` (see
+ *   admin.createUser calls below), so that field is the canonical source. Older accounts
+ *   may have used `display_name` or `full_name`, so we fall back through both before
+ *   degrading to the local-part of the email. This avoids ever surfacing an empty string
+ *   to the frontend (UI assumes a non-empty `displayName`).
+ * - Previously fixed bugs: typecheck was failing because this helper was referenced from
+ *   mapAuthenticatedUser and ensureProfileAndGetRole but not defined; reintroduced here.
+ */
+function resolveDisplayName(user: User): string {
+  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const candidates = [metadata.nombre, metadata.display_name, metadata.full_name, metadata.name];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+  const email = user.email ?? '';
+  const localPart = email.split('@')[0];
+  return localPart || 'Usuario';
+}
+
 function mapAuthenticatedUser(user: User, role: AuthUserRole): AuthenticatedUser {
   return {
     id: user.id,
