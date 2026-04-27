@@ -16,11 +16,43 @@ import type { APIRoute } from 'astro';
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request }) => {
-  const backendUrl =
+function getBackendUrl(): string {
+  return (
     import.meta.env.PRIVATE_BACKEND_URL ||
     (typeof process !== 'undefined' ? process.env.PRIVATE_BACKEND_URL : undefined) ||
-    'http://localhost:4000';
+    'http://localhost:4000'
+  );
+}
+
+export const GET: APIRoute = async ({ request }) => {
+  const backendUrl = getBackendUrl();
+  const url = new URL(request.url);
+
+  try {
+    const upstream = await fetch(`${backendUrl}/graphql${url.search}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'apollo-require-preflight': 'true',
+      },
+    });
+
+    const data = await upstream.text();
+    return new Response(data, {
+      status: upstream.status,
+      headers: { 'Content-Type': upstream.headers.get('Content-Type') ?? 'application/json' },
+    });
+  } catch (err) {
+    console.error('[api/graphql] Proxy error:', err);
+    return new Response(
+      JSON.stringify({ errors: [{ message: 'Backend unreachable' }] }),
+      { status: 502, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+};
+
+export const POST: APIRoute = async ({ request }) => {
+  const backendUrl = getBackendUrl();
 
   let body: unknown;
   try {

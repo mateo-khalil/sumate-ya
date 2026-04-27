@@ -39,7 +39,7 @@ const FRONTEND_URL = 'http://localhost:4321';
 // una querystring (urql arma queries con `?query=...&operationName=...`).
 // Usamos regex en lugar de glob porque Playwright ignora la querystring al matchear
 // globs, pero aún así queremos ser explícitos y robustos ante cambios de host.
-const GRAPHQL_ROUTE = /\/graphql(?:\?|$)/;
+const GRAPHQL_ROUTE = /\/(?:api\/)?graphql(?:\?|$)/;
 
 const TEST_USER = {
   email: 'mateoduran2010@gmail.com',
