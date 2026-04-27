@@ -10,7 +10,7 @@
 import { Client, cacheExchange, fetchExchange } from '@urql/core';
 
 const GRAPHQL_ENDPOINT =
-  import.meta.env.PUBLIC_GRAPHQL_URL || 'http://localhost:4000/graphql';
+  import.meta.env.PUBLIC_GRAPHQL_URL || '/api/graphql';
 
 /**
  * urql client for GraphQL operations

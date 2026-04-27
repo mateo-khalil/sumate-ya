@@ -4,7 +4,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
  * Tests E2E del listado de partidos (/partidos).
  *
  * Decision Context:
- * - Por qué mockeamos la query `GetMatches` con `page.route()`: el ambiente de dev puede
+ * - Por qué mockeamos el endpoint GraphQL con `page.route()`: el ambiente de dev puede
  *   no tener datos seed en la DB de Supabase. Interceptando la respuesta del endpoint
  *   GraphQL dejamos los tests deterministas y los desacoplamos del estado del backend.
  * - El login NO va por GraphQL sino por POST a /login (SSR que golpea la REST del backend),
@@ -22,12 +22,10 @@ import { test, expect, type Page, type Route } from '@playwright/test';
  *   * El usuario `mateoduran2010@gmail.com` tiene role != 'club_admin' → redirect a /partidos.
  *   * El backend corre en :4000 y el frontend en :4321 (pnpm dev levantado a mano).
  * - Previously fixed bugs:
- *   * Mock no interceptaba: urql envía las queries como **GET** con `operationName`,
- *     `query` y `variables` en la querystring (no como POST JSON). El matcher
- *     originalmente sólo miraba el body de POST, así que TODOS los requests caían al
- *     backend real. `isGetMatchesRequest()` ahora mira primero los params de URL.
+ *   * Mock no interceptaba: el suite ahora responde todo request a `/api/graphql`
+ *     porque estas pruebas sólo validan el listado y el login no usa GraphQL.
  *   * Mock URL literal `http://localhost:4000/graphql` era frágil por diferencias de
- *     host/puerto. Se cambió a glob `**\/graphql`.
+ *     host/puerto. Se cambió al proxy del frontend con glob `**\/api/graphql**`.
  *   * `page.locator('select')` contaba 4 elementos por el Astro dev toolbar. Se restringe
  *     a `main select`.
  *   * Interacciones con el filtro "Limpiar" fallaban porque React no había hidratado
@@ -35,11 +33,8 @@ import { test, expect, type Page, type Route } from '@playwright/test';
  */
 
 const FRONTEND_URL = 'http://localhost:4321';
-// Regex path-only: matchea `/graphql` con cualquier host/puerto y opcionalmente
-// una querystring (urql arma queries con `?query=...&operationName=...`).
-// Usamos regex en lugar de glob porque Playwright ignora la querystring al matchear
-// globs, pero aún así queremos ser explícitos y robustos ante cambios de host.
-const GRAPHQL_ROUTE = /\/graphql(?:\?|$)/;
+// Glob path-only: catches the frontend GraphQL proxy, including urql querystrings.
+const GRAPHQL_ROUTE = '**/api/graphql**';
 
 const TEST_USER = {
   email: 'mateoduran2010@gmail.com',
@@ -74,40 +69,11 @@ function buildMatch(overrides: Partial<MockMatch> = {}): MockMatch {
 }
 
 /**
- * Intercepta el endpoint GraphQL y responde `GetMatches` con la lista provista.
- * Deja pasar cualquier otra operación (si el front dispara más queries en el futuro).
+ * Intercepta el endpoint GraphQL del frontend y responde con la lista provista.
  */
-/**
- * Detecta si un request al endpoint `/graphql` corresponde a la operación `GetMatches`.
- * urql envía queries como GET con los parámetros `query`, `operationName` y `variables`
- * en la querystring (ver `@urql/core` fetchExchange) — NO como POST JSON. Por eso
- * necesitamos inspeccionar tanto la URL como el body.
- */
-function isGetMatchesRequest(route: Route): boolean {
-  const request = route.request();
-  const url = new URL(request.url());
-  const opName = url.searchParams.get('operationName');
-  const query = url.searchParams.get('query');
-  if (opName === 'GetMatches') return true;
-  if (typeof query === 'string' && query.includes('GetMatches')) return true;
-
-  if (request.method() === 'POST') {
-    const body = request.postDataJSON() as
-      | { query?: string; operationName?: string }
-      | null;
-    if (body?.operationName === 'GetMatches') return true;
-    if (typeof body?.query === 'string' && body.query.includes('GetMatches')) return true;
-  }
-  return false;
-}
-
 async function mockMatchesQuery(page: Page, matches: MockMatch[]): Promise<void> {
   await page.unroute(GRAPHQL_ROUTE).catch(() => undefined);
   await page.route(GRAPHQL_ROUTE, async (route: Route) => {
-    if (!isGetMatchesRequest(route)) {
-      await route.continue();
-      return;
-    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -120,10 +86,6 @@ async function mockMatchesQuery(page: Page, matches: MockMatch[]): Promise<void>
 async function mockMatchesError(page: Page, message = 'Backend caído'): Promise<void> {
   await page.unroute(GRAPHQL_ROUTE).catch(() => undefined);
   await page.route(GRAPHQL_ROUTE, async (route: Route) => {
-    if (!isGetMatchesRequest(route)) {
-      await route.continue();
-      return;
-    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -144,7 +106,14 @@ async function login(page: Page): Promise<void> {
   await page.waitForURL((url) => !url.pathname.endsWith('/login'), { timeout: 10_000 });
 }
 
+async function gotoMatchesPage(page: Page): Promise<void> {
+  await page.goto(`${FRONTEND_URL}/partidos`);
+  await page.locator('.matches-section').scrollIntoViewIfNeeded();
+}
+
 test.describe('Listado de partidos (/partidos)', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeEach(async ({ page }) => {
     // Mock por defecto: lista vacía. Los tests que necesiten data la re-mockean antes de navegar.
     await mockMatchesQuery(page, []);
@@ -152,7 +121,7 @@ test.describe('Listado de partidos (/partidos)', () => {
   });
 
   test('renderiza el header y sale del estado de loading', async ({ page }) => {
-    await page.goto(`${FRONTEND_URL}/partidos`);
+    await gotoMatchesPage(page);
 
     await expect(page.getByRole('heading', { name: /Partidos Disponibles/i })).toBeVisible();
     // Con la lista mockeada vacía, debe aparecer el empty-state (no quedarse en skeleton).
@@ -160,7 +129,7 @@ test.describe('Listado de partidos (/partidos)', () => {
   });
 
   test('muestra los controles de filtros principales', async ({ page }) => {
-    await page.goto(`${FRONTEND_URL}/partidos`);
+    await gotoMatchesPage(page);
 
     await expect(page.getByPlaceholder(/Buscar por partido o club/i)).toBeVisible();
     // 3 selects: formato, zona, estado.
@@ -170,7 +139,7 @@ test.describe('Listado de partidos (/partidos)', () => {
   });
 
   test('"Más filtros" expande los date pickers y cambia el label del botón', async ({ page }) => {
-    await page.goto(`${FRONTEND_URL}/partidos`);
+    await gotoMatchesPage(page);
 
     // Esperar a que MatchList termine el fetch y hidrate antes de clickear — de lo
     // contrario el click llega antes que React enganche el handler y setShowAdvanced
@@ -186,7 +155,7 @@ test.describe('Listado de partidos (/partidos)', () => {
   });
 
   test('al aplicar un filtro aparece "Limpiar" y al clickearlo se resetea la búsqueda', async ({ page }) => {
-    await page.goto(`${FRONTEND_URL}/partidos`);
+    await gotoMatchesPage(page);
 
     // Esperamos a que el empty-state (lista vacía mockeada) se renderice — garantiza
     // que MatchList hidrató y los handlers onChange ya están enganchados. Sin esto,
@@ -215,7 +184,7 @@ test.describe('Listado de partidos (/partidos)', () => {
       }),
     ]);
 
-    await page.goto(`${FRONTEND_URL}/partidos`);
+    await gotoMatchesPage(page);
 
     await expect(page.getByText('Pickup F5 en Palermo')).toBeVisible();
     await expect(page.getByText('F7 nocturno en Núñez')).toBeVisible();
@@ -236,7 +205,7 @@ test.describe('Listado de partidos (/partidos)', () => {
       }),
     ]);
 
-    await page.goto(`${FRONTEND_URL}/partidos`);
+    await gotoMatchesPage(page);
 
     const fullBtn = page.getByRole('button', { name: /Completo/i });
     await expect(fullBtn).toBeVisible();
@@ -245,7 +214,7 @@ test.describe('Listado de partidos (/partidos)', () => {
   });
 
   test('empty-state muestra mensaje amigable cuando no hay partidos', async ({ page }) => {
-    await page.goto(`${FRONTEND_URL}/partidos`);
+    await gotoMatchesPage(page);
 
     await expect(page.getByText('No hay partidos disponibles')).toBeVisible();
     await expect(page.getByText(/Probá con otros filtros/i)).toBeVisible();
@@ -254,7 +223,7 @@ test.describe('Listado de partidos (/partidos)', () => {
   test('muestra mensaje de error cuando la query falla', async ({ page }) => {
     await mockMatchesError(page, 'Server on fire');
 
-    await page.goto(`${FRONTEND_URL}/partidos`);
+    await gotoMatchesPage(page);
 
     await expect(page.getByText('Error').first()).toBeVisible();
     await expect(page.getByText('Server on fire')).toBeVisible();
