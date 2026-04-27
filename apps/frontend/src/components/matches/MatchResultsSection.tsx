@@ -16,9 +16,13 @@
  * - Styling: Tailwind utility classes using @theme tokens from globals.css.
  *   font-display → Bebas Neue, font-condensed → Barlow Condensed (tokens added for P3).
  *   bg-success / text-success-foreground → hsl(142 72% 50%) / hsl(142 72% 65%).
+ * - Error display: vote errors from GraphQL are passed through parseGqlError so Zod v4 JSON
+ *   arrays render as readable Spanish messages rather than raw JSON. Keep in sync with the
+ *   same helper in ProposeResultForm.
  * - Previously fixed bugs:
  *   - P2 audit: "Cargar resultado" disappeared when all submissions were REJECTED.
  *   - P3 audit: inline style objects replaced with Tailwind classes per design-system.md.
+ *   - Zod v4 JSON error array shown raw in UI — fixed by parseGqlError helper.
  */
 
 import { useEffect, useState } from 'react';
@@ -35,6 +39,24 @@ interface Props {
   isParticipant: boolean;
   backendUrl: string;
   accessToken: string;
+}
+
+function parseGqlError(message: string): string {
+  try {
+    const parsed: unknown = JSON.parse(message);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length > 0 &&
+      typeof (parsed[0] as Record<string, unknown>).message === 'string'
+    ) {
+      return parsed
+        .map((issue: Record<string, unknown>) => String(issue.message))
+        .join('. ');
+    }
+  } catch {
+    // not JSON — fall through
+  }
+  return message;
 }
 
 async function gql<T>(
@@ -278,7 +300,7 @@ export default function MatchResultsSection({
     setVoting(null);
 
     if (json.errors?.length) {
-      setVoteError(json.errors[0].message);
+      setVoteError(parseGqlError(json.errors[0].message));
       return;
     }
 

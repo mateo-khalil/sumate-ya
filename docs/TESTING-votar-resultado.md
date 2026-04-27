@@ -277,6 +277,71 @@ Levantar backend (`pnpm dev` desde la raíz) y frontend antes de ejecutar estos 
 
 ---
 
+---
+
+### TC-18: UUID seeded aceptado por la validación backend
+
+**Contexto:** Zod v4 cambió `z.string().uuid()` para exigir bits de versión RFC 9562 (grupos 3 y 4).
+Los UUIDs seeded del proyecto (ej. `e1000000-0000-0000-0000-000000000001`) tienen `0` en esas
+posiciones y son rechazados por Zod v4, aunque Postgres los acepta. El fix usa un regex permisivo
+que valida solo formato hexadecimal + guiones.
+
+**Pasos:**
+1. Navegar a `/partidos/e1000000-0000-0000-0000-000000000001`
+2. Verificar que la página carga sin errores (el UUID seeded resuelve correctamente el partido)
+3. Autenticarse como un participante del partido seeded
+4. Hacer clic en "+ Cargar resultado", ingresar scoreA=2, scoreB=1 y enviar
+
+**Resultado esperado:**
+- La página carga sin errores de validación
+- La propuesta se crea exitosamente (aparece submission PENDIENTE)
+- No aparece ningún error "ID inválido" ni JSON crudo
+
+---
+
+### TC-19: UUID v4 real sigue funcionando
+
+**Pasos:**
+1. Navegar a un partido con UUID v4 estándar (ej. `550e8400-e29b-41d4-a716-446655440000`)
+2. Autenticarse como participante y proponer un resultado
+
+**Resultado esperado:**
+- El UUID v4 es aceptado sin errores (la regex permisiva acepta todos los formatos hexadecimales)
+
+---
+
+### TC-20: UUID malformado sigue siendo rechazado
+
+**Pasos:**
+1. Ejecutar directamente via GraphQL con un matchId malformado:
+   ```graphql
+   mutation {
+     proposeMatchResult(input: { matchId: "abc123", scoreA: 1, scoreB: 0 }) { id }
+   }
+   ```
+
+**Resultado esperado:**
+- Error GraphQL con mensaje legible en español: `"ID inválido"` (no JSON crudo)
+- El backend rechaza el UUID malformado antes de hacer un round-trip a la DB
+- En el frontend, el mensaje aparece como texto plano (no como array JSON)
+
+---
+
+### TC-21: Error Zod muestra mensaje legible en el frontend (no JSON crudo)
+
+**Contexto:** Zod v4 serializa `ZodError.message` como JSON array. Apollo propaga eso como el
+mensaje del error GraphQL. El frontend lo parsea con `parseGqlError()`.
+
+**Pasos:**
+1. Forzar un error de validación desde la UI (ej. manipular el request para enviar `matchId: "bad"`)
+2. Observar el mensaje de error en la UI
+
+**Resultado esperado:**
+- El mensaje mostrado es texto legible: `"ID inválido"` u otro mensaje en español
+- **No** aparece texto como `[{"code":"invalid_format","format":"uuid",...}]` en pantalla
+
+---
+
 ## Notas de implementación
 
 - `winningTeam` en DB: `'a'` | `'b'` | `'draw'` (lowercase)
