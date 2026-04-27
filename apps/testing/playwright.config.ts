@@ -11,8 +11,9 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Decision Context:
  * - `screenshot: 'only-on-failure'` captures a PNG of the failing page into the
- *   HTML report / test-results dir. Cheaper than `on` (no overhead when green)
- *   and exactly the forensic artifact we want when a flow breaks in CI or locally.
+ *   HTML report / test-results dir. We now run with `screenshot: 'on'` and
+ *   `video: 'on'` so every execution includes visual artifacts in the HTML
+ *   report, which makes debugging non-deterministic UI issues easier.
  * - `webServer` boots `npm run dev` from the monorepo root (two levels up from
  *   `apps/testing`) so Playwright brings up frontend + backend (turbo dev) before
  *   any spec runs. The frontend serves on :4321 — we wait on that URL because the
@@ -54,8 +55,9 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
 
-    /* Capture a screenshot whenever a test fails (saved with the HTML report). */
-    screenshot: 'only-on-failure',
+    /* Always attach screenshots and videos so the HTML report has full visual evidence. */
+    screenshot: 'on',
+    video: 'on',
   },
 
   /* Run tests only in Google Chrome. */
