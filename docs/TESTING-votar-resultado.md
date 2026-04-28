@@ -321,9 +321,10 @@ que valida solo formato hexadecimal + guiones.
    ```
 
 **Resultado esperado:**
-- Error GraphQL con mensaje legible en español: `"ID inválido"` (no JSON crudo)
+- GraphQL devuelve un error para el `matchId` malformado
+- Si el backend propaga `ZodError.message` de Zod v4 sin parsearlo, el mensaje raw puede venir como JSON serializado (por ejemplo un array con detalles de validación), no necesariamente como el string plano `"ID inválido"`
 - El backend rechaza el UUID malformado antes de hacer un round-trip a la DB
-- En el frontend, el mensaje aparece como texto plano (no como array JSON)
+- **Nota:** el texto plano legible en español (`"ID inválido"`) se espera en la UI después de que el frontend procese el error con `parseGqlError()`, no en esta ejecución directa por GraphQL
 
 ---
 
