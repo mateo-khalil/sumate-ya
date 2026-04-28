@@ -1,31 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
 
-/**
- * Tests E2E del registro de club (/registro-club).
- *
- * Decision Context:
- * - Por qué NO mockeamos el endpoint del backend con `page.route()`: la página es SSR
- *   (`prerender = false`) y el POST del form se procesa en el servidor de Astro, que a
- *   su vez hace `fetch` al backend Express desde Node — esa request NUNCA pasa por el
- *   navegador, por lo que un `page.route('**\/api/auth/register')` jamás se dispara.
- *   Para mockear esa capa habría que levantar un proxy/MSW del lado server, fuera del
- *   alcance de Playwright. En su lugar, los tests cubren todo lo que SÍ es observable
- *   desde el browser sin depender del backend:
- *     1. Render del GET (estructura del form, labels, secciones, links).
- *     2. Comportamiento client-side del form (escribir valores, atributos, etc.).
- *     3. Submit con datos inválidos → la validación Zod del backend devuelve 400 y la
- *        página se re-renderiza con `fieldErrors`. Esto SÍ requiere backend levantado,
- *        por eso ese test usa `test.describe.serial` aparte y se puede saltar con
- *        `SKIP_BACKEND_TESTS=1` cuando el backend no está disponible.
- * - Por qué no probamos el happy-path (registro exitoso): crearía usuarios reales en
- *   Supabase, ensuciando la DB y rompiendo la idempotencia de los tests. Los tests de
- *   integración con DB van en otra suite.
- * - Assumptions:
- *   * El frontend corre en :4321 y, para los tests de POST, el backend en :4000.
- *   * El usuario NO está autenticado (de lo contrario la página redirige por
- *     `getRoleRedirect`). No usamos el helper de login del spec de matches.
- * - Previously fixed bugs: none relevant.
- */
 
 const FRONTEND_URL = 'http://localhost:4321';
 const REGISTRO_URL = `${FRONTEND_URL}/registro-club`;
