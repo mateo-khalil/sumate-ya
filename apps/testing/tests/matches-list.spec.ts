@@ -1,38 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 
-/**
- * Tests E2E del listado de partidos (/partidos).
- *
- * Decision Context:
- * - Por qué mockeamos la query `GetMatches` con `page.route()`: el ambiente de dev puede
- *   no tener datos seed en la DB de Supabase. Interceptando la respuesta del endpoint
- *   GraphQL dejamos los tests deterministas y los desacoplamos del estado del backend.
- * - El login NO va por GraphQL sino por POST a /login (SSR que golpea la REST del backend),
- *   así que el route de `**\/graphql` no interfiere con la autenticación.
- * - Usamos cookies HttpOnly (set por el flujo SSR de login) — Playwright las persiste entre
- *   navegaciones del mismo `page`, por lo que una vez logueados podemos ir directo a /partidos.
- * - Por qué usamos el glob `**\/graphql` en lugar de la URL absoluta: el endpoint puede
- *   cambiar de `http://localhost:4000/...` a `http://127.0.0.1:...` (o a un proxy del dev
- *   server) y el matching literal por URL falla silenciosamente. El glob por path cubre
- *   cualquier host/puerto.
- * - Scope `main` en selectors: el Astro dev toolbar inyecta controles (incluyendo un
- *   `<select>`) dentro del body que contaminan conteos globales. Restringir a `main`
- *   garantiza que sólo contemos elementos de la página real.
- * - Assumptions:
- *   * El usuario `mateoduran2010@gmail.com` tiene role != 'club_admin' → redirect a /partidos.
- *   * El backend corre en :4000 y el frontend en :4321 (pnpm dev levantado a mano).
- * - Previously fixed bugs:
- *   * Mock no interceptaba: urql envía las queries como **GET** con `operationName`,
- *     `query` y `variables` en la querystring (no como POST JSON). El matcher
- *     originalmente sólo miraba el body de POST, así que TODOS los requests caían al
- *     backend real. `isGetMatchesRequest()` ahora mira primero los params de URL.
- *   * Mock URL literal `http://localhost:4000/graphql` era frágil por diferencias de
- *     host/puerto. Se cambió a glob `**\/graphql`.
- *   * `page.locator('select')` contaba 4 elementos por el Astro dev toolbar. Se restringe
- *     a `main select`.
- *   * Interacciones con el filtro "Limpiar" fallaban porque React no había hidratado
- *     todavía. Se espera a que la lista termine el loading antes de escribir en la búsqueda.
- */
 
 const FRONTEND_URL = 'http://localhost:4321';
 // Regex path-only: matchea `/graphql` con cualquier host/puerto y opcionalmente
