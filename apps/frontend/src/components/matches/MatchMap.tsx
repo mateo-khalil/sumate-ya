@@ -24,6 +24,12 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import type { Match } from './MatchCard';
 import { executeQuery } from '@/lib/urql-client';
 import { GET_MATCHES_WITH_COORDS } from '@/graphql/operations/matches';
+import {
+  DEFAULT_MATCH_FILTERS,
+  filterMatches,
+  toServerMatchFilters,
+  type ClientMatchFilters,
+} from '@/lib/match-filtering';
 
 // Fix Leaflet default icon — bundlers mangle the internal _getIconUrl path.
 // Using CDN URLs is the most reliable cross-bundler solution.
@@ -177,7 +183,11 @@ function EmptyMap({ message, mapStyle }: { message: string; mapStyle: React.CSSP
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function MatchMap() {
+interface MatchMapProps {
+  filters?: ClientMatchFilters;
+}
+
+export function MatchMap({ filters = DEFAULT_MATCH_FILTERS }: MatchMapProps) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -192,14 +202,16 @@ export function MatchMap() {
 
   useEffect(() => {
     executeQuery<{ matches: Match[] }>(GET_MATCHES_WITH_COORDS, {
-      filters: { status: 'OPEN' },
+      filters: toServerMatchFilters(DEFAULT_MATCH_FILTERS),
     })
       .then((data) => setMatches(data.matches))
       .catch((err) => setError(err instanceof Error ? err.message : 'Error al cargar el mapa'))
       .finally(() => setLoading(false));
   }, []);
 
-  const geoMatches = matches.filter((m) => {
+  const filteredMatches = useMemo(() => filterMatches(matches, filters), [matches, filters]);
+
+  const geoMatches = filteredMatches.filter((m) => {
     if (m.club?.lat == null || m.club?.lng == null) {
       if (m.club) {
         console.warn(`[MatchMap] Club sin coordenadas, omitido del mapa: matchId=${m.id}`);
@@ -225,7 +237,7 @@ export function MatchMap() {
     );
   }
 
-  if (matches.length === 0) {
+  if (filteredMatches.length === 0) {
     return <EmptyMap message="No hay partidos disponibles" mapStyle={mapStyle} />;
   }
 

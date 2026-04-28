@@ -1,46 +1,60 @@
 /**
- * MatchList Component - Displays grid of match cards with filtering
+ * MatchList Component - Displays a grid of match cards with instant filtering.
  *
  * Decision Context:
- * - Why: Encapsulates data fetching with urql and renders the MatchCard grid.
- * - Pattern: Client-side fetch on mount and filter change; hydrated via `client:visible`
- *   in Astro so the request only fires when the user scrolls the section into view.
- *   SSR-populated `initialMatches` can skip the fetch entirely.
- * - Filter integration: Uses MatchFilters component for user input, passes filters to
- *   GraphQL query via GET_MATCHES operation.
- * - GraphQL operations live in `src/graphql/operations/matches.ts` (frontend.md rule:
- *   no inline GraphQL strings inside UI components). If you need to edit the query,
- *   update BOTH `operations/matches.graphql` (codegen source of truth) and `operations/matches.ts`.
- * - Error + empty + loading states are handled inline because they are layout-specific
- *   skeletons; extract to a shared component if another list reuses them.
- * - Previously fixed bugs: inline `GET_OPEN_MATCHES` string was defined in this file,
- *   which broke the frontend GraphQL rule and duplicated the `.graphql` operation.
+ * - Loads the open match dataset once, then filters locally for immediate UX.
+ * - Backend GraphQL filters remain available for larger datasets and map/list parity.
+ * - Can render its own filters, or receive controlled filters from MatchesView.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MatchCard, type Match } from './MatchCard';
 import { MatchFilters as MatchFiltersComponent } from './MatchFilters';
 import { executeQuery } from '@/lib/urql-client';
-import { GET_MATCHES, type MatchFilters } from '@/graphql/operations/matches';
+import { GET_MATCHES } from '@/graphql/operations/matches';
+import {
+  DEFAULT_MATCH_FILTERS,
+  filterMatches,
+  normalizeMatchFilters,
+  toServerMatchFilters,
+  type ClientMatchFilters,
+} from '@/lib/match-filtering';
 
 interface MatchListProps {
   /** Initial matches for SSR/SSG hydration (optional) */
   initialMatches?: Match[];
-  /** Whether the current user is authenticated — gates the join action */
+  /** Whether the current user is authenticated; gates the join action */
   isAuthenticated?: boolean;
+  /** Controlled filters shared with other views, e.g. map */
+  filters?: ClientMatchFilters;
+  /** Called when this list owns and renders the filter controls */
+  onFiltersChange?: (filters: ClientMatchFilters) => void;
+  /** Allows MatchesView to render a single filter bar for list + map */
+  showFilters?: boolean;
 }
 
-export function MatchList({ initialMatches, isAuthenticated = false }: MatchListProps) {
+export function MatchList({
+  initialMatches,
+  isAuthenticated = false,
+  filters: controlledFilters,
+  onFiltersChange,
+  showFilters = true,
+}: MatchListProps) {
   const [matches, setMatches] = useState<Match[]>(initialMatches || []);
   const [loading, setLoading] = useState(!initialMatches);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<MatchFilters>({ status: 'OPEN' });
+  const [internalFilters, setInternalFilters] =
+    useState<ClientMatchFilters>(DEFAULT_MATCH_FILTERS);
 
-  const fetchMatches = useCallback(async (currentFilters: MatchFilters) => {
+  const filters = controlledFilters ?? internalFilters;
+
+  const fetchMatches = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await executeQuery<{ matches: Match[] }>(GET_MATCHES, { filters: currentFilters });
+      const data = await executeQuery<{ matches: Match[] }>(GET_MATCHES, {
+        filters: toServerMatchFilters(DEFAULT_MATCH_FILTERS),
+      });
       setMatches(data.matches);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar partidos');
@@ -51,24 +65,29 @@ export function MatchList({ initialMatches, isAuthenticated = false }: MatchList
 
   useEffect(() => {
     if (initialMatches) return;
-    fetchMatches(filters);
-  }, [initialMatches, fetchMatches, filters]);
+    fetchMatches();
+  }, [initialMatches, fetchMatches]);
 
-  const handleFiltersChange = useCallback((newFilters: MatchFilters) => {
-    setFilters(newFilters);
-    fetchMatches(newFilters);
-  }, [fetchMatches]);
+  const handleFiltersChange = useCallback(
+    (newFilters: ClientMatchFilters) => {
+      const normalized = normalizeMatchFilters(newFilters);
+      setInternalFilters(normalized);
+      onFiltersChange?.(normalized);
+    },
+    [onFiltersChange],
+  );
+
+  const visibleMatches = useMemo(() => filterMatches(matches, filters), [matches, filters]);
 
   const handleJoin = (matchId: string) => {
-    // Navigate to the match detail page where team selection + JoinTeamButton
-    // handle the full join flow (auth, team A/B choice, mutation, reload).
-    // Previously fixed bugs: was a placeholder alert() — replaced with navigation.
     window.location.href = `/partidos/${matchId}`;
   };
 
   return (
     <div>
-      <MatchFiltersComponent onFiltersChange={handleFiltersChange} initialFilters={filters} />
+      {showFilters && (
+        <MatchFiltersComponent filters={filters} onFiltersChange={handleFiltersChange} />
+      )}
 
       {loading && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -88,19 +107,24 @@ export function MatchList({ initialMatches, isAuthenticated = false }: MatchList
         </div>
       )}
 
-      {!loading && !error && matches.length === 0 && (
+      {!loading && !error && visibleMatches.length === 0 && (
         <div className="text-center py-12">
           <p className="text-xl font-medium">No hay partidos disponibles</p>
           <p className="text-muted-foreground mt-2">
-            Probá con otros filtros o vuelve más tarde
+            Proba con otros filtros o vuelve mas tarde
           </p>
         </div>
       )}
 
-      {!loading && !error && matches.length > 0 && (
+      {!loading && !error && visibleMatches.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {matches.map((match) => (
-            <MatchCard key={match.id} match={match} onJoin={handleJoin} isAuthenticated={isAuthenticated} />
+          {visibleMatches.map((match) => (
+            <MatchCard
+              key={match.id}
+              match={match}
+              onJoin={handleJoin}
+              isAuthenticated={isAuthenticated}
+            />
           ))}
         </div>
       )}
