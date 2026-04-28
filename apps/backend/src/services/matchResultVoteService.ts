@@ -19,8 +19,9 @@
  *   always sets the same values). The second call is a harmless no-op.
  * - UUID validation: uses uuidSchema from lib/validators.ts (permissive hex-format regex)
  *   instead of z.string().uuid(). Zod v4 uuid() enforces RFC 9562 version bits and rejects
- *   seeded test UUIDs (e.g., e1000000-0000-0000-0000-000000000001). The regex matches what
- *   Postgres accepts. Do NOT revert to z.string().uuid() — it will break all seeded test data.
+ *   seeded test UUIDs (e.g., e1000000-0000-0000-0000-000000000001). The regex matches the
+ *   canonical hyphenated UUID format used in this project. Do NOT revert to z.string().uuid()
+ *   — it will break all seeded test data.
  * - Previously fixed bugs: Zod v4 uuid() rejected seeded UUIDs in proposeMatchResult and
  *   voteMatchResult, displaying a raw JSON error in the frontend.
  */
