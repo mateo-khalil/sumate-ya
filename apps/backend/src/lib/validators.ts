@@ -8,8 +8,8 @@
  *   (e.g., e1000000-0000-0000-0000-000000000001) have 0 in those positions, which Zod v4
  *   rejects with invalid_format. Postgres only validates hex format + hyphen positions,
  *   so the strict Zod check created a backend-only rejection for valid DB keys.
- * - The regex below matches exactly what Postgres accepts: 32 hex digits split by hyphens
- *   in the 8-4-4-4-12 pattern, case-insensitive.
+ * - The regex below matches the canonical hyphenated UUID format used by our DB IDs and
+ *   seeded data: 32 hex digits split by hyphens in the 8-4-4-4-12 pattern, case-insensitive.
  * - Previously fixed bugs: Zod v4 uuid() rejected seeded UUIDs, breaking proposeMatchResult
  *   and voteMatchResult for all seeded test data.
  */

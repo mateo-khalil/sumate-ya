@@ -7,11 +7,10 @@
  * - Client-side validation mirrors the backend Zod schema (0–99 range).
  * - On success, calls onSuccess(newSubmission) so the parent MatchResultsSection can
  *   prepend the submission without a full re-fetch.
- * - Error display: GraphQL errors whose message is a Zod v4 JSON array (e.g.,
- *   '[{"message":"ID inválido",...}]') are parsed and the human-readable .message of each
- *   issue is joined — prevents raw JSON appearing in the UI. Plain string messages fall
- *   through unchanged. Do NOT remove parseGqlError — Zod v4 serialises ZodError.message
- *   as a JSON array, and Apollo propagates that verbatim.
+ * - Error display: GraphQL errors are normalised via the shared parseGqlError helper
+ *   (apps/frontend/src/lib/parseGqlError.ts). Zod v4 serialises ZodError.message as a
+ *   JSON array — parseGqlError extracts the human-readable .message fields so raw JSON
+ *   never reaches the UI. Plain string messages fall through unchanged.
  * - Styling: Tailwind utility classes using @theme tokens from globals.css per P3 audit fix.
  *   font-display → Bebas Neue, font-condensed → Barlow Condensed.
  * - Previously fixed bugs:
@@ -22,6 +21,7 @@
 import { useState } from 'react';
 import type { MatchResultSubmission, WinnerTeam } from '../../graphql/operations/match-results.js';
 import { PROPOSE_MATCH_RESULT } from '../../graphql/operations/match-results.js';
+import { parseGqlError } from '../../lib/parseGqlError.js';
 
 interface Props {
   matchId: string;
@@ -29,24 +29,6 @@ interface Props {
   accessToken: string;
   onSuccess: (submission: MatchResultSubmission) => void;
   onCancel: () => void;
-}
-
-function parseGqlError(message: string): string {
-  try {
-    const parsed: unknown = JSON.parse(message);
-    if (
-      Array.isArray(parsed) &&
-      parsed.length > 0 &&
-      typeof (parsed[0] as Record<string, unknown>).message === 'string'
-    ) {
-      return parsed
-        .map((issue: Record<string, unknown>) => String(issue.message))
-        .join('. ');
-    }
-  } catch {
-    // not JSON — fall through
-  }
-  return message;
 }
 
 function deriveWinner(a: number, b: number): WinnerTeam {
