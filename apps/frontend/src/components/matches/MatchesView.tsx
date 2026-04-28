@@ -12,8 +12,16 @@
  * - Previously fixed bugs: none relevant.
  */
 
-import { useState, lazy, Suspense } from 'react';
+import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
 import { MatchList } from './MatchList';
+import { MatchFilters } from './MatchFilters';
+import {
+  DEFAULT_MATCH_FILTERS,
+  normalizeMatchFilters,
+  parseMatchFiltersFromSearch,
+  writeMatchFiltersToUrl,
+  type ClientMatchFilters,
+} from '@/lib/match-filtering';
 
 // Lazy import — Leaflet uses browser-only APIs (window/document) and crashes in Node SSR
 // if imported statically. React.lazy defers the import until the user clicks "Mapa",
@@ -29,9 +37,31 @@ interface MatchesViewProps {
 
 export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
   const [view, setView] = useState<View>('list');
+  const [filters, setFilters] = useState<ClientMatchFilters>(DEFAULT_MATCH_FILTERS);
+  const [urlReady, setUrlReady] = useState(false);
+
+  useEffect(() => {
+    const filtersFromUrl = parseMatchFiltersFromSearch(window.location.search);
+    setFilters(filtersFromUrl);
+    setUrlReady(true);
+  }, []);
+
+  const handleFiltersChange = useCallback(
+    (newFilters: ClientMatchFilters) => {
+      const normalized = normalizeMatchFilters(newFilters);
+      setFilters(normalized);
+
+      if (urlReady) {
+        window.history.replaceState(null, '', writeMatchFiltersToUrl(normalized, window.location.href));
+      }
+    },
+    [urlReady],
+  );
 
   return (
     <div>
+      <MatchFilters filters={filters} onFiltersChange={handleFiltersChange} />
+
       {/* View toggle */}
       <div className="view-toggle">
         <button
@@ -54,7 +84,12 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
 
       {/* Active view */}
       {view === 'list' ? (
-        <MatchList isAuthenticated={isAuthenticated} />
+        <MatchList
+          isAuthenticated={isAuthenticated}
+          filters={filters}
+          onFiltersChange={handleFiltersChange}
+          showFilters={false}
+        />
       ) : (
         <Suspense
           fallback={
@@ -63,7 +98,7 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
             </div>
           }
         >
-          <MatchMap />
+          <MatchMap filters={filters} />
         </Suspense>
       )}
 
