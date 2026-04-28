@@ -5,6 +5,9 @@
  * - Loads the open match dataset once, then filters locally for immediate UX.
  * - Backend GraphQL filters remain available for larger datasets and map/list parity.
  * - Can render its own filters, or receive controlled filters from MatchesView.
+ * - Empty state distinguishes "no open matches at all" (matches.length === 0) from
+ *   "matches exist but all are hidden by filters" (visibleMatches.length === 0) so
+ *   players know whether to wait or to adjust their search.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -111,7 +114,9 @@ export function MatchList({
         <div className="text-center py-12">
           <p className="text-xl font-medium">No hay partidos disponibles</p>
           <p className="text-muted-foreground mt-2">
-            Proba con otros filtros o vuelve mas tarde
+            {matches.length > 0
+              ? 'Ningún partido coincide con los filtros. Probá ajustando la búsqueda.'
+              : 'No hay partidos abiertos por el momento. Volvé más tarde.'}
           </p>
         </div>
       )}

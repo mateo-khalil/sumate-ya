@@ -16,6 +16,7 @@ import { Search, X } from 'lucide-react';
 import {
   DEFAULT_MATCH_FILTERS,
   normalizeMatchFilters,
+  toDateFilter,
   toDateInputValue,
   type ClientMatchFilters,
 } from '@/lib/match-filtering';
@@ -44,11 +45,6 @@ const TIME_RANGE_OPTIONS = [
   { value: '18:00|23:59', label: 'Noche' },
   { value: '20:00|02:00', label: 'Nocturno' },
 ];
-
-function toDateFilter(value: string, endOfDay = false): string | undefined {
-  if (!value) return undefined;
-  return `${value}T${endOfDay ? '23:59:59' : '00:00:00'}`;
-}
 
 function toTimeRangeValue(filters: ClientMatchFilters): string {
   return filters.timeFrom && filters.timeTo ? `${filters.timeFrom}|${filters.timeTo}` : '';
