@@ -1,0 +1,44 @@
+name: "🧭 Epic"
+description: "Crear un epic nuevo que agrupa varias tareas"
+title: "Epic: <Nombre>"
+labels: []
+projects: ["mateo-khalil/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Un **epic** agrupa varias tareas bajo un mismo objetivo. Después de crearlo, asignale el label de área y andá a los issues hijos para setear este epic como *Add parent* en el sidebar.
+
+  - type: input
+    id: goal
+    attributes:
+      label: Objetivo del epic
+      description: "En una línea: qué queremos lograr."
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Alcance / qué incluye
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Fuera de alcance (opcional)
+      value: |
+        -
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Criterio de done
+      description: Cómo sabemos que el epic está listo.
+      value: |
+        - [ ]
+    validations:
+      required: true

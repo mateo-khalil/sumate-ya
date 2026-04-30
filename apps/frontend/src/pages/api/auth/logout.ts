@@ -7,5 +7,5 @@ export const POST: APIRoute = async ({ cookies, redirect }) => {
   const accessToken = readAccessToken(cookies);
   await logoutFromBackend(accessToken);
   clearAuthCookies(cookies);
-  return redirect('/login', 302);
+  return redirect('/', 302);
 };

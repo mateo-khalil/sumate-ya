@@ -16,6 +16,26 @@ query GetMatches($filters: MatchFilters) {
   }
 }
 
+# Extended variant for the map view — includes club coordinates and address
+query GetMatchesWithCoords($filters: MatchFilters) {
+  matches(filters: $filters) {
+    id
+    title
+    startTime
+    format
+    totalSlots
+    availableSlots
+    status
+    club {
+      name
+      zone
+      address
+      lat
+      lng
+    }
+  }
+}
+
 query GetMatchById($id: ID!) {
   match(id: $id) {
     id
@@ -30,6 +50,81 @@ query GetMatchById($id: ID!) {
       name
       zone
       imageUrl
+    }
+  }
+}
+
+# Full match detail including participant lists, counts, organizer and auth-context flags.
+# Used by /partidos/[id] page. Auth token should be forwarded so isCurrentUserJoined,
+# canJoin and currentUserTeam are populated correctly.
+query GetMatchDetail($id: ID!) {
+  match(id: $id) {
+    id
+    title
+    startTime
+    format
+    totalSlots
+    availableSlots
+    status
+    description
+    createdAt
+    organizerId
+    currentUserTeam
+    club {
+      id
+      name
+      zone
+      address
+      lat
+      lng
+      phone
+    }
+    participants {
+      teamA {
+        id
+        displayName
+        avatarUrl
+        preferredPosition
+      }
+      teamB {
+        id
+        displayName
+        avatarUrl
+        preferredPosition
+      }
+      teamACount
+      teamBCount
+      totalCount
+      spotsLeftA
+      spotsLeftB
+    }
+    isCurrentUserJoined
+    canJoin
+  }
+}
+
+# Join a match. Requires auth token in Authorization header.
+mutation JoinMatch($input: JoinMatchInput!) {
+  joinMatch(input: $input) {
+    success
+    message
+  }
+}
+
+# Leave a match. Requires auth token in Authorization header.
+# matchDeleted is true when the match was auto-deleted (0 participants remaining).
+mutation LeaveMatch($input: LeaveMatchInput!) {
+  leaveMatch(input: $input) {
+    matchDeleted
+    match {
+      id
+      status
+      availableSlots
+      participants {
+        teamACount
+        teamBCount
+        totalCount
+      }
     }
   }
 }

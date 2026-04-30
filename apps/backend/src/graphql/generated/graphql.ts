@@ -19,19 +19,106 @@ export type Scalars = {
 
 export type Club = {
   __typename?: 'Club';
+  address?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  imageUrl?: Maybe<Scalars['String']['output']>;
+  lat?: Maybe<Scalars['Float']['output']>;
+  lng?: Maybe<Scalars['Float']['output']>;
+  name: Scalars['String']['output'];
+  phone?: Maybe<Scalars['String']['output']>;
+  zone?: Maybe<Scalars['String']['output']>;
+};
+
+export type ClubDetail = {
+  __typename?: 'ClubDetail';
+  address: Scalars['String']['output'];
+  description?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   imageUrl?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
-  zone?: Maybe<Scalars['String']['output']>;
+  phone?: Maybe<Scalars['String']['output']>;
+  zone: Scalars['String']['output'];
+};
+
+export type ClubSlot = {
+  __typename?: 'ClubSlot';
+  clubId: Scalars['ID']['output'];
+  court: Court;
+  dayOfWeek: Scalars['String']['output'];
+  endTime: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  priceArs?: Maybe<Scalars['Float']['output']>;
+  startTime: Scalars['String']['output'];
+};
+
+export type Court = {
+  __typename?: 'Court';
+  id: Scalars['ID']['output'];
+  isIndoor: Scalars['Boolean']['output'];
+  maxFormat: MatchFormat;
+  name: Scalars['String']['output'];
+  surface: CourtSurface;
+};
+
+export enum CourtSurface {
+  Concrete = 'CONCRETE',
+  Grass = 'GRASS',
+  Indoor = 'INDOOR',
+  Synthetic = 'SYNTHETIC'
+}
+
+export type CreateMatchInput = {
+  capacity: Scalars['Int']['input'];
+  clubId: Scalars['ID']['input'];
+  courtId: Scalars['ID']['input'];
+  date: Scalars['String']['input'];
+  description?: InputMaybe<Scalars['String']['input']>;
+  format: MatchFormat;
+  slotId: Scalars['ID']['input'];
+};
+
+export type CreateMatchResult = {
+  __typename?: 'CreateMatchResult';
+  matchId?: Maybe<Scalars['ID']['output']>;
+  message?: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
+export type JoinMatchInput = {
+  matchId: Scalars['ID']['input'];
+  team: MatchTeam;
+};
+
+export type JoinMatchResult = {
+  __typename?: 'JoinMatchResult';
+  match?: Maybe<Match>;
+  message?: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
+export type LeaveMatchInput = {
+  matchId: Scalars['ID']['input'];
+};
+
+export type LeaveMatchResult = {
+  __typename?: 'LeaveMatchResult';
+  match?: Maybe<Match>;
+  matchDeleted: Scalars['Boolean']['output'];
 };
 
 export type Match = {
   __typename?: 'Match';
   availableSlots: Scalars['Int']['output'];
+  canJoin?: Maybe<Scalars['Boolean']['output']>;
   club?: Maybe<Club>;
   createdAt: Scalars['String']['output'];
+  currentUserTeam?: Maybe<MatchTeam>;
+  description?: Maybe<Scalars['String']['output']>;
   format: MatchFormat;
   id: Scalars['ID']['output'];
+  isCurrentUserJoined?: Maybe<Scalars['Boolean']['output']>;
+  organizerId?: Maybe<Scalars['ID']['output']>;
+  participants?: Maybe<MatchParticipantsData>;
   startTime: Scalars['String']['output'];
   status: MatchStatus;
   title: Scalars['String']['output'];
@@ -54,6 +141,65 @@ export enum MatchFormat {
   TenVsTen = 'TEN_VS_TEN'
 }
 
+export type MatchHistoryConnection = {
+  __typename?: 'MatchHistoryConnection';
+  hasMore: Scalars['Boolean']['output'];
+  items: Array<MatchHistoryItem>;
+  page: Scalars['Int']['output'];
+  pageSize: Scalars['Int']['output'];
+  total: Scalars['Int']['output'];
+};
+
+export type MatchHistoryItem = {
+  __typename?: 'MatchHistoryItem';
+  club?: Maybe<Club>;
+  format: MatchFormat;
+  id: Scalars['ID']['output'];
+  isOrganizer: Scalars['Boolean']['output'];
+  scoreA?: Maybe<Scalars['Int']['output']>;
+  scoreB?: Maybe<Scalars['Int']['output']>;
+  startTime: Scalars['String']['output'];
+  title: Scalars['String']['output'];
+  userResult: MatchUserResult;
+  userTeam: Scalars['String']['output'];
+};
+
+export type MatchParticipantsData = {
+  __typename?: 'MatchParticipantsData';
+  spotsLeftA: Scalars['Int']['output'];
+  spotsLeftB: Scalars['Int']['output'];
+  teamA: Array<TeamMember>;
+  teamACount: Scalars['Int']['output'];
+  teamB: Array<TeamMember>;
+  teamBCount: Scalars['Int']['output'];
+  totalCount: Scalars['Int']['output'];
+};
+
+export type MatchResultSubmission = {
+  __typename?: 'MatchResultSubmission';
+  approveCount: Scalars['Int']['output'];
+  createdAt: Scalars['String']['output'];
+  hasUserVoted: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  matchId: Scalars['ID']['output'];
+  rejectCount: Scalars['Int']['output'];
+  scoreA: Scalars['Int']['output'];
+  scoreB: Scalars['Int']['output'];
+  status: SubmissionStatus;
+  submitter: TeamMember;
+  userVote?: Maybe<VoteValue>;
+  votes: Array<MatchResultVote>;
+  winnerTeam: WinnerTeam;
+};
+
+export type MatchResultVote = {
+  __typename?: 'MatchResultVote';
+  createdAt: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  vote: VoteValue;
+  voter: TeamMember;
+};
+
 export enum MatchStatus {
   Cancelled = 'CANCELLED',
   Completed = 'COMPLETED',
@@ -62,10 +208,94 @@ export enum MatchStatus {
   Open = 'OPEN'
 }
 
+export enum MatchTeam {
+  A = 'A',
+  B = 'B'
+}
+
+export enum MatchUserResult {
+  Draw = 'DRAW',
+  Lost = 'LOST',
+  Pending = 'PENDING',
+  Won = 'WON'
+}
+
+export type Mutation = {
+  __typename?: 'Mutation';
+  createMatch: CreateMatchResult;
+  joinMatch: JoinMatchResult;
+  leaveMatch: LeaveMatchResult;
+  proposeMatchResult: MatchResultSubmission;
+  voteMatchResult: VoteSubmissionResult;
+};
+
+
+export type MutationCreateMatchArgs = {
+  input: CreateMatchInput;
+};
+
+
+export type MutationJoinMatchArgs = {
+  input: JoinMatchInput;
+};
+
+
+export type MutationLeaveMatchArgs = {
+  input: LeaveMatchInput;
+};
+
+
+export type MutationProposeMatchResultArgs = {
+  input: ProposeMatchResultInput;
+};
+
+
+export type MutationVoteMatchResultArgs = {
+  input: VoteMatchResultInput;
+};
+
+export enum PlayerPosition {
+  Defender = 'DEFENDER',
+  Forward = 'FORWARD',
+  Goalkeeper = 'GOALKEEPER',
+  Midfielder = 'MIDFIELDER'
+}
+
+export type Profile = {
+  __typename?: 'Profile';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  division: Scalars['Int']['output'];
+  id: Scalars['ID']['output'];
+  matchesPlayed: Scalars['Int']['output'];
+  matchesWon: Scalars['Int']['output'];
+  preferredPosition?: Maybe<PlayerPosition>;
+  role: UserRole;
+  winrate?: Maybe<Scalars['Float']['output']>;
+};
+
+export type ProposeMatchResultInput = {
+  matchId: Scalars['ID']['input'];
+  scoreA: Scalars['Int']['input'];
+  scoreB: Scalars['Int']['input'];
+  winnerTeam?: InputMaybe<WinnerTeam>;
+};
+
 export type Query = {
   __typename?: 'Query';
+  clubSlots: Array<ClubSlot>;
+  clubs: Array<ClubDetail>;
   match?: Maybe<Match>;
+  matchResultSubmissions: Array<MatchResultSubmission>;
   matches: Array<Match>;
+  myMatches: MatchHistoryConnection;
+  myProfile: Profile;
+};
+
+
+export type QueryClubSlotsArgs = {
+  clubId: Scalars['ID']['input'];
+  date: Scalars['String']['input'];
 };
 
 
@@ -74,9 +304,61 @@ export type QueryMatchArgs = {
 };
 
 
+export type QueryMatchResultSubmissionsArgs = {
+  matchId: Scalars['ID']['input'];
+};
+
+
 export type QueryMatchesArgs = {
   filters?: InputMaybe<MatchFilters>;
 };
+
+
+export type QueryMyMatchesArgs = {
+  page?: InputMaybe<Scalars['Int']['input']>;
+  pageSize?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export enum SubmissionStatus {
+  Confirmed = 'CONFIRMED',
+  Pending = 'PENDING',
+  Rejected = 'REJECTED'
+}
+
+export type TeamMember = {
+  __typename?: 'TeamMember';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  preferredPosition?: Maybe<Scalars['String']['output']>;
+};
+
+export enum UserRole {
+  ClubAdmin = 'CLUB_ADMIN',
+  Player = 'PLAYER'
+}
+
+export type VoteMatchResultInput = {
+  submissionId: Scalars['ID']['input'];
+  vote: VoteValue;
+};
+
+export type VoteSubmissionResult = {
+  __typename?: 'VoteSubmissionResult';
+  statusChanged: Scalars['Boolean']['output'];
+  submission: MatchResultSubmission;
+};
+
+export enum VoteValue {
+  Approve = 'APPROVE',
+  Reject = 'REJECT'
+}
+
+export enum WinnerTeam {
+  A = 'A',
+  B = 'B',
+  Draw = 'DRAW'
+}
 
 export type WithIndex<TObject> = TObject & Record<string, any>;
 export type ResolversObject<TObject> = WithIndex<TObject>;
@@ -154,55 +436,266 @@ export type DirectiveResolverFn<TResult = Record<PropertyKey, never>, TParent = 
 export type ResolversTypes = ResolversObject<{
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   Club: ResolverTypeWrapper<Club>;
+  ClubDetail: ResolverTypeWrapper<ClubDetail>;
+  ClubSlot: ResolverTypeWrapper<ClubSlot>;
+  Court: ResolverTypeWrapper<Court>;
+  CourtSurface: CourtSurface;
+  CreateMatchInput: CreateMatchInput;
+  CreateMatchResult: ResolverTypeWrapper<CreateMatchResult>;
+  Float: ResolverTypeWrapper<Scalars['Float']['output']>;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
+  JoinMatchInput: JoinMatchInput;
+  JoinMatchResult: ResolverTypeWrapper<JoinMatchResult>;
+  LeaveMatchInput: LeaveMatchInput;
+  LeaveMatchResult: ResolverTypeWrapper<LeaveMatchResult>;
   Match: ResolverTypeWrapper<Match>;
   MatchFilters: MatchFilters;
   MatchFormat: MatchFormat;
+  MatchHistoryConnection: ResolverTypeWrapper<MatchHistoryConnection>;
+  MatchHistoryItem: ResolverTypeWrapper<MatchHistoryItem>;
+  MatchParticipantsData: ResolverTypeWrapper<MatchParticipantsData>;
+  MatchResultSubmission: ResolverTypeWrapper<MatchResultSubmission>;
+  MatchResultVote: ResolverTypeWrapper<MatchResultVote>;
   MatchStatus: MatchStatus;
+  MatchTeam: MatchTeam;
+  MatchUserResult: MatchUserResult;
+  Mutation: ResolverTypeWrapper<Record<PropertyKey, never>>;
+  PlayerPosition: PlayerPosition;
+  Profile: ResolverTypeWrapper<Profile>;
+  ProposeMatchResultInput: ProposeMatchResultInput;
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
+  SubmissionStatus: SubmissionStatus;
+  TeamMember: ResolverTypeWrapper<TeamMember>;
+  UserRole: UserRole;
+  VoteMatchResultInput: VoteMatchResultInput;
+  VoteSubmissionResult: ResolverTypeWrapper<VoteSubmissionResult>;
+  VoteValue: VoteValue;
+  WinnerTeam: WinnerTeam;
 }>;
 
 /** Mapping between all available schema types and the resolvers parents */
 export type ResolversParentTypes = ResolversObject<{
   Boolean: Scalars['Boolean']['output'];
   Club: Club;
+  ClubDetail: ClubDetail;
+  ClubSlot: ClubSlot;
+  Court: Court;
+  CreateMatchInput: CreateMatchInput;
+  CreateMatchResult: CreateMatchResult;
+  Float: Scalars['Float']['output'];
   ID: Scalars['ID']['output'];
   Int: Scalars['Int']['output'];
+  JoinMatchInput: JoinMatchInput;
+  JoinMatchResult: JoinMatchResult;
+  LeaveMatchInput: LeaveMatchInput;
+  LeaveMatchResult: LeaveMatchResult;
   Match: Match;
   MatchFilters: MatchFilters;
+  MatchHistoryConnection: MatchHistoryConnection;
+  MatchHistoryItem: MatchHistoryItem;
+  MatchParticipantsData: MatchParticipantsData;
+  MatchResultSubmission: MatchResultSubmission;
+  MatchResultVote: MatchResultVote;
+  Mutation: Record<PropertyKey, never>;
+  Profile: Profile;
+  ProposeMatchResultInput: ProposeMatchResultInput;
   Query: Record<PropertyKey, never>;
   String: Scalars['String']['output'];
+  TeamMember: TeamMember;
+  VoteMatchResultInput: VoteMatchResultInput;
+  VoteSubmissionResult: VoteSubmissionResult;
 }>;
 
 export type ClubResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Club'] = ResolversParentTypes['Club']> = ResolversObject<{
+  address?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  imageUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  lat?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  lng?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  phone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  zone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+}>;
+
+export type ClubDetailResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ClubDetail'] = ResolversParentTypes['ClubDetail']> = ResolversObject<{
+  address?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  description?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   imageUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  zone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  phone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  zone?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
+export type ClubSlotResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ClubSlot'] = ResolversParentTypes['ClubSlot']> = ResolversObject<{
+  clubId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  court?: Resolver<ResolversTypes['Court'], ParentType, ContextType>;
+  dayOfWeek?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  endTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  priceArs?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
+export type CourtResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Court'] = ResolversParentTypes['Court']> = ResolversObject<{
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isIndoor?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  maxFormat?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  surface?: Resolver<ResolversTypes['CourtSurface'], ParentType, ContextType>;
+}>;
+
+export type CreateMatchResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['CreateMatchResult'] = ResolversParentTypes['CreateMatchResult']> = ResolversObject<{
+  matchId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  message?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+}>;
+
+export type JoinMatchResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['JoinMatchResult'] = ResolversParentTypes['JoinMatchResult']> = ResolversObject<{
+  match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType>;
+  message?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+}>;
+
+export type LeaveMatchResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['LeaveMatchResult'] = ResolversParentTypes['LeaveMatchResult']> = ResolversObject<{
+  match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType>;
+  matchDeleted?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
 }>;
 
 export type MatchResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Match'] = ResolversParentTypes['Match']> = ResolversObject<{
   availableSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  canJoin?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
   club?: Resolver<Maybe<ResolversTypes['Club']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  currentUserTeam?: Resolver<Maybe<ResolversTypes['MatchTeam']>, ParentType, ContextType>;
+  description?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   format?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isCurrentUserJoined?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
+  organizerId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  participants?: Resolver<Maybe<ResolversTypes['MatchParticipantsData']>, ParentType, ContextType>;
   startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   status?: Resolver<ResolversTypes['MatchStatus'], ParentType, ContextType>;
   title?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   totalSlots?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
 }>;
 
+export type MatchHistoryConnectionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchHistoryConnection'] = ResolversParentTypes['MatchHistoryConnection']> = ResolversObject<{
+  hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  items?: Resolver<Array<ResolversTypes['MatchHistoryItem']>, ParentType, ContextType>;
+  page?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  pageSize?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  total?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+}>;
+
+export type MatchHistoryItemResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchHistoryItem'] = ResolversParentTypes['MatchHistoryItem']> = ResolversObject<{
+  club?: Resolver<Maybe<ResolversTypes['Club']>, ParentType, ContextType>;
+  format?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isOrganizer?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  scoreA?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  scoreB?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  title?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  userResult?: Resolver<ResolversTypes['MatchUserResult'], ParentType, ContextType>;
+  userTeam?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
+export type MatchParticipantsDataResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchParticipantsData'] = ResolversParentTypes['MatchParticipantsData']> = ResolversObject<{
+  spotsLeftA?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  spotsLeftB?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  teamA?: Resolver<Array<ResolversTypes['TeamMember']>, ParentType, ContextType>;
+  teamACount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  teamB?: Resolver<Array<ResolversTypes['TeamMember']>, ParentType, ContextType>;
+  teamBCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+}>;
+
+export type MatchResultSubmissionResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchResultSubmission'] = ResolversParentTypes['MatchResultSubmission']> = ResolversObject<{
+  approveCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  hasUserVoted?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  matchId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  rejectCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  scoreA?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  scoreB?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['SubmissionStatus'], ParentType, ContextType>;
+  submitter?: Resolver<ResolversTypes['TeamMember'], ParentType, ContextType>;
+  userVote?: Resolver<Maybe<ResolversTypes['VoteValue']>, ParentType, ContextType>;
+  votes?: Resolver<Array<ResolversTypes['MatchResultVote']>, ParentType, ContextType>;
+  winnerTeam?: Resolver<ResolversTypes['WinnerTeam'], ParentType, ContextType>;
+}>;
+
+export type MatchResultVoteResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['MatchResultVote'] = ResolversParentTypes['MatchResultVote']> = ResolversObject<{
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  vote?: Resolver<ResolversTypes['VoteValue'], ParentType, ContextType>;
+  voter?: Resolver<ResolversTypes['TeamMember'], ParentType, ContextType>;
+}>;
+
+export type MutationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
+  createMatch?: Resolver<ResolversTypes['CreateMatchResult'], ParentType, ContextType, RequireFields<MutationCreateMatchArgs, 'input'>>;
+  joinMatch?: Resolver<ResolversTypes['JoinMatchResult'], ParentType, ContextType, RequireFields<MutationJoinMatchArgs, 'input'>>;
+  leaveMatch?: Resolver<ResolversTypes['LeaveMatchResult'], ParentType, ContextType, RequireFields<MutationLeaveMatchArgs, 'input'>>;
+  proposeMatchResult?: Resolver<ResolversTypes['MatchResultSubmission'], ParentType, ContextType, RequireFields<MutationProposeMatchResultArgs, 'input'>>;
+  voteMatchResult?: Resolver<ResolversTypes['VoteSubmissionResult'], ParentType, ContextType, RequireFields<MutationVoteMatchResultArgs, 'input'>>;
+}>;
+
+export type ProfileResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Profile'] = ResolversParentTypes['Profile']> = ResolversObject<{
+  avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  division?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  matchesPlayed?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  matchesWon?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  preferredPosition?: Resolver<Maybe<ResolversTypes['PlayerPosition']>, ParentType, ContextType>;
+  role?: Resolver<ResolversTypes['UserRole'], ParentType, ContextType>;
+  winrate?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+}>;
+
 export type QueryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = ResolversObject<{
+  clubSlots?: Resolver<Array<ResolversTypes['ClubSlot']>, ParentType, ContextType, RequireFields<QueryClubSlotsArgs, 'clubId' | 'date'>>;
+  clubs?: Resolver<Array<ResolversTypes['ClubDetail']>, ParentType, ContextType>;
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType, RequireFields<QueryMatchArgs, 'id'>>;
+  matchResultSubmissions?: Resolver<Array<ResolversTypes['MatchResultSubmission']>, ParentType, ContextType, RequireFields<QueryMatchResultSubmissionsArgs, 'matchId'>>;
   matches?: Resolver<Array<ResolversTypes['Match']>, ParentType, ContextType, Partial<QueryMatchesArgs>>;
+  myMatches?: Resolver<ResolversTypes['MatchHistoryConnection'], ParentType, ContextType, Partial<QueryMyMatchesArgs>>;
+  myProfile?: Resolver<ResolversTypes['Profile'], ParentType, ContextType>;
+}>;
+
+export type TeamMemberResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TeamMember'] = ResolversParentTypes['TeamMember']> = ResolversObject<{
+  avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  preferredPosition?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+}>;
+
+export type VoteSubmissionResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['VoteSubmissionResult'] = ResolversParentTypes['VoteSubmissionResult']> = ResolversObject<{
+  statusChanged?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  submission?: Resolver<ResolversTypes['MatchResultSubmission'], ParentType, ContextType>;
 }>;
 
 export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Club?: ClubResolvers<ContextType>;
+  ClubDetail?: ClubDetailResolvers<ContextType>;
+  ClubSlot?: ClubSlotResolvers<ContextType>;
+  Court?: CourtResolvers<ContextType>;
+  CreateMatchResult?: CreateMatchResultResolvers<ContextType>;
+  JoinMatchResult?: JoinMatchResultResolvers<ContextType>;
+  LeaveMatchResult?: LeaveMatchResultResolvers<ContextType>;
   Match?: MatchResolvers<ContextType>;
+  MatchHistoryConnection?: MatchHistoryConnectionResolvers<ContextType>;
+  MatchHistoryItem?: MatchHistoryItemResolvers<ContextType>;
+  MatchParticipantsData?: MatchParticipantsDataResolvers<ContextType>;
+  MatchResultSubmission?: MatchResultSubmissionResolvers<ContextType>;
+  MatchResultVote?: MatchResultVoteResolvers<ContextType>;
+  Mutation?: MutationResolvers<ContextType>;
+  Profile?: ProfileResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
+  TeamMember?: TeamMemberResolvers<ContextType>;
+  VoteSubmissionResult?: VoteSubmissionResultResolvers<ContextType>;
 }>;
 

@@ -5,12 +5,16 @@
  * Decision Context:
  * - Why SSR: Handles POST form server-side so credentials are never sent via client-side fetch.
  *   Same progressive-enhancement pattern as login.astro.
- * - Pattern: All Supabase calls are brokered by the backend via /api/auth/register. The
+ * - Pattern: All Supabase calls are brokered by the backend via /api/auth/register-club. The
  *   frontend only calls the backend REST endpoint.
  * - Security: Passwords never reach the Astro page's client bundle. Field-level errors come
  *   from Zod validation on the backend and are mapped back to the form inline.
- * - Constraints: latitud/longitud are optional — clubs can be added without coordinates initially.
- * - Previously fixed bugs: none relevant.
+ * - Constraints: latitud/longitud are REQUIRED — clubs must have coordinates for the map feature.
+ *   Pre-validated server-side before calling the backend so the user gets a clear Spanish message
+ *   instead of a generic Zod type error.
+ * - Previously fixed bugs:
+ *   - Comment said lat/lng were optional — corrected; they are required by the Zod schema (P2/P8).
+ *   - No visual indicator that lat/lng are required fields — asterisk + helper text added (P2).
  */
 export const prerender = false;
 
@@ -51,20 +55,27 @@ if (Astro.request.method === 'POST') {
   const password        = fd.get('password')?.toString() ?? '';
   const confirmPassword = fd.get('confirmPassword')?.toString() ?? '';
 
-  const result = await registerClubWithBackend({
-    ...values,
-    password,
-    confirmPassword,
-    lat: values.lat ? parseFloat(values.lat) : undefined,
-    lng: values.lng ? parseFloat(values.lng) : undefined,
-  });
+  // P2: pre-validate required lat/lng before hitting the backend so the user sees
+  // a clear Spanish message instead of a raw Zod type error.
+  if (!values.lat.trim() || !values.lng.trim()) {
+    if (!values.lat.trim()) fieldErrors.lat = 'La latitud es obligatoria para mostrar el club en el mapa';
+    if (!values.lng.trim()) fieldErrors.lng = 'La longitud es obligatoria para mostrar el club en el mapa';
+  } else {
+    const result = await registerClubWithBackend({
+      ...values,
+      password,
+      confirmPassword,
+      lat: parseFloat(values.lat),
+      lng: parseFloat(values.lng),
+    });
 
-  if (result.ok) {
-    return Astro.redirect('/login?registered=1');
+    if (result.ok) {
+      return Astro.redirect('/login?registered=1');
+    }
+
+    fieldErrors = result.errors ?? {};
+    globalError = Object.keys(fieldErrors).length === 0 ? (result.message || 'Error al registrar') : '';
   }
-
-  fieldErrors = result.errors ?? {};
-  globalError = Object.keys(fieldErrors).length === 0 ? (result.message || 'Error al registrar') : '';
 }
 ---
 
@@ -158,18 +169,28 @@ if (Astro.request.method === 'POST') {
             </div>
           </div>
 
+          <div class="coords-header">
+            <span class="coords-title">Ubicación <span class="req-star" aria-hidden="true">*</span></span>
+            <button type="button" id="btn-geolocate" class="btn-geo">
+              📍 Usar mi ubicación
+            </button>
+          </div>
+
           <div class="field-row">
             <div class="field">
-              <label for="lat">Latitud <span class="optional">(opcional)</span></label>
-              <input id="lat" name="lat" type="number" step="any"
+              <label for="lat">Latitud <span class="req-star" aria-hidden="true">*</span></label>
+              <input id="lat" name="lat" type="number" step="any" required
                 value={values.lat} placeholder="-34.6037" />
+              {fieldErrors.lat && <span class="field-error">{fieldErrors.lat}</span>}
             </div>
             <div class="field">
-              <label for="lng">Longitud <span class="optional">(opcional)</span></label>
-              <input id="lng" name="lng" type="number" step="any"
+              <label for="lng">Longitud <span class="req-star" aria-hidden="true">*</span></label>
+              <input id="lng" name="lng" type="number" step="any" required
                 value={values.lng} placeholder="-58.3816" />
+              {fieldErrors.lng && <span class="field-error">{fieldErrors.lng}</span>}
             </div>
           </div>
+          <p class="coords-hint">Necesario para mostrar el club en el mapa. Usá el botón o ingresalas manualmente.</p>
         </div>
 
         <button type="submit" class="btn-submit">REGISTRAR CLUB</button>
@@ -362,4 +383,73 @@ if (Astro.request.method === 'POST') {
   }
 
   .login-link a:hover { text-decoration: underline; }
+
+  /* ── Required indicator ── */
+  .req-star { color: hsl(0 72% 60%); font-weight: 700; }
+
+  /* ── Coords header (label + geo button row) ── */
+  .coords-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 0.25rem;
+  }
+
+  .coords-title {
+    font-size: 0.78rem; font-weight: 600;
+    color: hsl(215 20% 62%); text-transform: uppercase;
+    letter-spacing: 0.08em; font-family: 'Barlow Condensed', sans-serif;
+  }
+
+  .btn-geo {
+    background: rgba(27, 105, 224, 0.15);
+    border: 1px solid rgba(27, 105, 224, 0.35);
+    color: hsl(216 85% 70%);
+    border-radius: 6px; padding: 0.3rem 0.65rem;
+    font-size: 0.78rem; font-family: 'Barlow', sans-serif;
+    cursor: pointer; transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-geo:hover {
+    background: rgba(27, 105, 224, 0.25);
+    border-color: rgba(27, 105, 224, 0.55);
+  }
+
+  .btn-geo:disabled { opacity: 0.5; cursor: default; }
+
+  /* ── Coords hint ── */
+  .coords-hint {
+    margin: 0.35rem 0 0;
+    font-size: 0.76rem; font-family: 'Barlow', sans-serif;
+    color: hsl(215 20% 45%);
+  }
 </style>
+
+<script>
+  // Geolocation helper — fills lat/lng inputs via the browser API.
+  // Runs only client-side; the form still submits and validates server-side without it.
+  const btn = document.getElementById('btn-geolocate') as HTMLButtonElement | null;
+  const latInput = document.getElementById('lat') as HTMLInputElement | null;
+  const lngInput = document.getElementById('lng') as HTMLInputElement | null;
+
+  if (btn && latInput && lngInput && navigator.geolocation) {
+    btn.addEventListener('click', () => {
+      btn.textContent = 'Obteniendo…';
+      btn.disabled = true;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          latInput.value = pos.coords.latitude.toFixed(6);
+          lngInput.value = pos.coords.longitude.toFixed(6);
+          btn.textContent = '📍 Usar mi ubicación';
+          btn.disabled = false;
+        },
+        () => {
+          btn.textContent = '📍 Usar mi ubicación';
+          btn.disabled = false;
+        },
+        { timeout: 8000 },
+      );
+    });
+  } else if (btn && !navigator.geolocation) {
+    btn.style.display = 'none';
+  }
+</script>

@@ -1,0 +1,184 @@
+---
+/**
+ * ClubLocationCard — Static card showing club location info
+ *
+ * Decision Context:
+ * - Why Astro: purely static — no interactivity needed. The "Ver en mapa" link is a
+ *   plain <a target="_blank"> pointing to Google Maps; no JS required.
+ * - Google Maps URL: uses q=lat,lng format which opens a directions/search view in
+ *   any browser. Prefer this over embed iframes to avoid Google Maps API costs.
+ * - The map link is only rendered when both lat and lng are non-null. Legacy club rows
+ *   may lack geocoded coordinates — callers should not assume they exist.
+ * - phone is shown when present; hidden when null to avoid empty UI elements.
+ * - Previously fixed bugs: none relevant.
+ */
+
+interface ClubLocationProps {
+  id: string;
+  name: string;
+  zone: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  phone: string | null;
+}
+
+interface Props {
+  club: ClubLocationProps;
+}
+
+const { club } = Astro.props;
+
+const mapsUrl =
+  club.lat != null && club.lng != null
+    ? `https://www.google.com/maps?q=${club.lat},${club.lng}`
+    : null;
+---
+
+<div class="location-card">
+  <div class="location-header">
+    <span class="location-icon">📍</span>
+    <h2 class="club-name">{club.name}</h2>
+  </div>
+
+  <div class="location-details">
+    {club.address && (
+      <div class="detail-row">
+        <span class="detail-label">Dirección</span>
+        <span class="detail-value">{club.address}</span>
+      </div>
+    )}
+    {club.zone && (
+      <div class="detail-row">
+        <span class="detail-label">Zona</span>
+        <span class="detail-value">{club.zone}</span>
+      </div>
+    )}
+    {club.phone && (
+      <div class="detail-row">
+        <span class="detail-label">Teléfono</span>
+        <a href={`tel:${club.phone}`} class="detail-link">{club.phone}</a>
+      </div>
+    )}
+  </div>
+
+  {mapsUrl && (
+    <a
+      href={mapsUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="map-btn"
+      aria-label={`Ver ${club.name} en Google Maps`}
+    >
+      <span class="map-btn-icon">🗺️</span>
+      Ver en mapa
+    </a>
+  )}
+</div>
+
+<style>
+  .location-card {
+    background: hsl(220 55% 11%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .location-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .location-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .club-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: hsl(210 20% 90%);
+    margin: 0;
+  }
+
+  .location-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .detail-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .detail-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(215 20% 50%);
+    flex-shrink: 0;
+    min-width: 64px;
+  }
+
+  .detail-value {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.875rem;
+    color: hsl(210 20% 80%);
+  }
+
+  .detail-link {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.875rem;
+    color: hsl(216 85% 65%);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .detail-link:hover {
+    color: hsl(216 85% 75%);
+    text-decoration: underline;
+  }
+
+  .map-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.1rem;
+    border-radius: 8px;
+    background: hsl(216 85% 45% / 0.15);
+    border: 1px solid hsl(216 85% 45% / 0.4);
+    color: hsl(216 85% 70%);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    align-self: flex-start;
+  }
+
+  .map-btn:hover {
+    background: hsl(216 85% 45% / 0.28);
+    border-color: hsl(216 85% 55% / 0.6);
+    color: hsl(216 85% 82%);
+  }
+
+  .map-btn-icon {
+    font-size: 1rem;
+    line-height: 1;
+  }
+</style>

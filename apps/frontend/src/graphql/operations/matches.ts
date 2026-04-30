@@ -8,6 +8,8 @@
  *   re-exports the same operations as string constants for urql `Client.query()` usage
  *   until frontend codegen is wired up.
  * - Filter support: Added MatchFilters input type for flexible match querying.
+ * - Participant types: TeamMember, MatchParticipantsData, MatchDetailData added to support
+ *   the join-match US. GET_MATCH_DETAIL fetches full roster + auth-context flags.
  * - Keep this file and `matches.graphql` in sync manually for now; when codegen is added,
  *   delete this file and import generated documents instead.
  * - Previously fixed bugs: a prior revision inlined these strings inside `MatchList.tsx`,
@@ -20,6 +22,7 @@
 
 export type MatchFormat = 'FIVE_VS_FIVE' | 'SEVEN_VS_SEVEN' | 'TEN_VS_TEN' | 'ELEVEN_VS_ELEVEN';
 export type MatchStatus = 'OPEN' | 'FULL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type CourtSurface = 'GRASS' | 'SYNTHETIC' | 'CONCRETE' | 'INDOOR';
 
 export interface MatchFilters {
   status?: MatchStatus;
@@ -28,6 +31,121 @@ export interface MatchFilters {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+}
+
+export interface ClubDetail {
+  id: string;
+  name: string;
+  zone: string;
+  address: string;
+  phone: string | null;
+  description: string | null;
+  imageUrl: string | null;
+}
+
+export interface Court {
+  id: string;
+  name: string;
+  maxFormat: MatchFormat;
+  surface: CourtSurface;
+  isIndoor: boolean;
+}
+
+export interface ClubSlot {
+  id: string;
+  clubId: string;
+  court: Court;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  priceArs: number | null;
+}
+
+export interface CreateMatchInput {
+  clubId: string;
+  slotId: string;
+  courtId: string;
+  date: string; // YYYY-MM-DD
+  format: MatchFormat;
+  capacity: number;
+  description?: string;
+}
+
+export interface CreateMatchResult {
+  success: boolean;
+  matchId: string | null;
+  message: string | null;
+}
+
+export type MatchTeam = 'A' | 'B';
+
+export interface TeamMember {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: string | null;
+}
+
+export interface MatchParticipantsData {
+  teamA: TeamMember[];
+  teamB: TeamMember[];
+  teamACount: number;
+  teamBCount: number;
+  totalCount: number;
+  spotsLeftA: number;
+  spotsLeftB: number;
+}
+
+export interface MatchDetailData {
+  id: string;
+  title: string;
+  startTime: string;
+  format: MatchFormat;
+  totalSlots: number;
+  availableSlots: number;
+  status: MatchStatus;
+  description: string | null;
+  createdAt: string;
+  /** ID of the match organizer — used to badge their PlayerCard as "Organizador" */
+  organizerId: string | null;
+  /** Team the current user is enrolled in — null when not joined or not authenticated */
+  currentUserTeam: MatchTeam | null;
+  club: {
+    id: string;
+    name: string;
+    zone: string | null;
+    address: string | null;
+    lat: number | null;
+    lng: number | null;
+    phone: string | null;
+  } | null;
+  participants: MatchParticipantsData | null;
+  isCurrentUserJoined: boolean | null;
+  canJoin: boolean | null;
+}
+
+export interface JoinMatchInput {
+  matchId: string;
+  team: MatchTeam;
+}
+
+export interface JoinMatchResult {
+  success: boolean;
+  message: string | null;
+}
+
+export interface LeaveMatchInput {
+  matchId: string;
+}
+
+export interface LeaveMatchResult {
+  matchDeleted: boolean;
+  match: {
+    id: string;
+    status: MatchStatus;
+    availableSlots: number;
+    participants: { teamACount: number; teamBCount: number; totalCount: number } | null;
+  } | null;
 }
 
 // =====================================================
@@ -52,8 +170,78 @@ export const GET_MATCHES = /* GraphQL */ `
   }
 `;
 
+/**
+ * Extended GET_MATCHES variant that also fetches club coordinates and address.
+ * Used by MatchMap to render geo-markers. Kept separate from GET_MATCHES so the
+ * base list view does not pay the lat/lng egress cost when it doesn't need them.
+ */
+export const GET_MATCHES_WITH_COORDS = /* GraphQL */ `
+  query GetMatchesWithCoords($filters: MatchFilters) {
+    matches(filters: $filters) {
+      id
+      title
+      startTime
+      format
+      totalSlots
+      availableSlots
+      status
+      club {
+        name
+        zone
+        address
+        lat
+        lng
+      }
+    }
+  }
+`;
+
 /** @deprecated Use GET_MATCHES with filters instead */
 export const GET_OPEN_MATCHES = GET_MATCHES;
+
+export const GET_CLUBS = /* GraphQL */ `
+  query GetClubs {
+    clubs {
+      id
+      name
+      zone
+      address
+      phone
+      description
+      imageUrl
+    }
+  }
+`;
+
+export const GET_CLUB_SLOTS = /* GraphQL */ `
+  query GetClubSlots($clubId: ID!, $date: String!) {
+    clubSlots(clubId: $clubId, date: $date) {
+      id
+      clubId
+      dayOfWeek
+      startTime
+      endTime
+      priceArs
+      court {
+        id
+        name
+        maxFormat
+        surface
+        isIndoor
+      }
+    }
+  }
+`;
+
+export const CREATE_MATCH = /* GraphQL */ `
+  mutation CreateMatch($input: CreateMatchInput!) {
+    createMatch(input: $input) {
+      success
+      matchId
+      message
+    }
+  }
+`;
 
 export const GET_MATCH_BY_ID = /* GraphQL */ `
   query GetMatchById($id: ID!) {
@@ -70,6 +258,71 @@ export const GET_MATCH_BY_ID = /* GraphQL */ `
         name
         zone
         imageUrl
+      }
+    }
+  }
+`;
+
+export const GET_MATCH_DETAIL = /* GraphQL */ `
+  query GetMatchDetail($id: ID!) {
+    match(id: $id) {
+      id
+      title
+      startTime
+      format
+      totalSlots
+      availableSlots
+      status
+      description
+      createdAt
+      organizerId
+      currentUserTeam
+      club {
+        id
+        name
+        zone
+        address
+        lat
+        lng
+        phone
+      }
+      participants {
+        teamA { id displayName avatarUrl preferredPosition }
+        teamB { id displayName avatarUrl preferredPosition }
+        teamACount
+        teamBCount
+        totalCount
+        spotsLeftA
+        spotsLeftB
+      }
+      isCurrentUserJoined
+      canJoin
+    }
+  }
+`;
+
+export const JOIN_MATCH = /* GraphQL */ `
+  mutation JoinMatch($input: JoinMatchInput!) {
+    joinMatch(input: $input) {
+      success
+      message
+    }
+  }
+`;
+
+export const LEAVE_MATCH = /* GraphQL */ `
+  mutation LeaveMatch($input: LeaveMatchInput!) {
+    leaveMatch(input: $input) {
+      matchDeleted
+      match {
+        id
+        status
+        availableSlots
+        participants {
+          teamACount
+          teamBCount
+          totalCount
+        }
       }
     }
   }

@@ -1,0 +1,59 @@
+# GraphQL Schema: Match history for the authenticated player
+#
+# Decision Context:
+# - Why separate file: keeps the public match queries (match.graphql) isolated from
+#   the auth-required personal history endpoint. Apollo merges all .graphql files.
+# - userResult is computed in the service (not the DB) by comparing the participant's
+#   team against the match's winnerTeam column.
+# - scoreA / scoreB / winnerTeam: these DB columns DO NOT EXIST YET.
+#   The "registrar resultado" User Story is out of scope for this sprint.
+#   Until that US is implemented, userResult is always PENDING and scoreA/scoreB are null.
+#   TODO: When "registrar resultado" is merged, wire up:
+#     - WON:  winnerTeam === userTeam (lowercase)
+#     - LOST: winnerTeam !== userTeam && winnerTeam !== 'draw'
+#     - DRAW: winnerTeam === 'draw'
+# - MatchHistoryConnection uses page/pageSize (offset pagination) instead of cursor
+#   pagination because the history list is not expected to change during a user session
+#   (completed matches are immutable), so offset drift is not a concern.
+# - myMatches is auth-required (requireAuth in resolver). Unauthenticated callers get
+#   an Apollo authentication error.
+# - Previously fixed bugs: none relevant.
+
+enum MatchUserResult {
+  WON
+  LOST
+  DRAW
+  PENDING
+}
+
+# A single completed match as seen from the authenticated player's perspective
+type MatchHistoryItem {
+  id: ID!
+  title: String!
+  startTime: String!
+  format: MatchFormat!
+  club: Club
+  # The team (A or B) the player was on
+  userTeam: String!
+  # Computed from winnerTeam vs userTeam — always PENDING until result fields are added
+  userResult: MatchUserResult!
+  # Nullable until "registrar resultado" US is implemented
+  scoreA: Int
+  scoreB: Int
+  isOrganizer: Boolean!
+}
+
+# Offset-paginated response for myMatches
+type MatchHistoryConnection {
+  items: [MatchHistoryItem!]!
+  total: Int!
+  page: Int!
+  pageSize: Int!
+  hasMore: Boolean!
+}
+
+extend type Query {
+  # Returns the authenticated player's completed match history, newest first.
+  # Requires authentication. page defaults to 1, pageSize defaults to 10 (max 50).
+  myMatches(page: Int, pageSize: Int): MatchHistoryConnection!
+}

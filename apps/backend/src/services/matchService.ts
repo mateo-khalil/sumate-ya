@@ -21,18 +21,33 @@
  *   those were left from initial scaffolding and polluted prod logs.
  */
 
-import { cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
+import { cacheDelete, cacheDeletePattern, cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
 import {
   MatchFormat,
   MatchStatus,
+  MatchTeam,
+  MatchUserResult,
+  type CreateMatchInput,
+  type CreateMatchResult,
+  type JoinMatchInput,
+  type JoinMatchResult,
+  type LeaveMatchInput,
+  type LeaveMatchResult,
   type Match,
   type MatchFilters,
+  type MatchHistoryConnection,
+  type MatchHistoryItem,
 } from '../graphql/generated/graphql.js';
 import {
   matchRepository,
+  type MatchDetailRow,
   type MatchWithClub,
   type MatchFilterOptions,
+  type CompletedMatchRow,
 } from '../repositories/matchRepository.js';
+import { clubSlotRepository } from '../repositories/clubSlotRepository.js';
+import { profileRepository } from '../repositories/profileRepository.js';
+import { dateToDayOfWeek } from './clubService.js';
 import type { ServiceContext } from '../types/context.js';
 
 // =====================================================
@@ -92,7 +107,11 @@ function toMatch(row: MatchWithClub): Match {
       ? {
           id: row.clubs.id,
           name: row.clubs.name,
-          zone: row.clubs.zone,
+          zone: row.clubs.zone ?? null,
+          address: row.clubs.address ?? null,
+          lat: row.clubs.lat ?? null,
+          lng: row.clubs.lng ?? null,
+          // phone is not fetched by CLUB_COLUMNS (list path) — omitted intentionally.
         }
       : null,
   };
@@ -186,9 +205,556 @@ export async function getMatchById(_ctx: ServiceContext, id: string): Promise<Ma
   return match ? toMatch(match) : null;
 }
 
+// =====================================================
+// Match Detail (with participants)
+// =====================================================
+
+/**
+ * Convert a MatchDetailRow (with participant list) to the GraphQL Match type.
+ * Computes per-team counts, available spots, and auth-context flags.
+ *
+ * Decision Context:
+ * - Why separate from toMatch(): toMatch() handles the cheap list-query path (no participants).
+ *   This variant is only called for single-match detail and after joinMatch. Keeping them
+ *   separate prevents accidental participant loading on list queries.
+ * - userId is optional — when null (unauthenticated), isCurrentUserJoined = false, canJoin = false.
+ * - canJoin does NOT check player role: that check belongs in the joinMatch mutation so the
+ *   flag stays accurate even before the user authenticates. The mutation enforces role server-side.
+ * - canJoin requires !!userId so unauthenticated callers always get false (P2 audit fix).
+ *   Without this, open matches with available spots returned canJoin=true for anonymous users,
+ *   which was semantically incorrect per the field's documented contract.
+ * - Previously fixed bugs:
+ *   - canJoin returned true for unauthenticated users — fixed by adding !!userId guard.
+ */
+function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
+  const teamA = row.matchParticipants
+    .filter((p) => p.team === 'a')
+    .map((p) => ({
+      id: p.profiles.id,
+      displayName: p.profiles.displayName,
+      avatarUrl: p.profiles.avatarUrl ?? null,
+      preferredPosition: p.profiles.preferredPosition ?? null,
+    }));
+
+  const teamB = row.matchParticipants
+    .filter((p) => p.team === 'b')
+    .map((p) => ({
+      id: p.profiles.id,
+      displayName: p.profiles.displayName,
+      avatarUrl: p.profiles.avatarUrl ?? null,
+      preferredPosition: p.profiles.preferredPosition ?? null,
+    }));
+
+  const spotsPerTeam = Math.floor(row.capacity / 2);
+  const totalCount = teamA.length + teamB.length;
+  const isCurrentUserJoined = userId
+    ? row.matchParticipants.some((p) => p.profiles.id === userId)
+    : false;
+
+  const userParticipant = userId
+    ? row.matchParticipants.find((p) => p.profiles.id === userId)
+    : null;
+  const currentUserTeam = userParticipant
+    ? (userParticipant.team === 'a' ? MatchTeam.A : MatchTeam.B)
+    : null;
+
+  return {
+    id: row.id,
+    title: row.description ?? 'Partido sin título',
+    startTime: row.scheduledAt,
+    format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
+    totalSlots: row.capacity,
+    availableSlots: row.capacity - totalCount,
+    status: DB_TO_STATUS[row.status] ?? MatchStatus.Open,
+    createdAt: row.createdAt,
+    description: row.description ?? null,
+    organizerId: row.organizerId ?? null,
+    currentUserTeam,
+    club: row.clubs
+      ? {
+          id: row.clubs.id,
+          name: row.clubs.name,
+          zone: row.clubs.zone ?? null,
+          address: row.clubs.address ?? null,
+          lat: row.clubs.lat ?? null,
+          lng: row.clubs.lng ?? null,
+          phone: row.clubs.phone ?? null,
+        }
+      : null,
+    participants: {
+      teamA,
+      teamB,
+      teamACount: teamA.length,
+      teamBCount: teamB.length,
+      totalCount,
+      spotsLeftA: Math.max(0, spotsPerTeam - teamA.length),
+      spotsLeftB: Math.max(0, spotsPerTeam - teamB.length),
+    },
+    isCurrentUserJoined,
+    canJoin: !!userId && row.status === 'open' && !isCurrentUserJoined && totalCount < row.capacity,
+  };
+}
+
+/**
+ * Get a single match with participant data (for the detail page).
+ * Caches the raw DB row separately from the basic match cache so the
+ * list queries continue using the lightweight MATCH_DETAIL cache.
+ */
+export async function getMatchDetail(ctx: ServiceContext, id: string): Promise<Match | null> {
+  const cacheKey = `${CACHE_PREFIX.MATCH_PARTICIPANTS}${id}`;
+
+  const row = await cacheGetOrSet<MatchDetailRow | null>(
+    cacheKey,
+    () => matchRepository.getMatchWithParticipants(id),
+    CACHE_TTL.DYNAMIC_DATA,
+  );
+
+  if (!row) return null;
+  return toMatchDetail(row, ctx.userId);
+}
+
+// =====================================================
+// joinMatch
+// =====================================================
+
+/**
+ * Join a match as a player.
+ *
+ * Decision Context:
+ * - Validation order (fail-fast):
+ *   1. Auth check — userId and user-scoped client must be present.
+ *   2. Role check — only players (not club_admin) can join matches.
+ *   3. Match existence — return clear 404-style error if not found.
+ *   4. Status check — only 'open' matches accept new participants.
+ *   5. Duplicate check — UNIQUE constraint in DB is the final guard, but we check
+ *      explicitly here to return a friendly message instead of a DB error.
+ *   6. Team capacity check — capacity/2 spots per team.
+ *   7. INSERT — uses user-scoped client so RLS (playerId = auth.uid()) is enforced.
+ *   8. Full check — if (existing + 1) === capacity, update status to 'full' via service role.
+ *   9. Cache invalidation — both participant cache and list caches are cleared.
+ *  10. Return updated match detail for immediate UI re-render.
+ * - Race condition: two simultaneous requests can pass the capacity check before either
+ *   inserts. The UNIQUE(matchId, playerId) constraint prevents double-joins for the same
+ *   player; the capacity check is eventually-consistent (at most 1 over-quota in a burst).
+ *   A future improvement could use a DB transaction + advisory lock.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function joinMatch(
+  input: JoinMatchInput,
+  ctx: ServiceContext,
+): Promise<JoinMatchResult> {
+  if (!ctx.userId) throw new Error('Authentication required');
+  const db = ctx.supabase;
+  if (!db) throw new Error('User-scoped client required for write operations');
+
+  // 1. Role check
+  const profile = await profileRepository.getProfileById(ctx.userId);
+  if (!profile) throw new Error('Perfil no encontrado');
+  if (profile.role !== 'player') {
+    throw new Error('Solo los jugadores pueden sumarse a partidos');
+  }
+
+  // 2. Fetch match with current participants (service-role read is fine here)
+  const matchRow = await matchRepository.getMatchWithParticipants(input.matchId);
+  if (!matchRow) throw new Error('Partido no encontrado');
+
+  // 3. Status check
+  if (matchRow.status !== 'open') {
+    throw new Error('El partido ya no acepta inscripciones');
+  }
+
+  // 4. Duplicate check
+  const alreadyJoined = matchRow.matchParticipants.some((p) => p.profiles.id === ctx.userId);
+  if (alreadyJoined) throw new Error('Ya estás inscripto en este partido');
+
+  // 5. Team capacity check
+  const spotsPerTeam = Math.floor(matchRow.capacity / 2);
+  const dbTeam = input.team === MatchTeam.A ? 'a' : 'b';
+  const teamCount = matchRow.matchParticipants.filter((p) => p.team === dbTeam).length;
+  if (teamCount >= spotsPerTeam) {
+    const teamLabel = input.team === MatchTeam.A ? 'A' : 'B';
+    throw new Error(`No hay cupos disponibles en el Equipo ${teamLabel}`);
+  }
+
+  // 6. Insert participant (user-scoped → RLS: playerId = auth.uid())
+  await matchRepository.createMatchParticipant(input.matchId, ctx.userId, dbTeam, db);
+  console.info(
+    `[matchService.joinMatch] userId=${ctx.userId} joined matchId=${input.matchId} team=${dbTeam}`,
+  );
+
+  // 7. If now full, update match status (service-role — see repository comment)
+  const totalAfterJoin = matchRow.matchParticipants.length + 1;
+  if (totalAfterJoin >= matchRow.capacity) {
+    await matchRepository.updateMatchStatus(input.matchId, 'full');
+    await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+    await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+    console.info(`[matchService.joinMatch] matchId=${input.matchId} is now full`);
+  }
+
+  // 8. Invalidate participant + detail caches
+  await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${input.matchId}`);
+  await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${input.matchId}`);
+
+  // 9. Return updated match with participants
+  const updatedMatch = await getMatchDetail({ userId: ctx.userId }, input.matchId);
+  return { success: true, message: null, match: updatedMatch ?? null };
+}
+
+// =====================================================
+// leaveMatch
+// =====================================================
+
+/** Basic UUID format check — avoids a round-trip for obviously invalid IDs. */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Leave a match as a player, with optional auto-deletion when the last participant exits.
+ *
+ * Decision Context:
+ * - Validation order (fail-fast):
+ *   1. Auth + user-scoped client — user identity and RLS client must both be present.
+ *   2. UUID format — catch malformed IDs before a DB round-trip (Spanish error message).
+ *   3. Match existence — clear 404-style message.
+ *   4. Status check — 'cancelled' matches block further participant changes to preserve
+ *      audit history. 'completed', 'in_progress', 'full', and 'open' matches allow leaving:
+ *      leaving a 'full' match re-opens it, which is intentional (frees a spot).
+ *   5. Membership check — explicit "not enrolled" error instead of a silent 0-row DELETE.
+ *   6. DELETE via user-scoped client — RLS enforces auth.uid() = playerId.
+ *   7. Count remaining participants.
+ *   8. If 0 → deleteMatch() via service-role (auto-elimination); invalidate list caches.
+ *   9. If was 'full' → updateMatchStatus('open') via service-role + invalidate list caches.
+ *  10. Invalidate participant + detail caches regardless.
+ *  11. Return { match: null, matchDeleted: true } or { match: updatedMatch, matchDeleted: false }.
+ *
+ * Caso A — organizador se sale:
+ *   The match keeps the organizerId FK pointing to the player who left, but they no longer
+ *   appear in matchParticipants. This is intentional: removing organizerId would require a
+ *   schema migration or a "transfer organizer" flow that is out of scope for this US.
+ *   The match remains playable; the organizerId is used for UPDATE RLS only.
+ *
+ * Caso B — último participante:
+ *   countParticipants() reads after the DELETE to get the authoritative count.
+ *   Race condition: two players leaving simultaneously when each is the last would both
+ *   read count=0; deleteMatch is idempotent (DELETE WHERE id=x on missing row returns 0
+ *   rows without error in PostgreSQL). At most one spurious no-op call to deleteMatch.
+ *
+ * Caso C — partido full → open:
+ *   The service-role update is required because the organizer-scoped RLS UPDATE policy
+ *   would reject updates by a non-organizer player.
+ *
+ * Caso D — menos de 1 hora para el partido:
+ *   Not blocked server-side — the UI shows a warning dialog but leaving is always allowed.
+ *   Blocking at the API level would require timezone-aware slot queries that are out of scope.
+ *
+ * Previously fixed bugs: none relevant.
+ */
+export async function leaveMatch(
+  input: LeaveMatchInput,
+  ctx: ServiceContext,
+): Promise<LeaveMatchResult> {
+  if (!ctx.userId) throw new Error('Authentication required');
+  const db = ctx.supabase;
+  if (!db) throw new Error('User-scoped client required for write operations');
+
+  // 1. UUID validation
+  if (!UUID_REGEX.test(input.matchId)) {
+    throw new Error('ID de partido inválido');
+  }
+
+  // 2. Fetch match with participants
+  const matchRow = await matchRepository.getMatchWithParticipants(input.matchId);
+  if (!matchRow) throw new Error('Partido no encontrado');
+
+  // 3. Status check — cancelled matches are locked
+  if (matchRow.status === 'cancelled') {
+    throw new Error('El partido ya fue cancelado');
+  }
+
+  // 4. Membership check — must be enrolled before we can leave
+  const isEnrolled = matchRow.matchParticipants.some((p) => p.profiles.id === ctx.userId);
+  if (!isEnrolled) {
+    throw new Error('No estás inscripto en este partido');
+  }
+
+  const wasFull = matchRow.status === 'full';
+
+  // 5. DELETE participant (user-scoped → RLS: auth.uid() = playerId)
+  await matchRepository.removeParticipant(input.matchId, ctx.userId, db);
+  console.info(
+    `[matchService.leaveMatch] userId=${ctx.userId} left matchId=${input.matchId}`,
+  );
+
+  // 6. Count remaining participants
+  const remaining = await matchRepository.countParticipants(input.matchId);
+
+  // 7. Auto-delete if no participants left (Caso B)
+  if (remaining === 0) {
+    await matchRepository.deleteMatch(input.matchId);
+    await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${input.matchId}`);
+    await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${input.matchId}`);
+    await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+    await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+    console.info(
+      `[matchService.leaveMatch] matchId=${input.matchId} auto-deleted (0 participants)`,
+    );
+    return { match: null, matchDeleted: true };
+  }
+
+  // 8. Re-open if was full (Caso C)
+  if (wasFull) {
+    await matchRepository.updateMatchStatus(input.matchId, 'open');
+    await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+    await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+    console.info(
+      `[matchService.leaveMatch] matchId=${input.matchId} re-opened (was full, now ${remaining} participants)`,
+    );
+  }
+
+  // 9. Invalidate participant + detail caches
+  await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${input.matchId}`);
+  await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${input.matchId}`);
+
+  // 10. Return updated match
+  const updatedMatch = await getMatchDetail({ userId: ctx.userId }, input.matchId);
+  return { match: updatedMatch ?? null, matchDeleted: false };
+}
+
+// =====================================================
+// Format Validation Helpers
+// =====================================================
+
+/** Numeric ordering for format comparison (lower = smaller pitch) */
+const FORMAT_ORDER: Record<string, number> = {
+  '5v5': 1,
+  '7v7': 2,
+  '10v10': 3,
+  '11v11': 4,
+};
+
+/** Default capacity per format (both teams combined) */
+const FORMAT_CAPACITY: Record<MatchFormat, number> = {
+  [MatchFormat.FiveVsFive]: 10,
+  [MatchFormat.SevenVsSeven]: 14,
+  [MatchFormat.TenVsTen]: 20,
+  [MatchFormat.ElevenVsEleven]: 22,
+};
+
+// =====================================================
+// createMatch
+// =====================================================
+
+/**
+ * Create a new match and register the organizer as the first participant (team A).
+ *
+ * Decision Context:
+ * - Why: Central service function orchestrates all business-rule checks before any write
+ *   so that no partial state is committed when a validation fails.
+ * - Validation order (fail-fast):
+ *   1. Role check — profile must be 'player' (fetched with service-role client to avoid
+ *      an extra RLS policy on profile reads).
+ *   2. Slot check — slot must exist and not be blocked (re-validated at write time to
+ *      guard against the race condition where the slot was open during the list query
+ *      but gets blocked before the mutation).
+ *   3. Court/format check — the chosen format must fit the court's maxFormat.
+ *   4. Capacity check — must be >= 2 and <= the format's maximum.
+ *   5. Date/day check — the given date's day of week must match the slot's dayOfWeek.
+ * - scheduledAt is computed as "${date}T${startTime}" — the DB interprets this in its
+ *   configured timezone. For a future improvement, append the club's explicit UTC offset.
+ * - Cache invalidation: the open-match list is invalidated so the new match appears
+ *   immediately in the /partidos listing.
+ * - Uses ctx.supabase (user-scoped) for writes so RLS policies on matches and
+ *   matchParticipants can verify auth.uid() == organizerId / playerId.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function createMatch(
+  input: CreateMatchInput,
+  ctx: ServiceContext,
+): Promise<CreateMatchResult> {
+  if (!ctx.userId) {
+    throw new Error('Authentication required');
+  }
+
+  const db = ctx.supabase;
+  if (!db) throw new Error('User-scoped client required for write operations');
+
+  // 1. Role check: only players can create matches
+  const profile = await profileRepository.getProfileById(ctx.userId);
+  if (!profile) throw new Error('Perfil no encontrado');
+  if (profile.role !== 'player') {
+    throw new Error('Solo los jugadores pueden crear partidos');
+  }
+
+  // 2. Slot check (re-validated at write time for race-condition safety)
+  const slot = await clubSlotRepository.getSlotById(input.slotId);
+  if (!slot) throw new Error('El horario seleccionado no existe');
+  if (slot.isBlocked) throw new Error('El horario ya está bloqueado. Elegí otro horario.');
+  if (slot.clubId !== input.clubId) {
+    throw new Error('El horario no pertenece al club seleccionado');
+  }
+  if (slot.courtId !== input.courtId) {
+    throw new Error('La cancha no corresponde al horario seleccionado');
+  }
+
+  // 3. Format compatibility check
+  const dbFormat = FORMAT_TO_DB[input.format];
+  if (!dbFormat) throw new Error('Formato de partido inválido');
+
+  const courtMaxFormat = slot.courts.maxFormat;
+  if ((FORMAT_ORDER[dbFormat] ?? 0) > (FORMAT_ORDER[courtMaxFormat] ?? 0)) {
+    throw new Error(
+      `Esta cancha soporta hasta ${courtMaxFormat}. El formato ${dbFormat} no es compatible.`,
+    );
+  }
+
+  // 4. Capacity check
+  const maxCapacity = FORMAT_CAPACITY[input.format];
+  if (input.capacity < 2 || input.capacity > maxCapacity) {
+    throw new Error(
+      `La capacidad para ${dbFormat} debe estar entre 2 y ${maxCapacity} jugadores.`,
+    );
+  }
+
+  // 5. Date/day-of-week check (guard against frontend sending mismatched date)
+  const expectedDay = dateToDayOfWeek(input.date);
+  if (slot.dayOfWeek !== expectedDay) {
+    throw new Error(
+      `El horario seleccionado es para ${slot.dayOfWeek}, pero la fecha elegida es ${expectedDay}`,
+    );
+  }
+
+  // 6. Compute scheduledAt = "YYYY-MM-DDTHH:MM:SS"
+  const scheduledAt = `${input.date}T${slot.startTime}`;
+
+  // 7. Insert match (user-scoped client enforces INSERT RLS: organizerId = auth.uid())
+  console.info(
+    `[matchService.createMatch] userId=${ctx.userId} format=${dbFormat} scheduledAt=${scheduledAt}`,
+  );
+
+  const newMatch = await matchRepository.createMatch(
+    {
+      organizerId: ctx.userId,
+      clubId: input.clubId,
+      courtId: input.courtId,
+      clubSlotId: input.slotId,
+      format: dbFormat,
+      capacity: input.capacity,
+      scheduledAt,
+      description: input.description,
+    },
+    db,
+  );
+
+  // 8. Register organizer as first participant on team A
+  await matchRepository.createMatchParticipant(newMatch.id, ctx.userId, 'a', db);
+
+  console.info(`[matchService.createMatch] Match created matchId=${newMatch.id}`);
+
+  // 9. Invalidate open match list cache so new match is visible immediately
+  await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+  await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+
+  return { success: true, matchId: newMatch.id, message: null };
+}
+
+// =====================================================
+// Match History
+// =====================================================
+
+/**
+ * Convert a completed-match DB row into a MatchHistoryItem GraphQL type.
+ *
+ * Decision Context:
+ * - userResult is derived from winningTeam vs the player's team:
+ *     WON  → winningTeam === userTeam (lowercase)
+ *     LOST → winningTeam is the other team
+ *     DRAW → winningTeam === 'draw'
+ *     PENDING → winningTeam is null (result not yet confirmed)
+ * - scoreA/scoreB map from DB scoreTeamA/scoreTeamB (null until result is confirmed).
+ * - isOrganizer is derived from `row.organizerId === userId` (no extra DB round-trip).
+ * - matchParticipants[0] always exists because getCompletedMatchesByUser uses !inner
+ *   join filtered by playerId — guarantees exactly one participant entry per row.
+ * - Previously fixed bugs: scoreA/scoreB were always null before "registrar resultado" US.
+ */
+function toMatchHistoryItem(row: CompletedMatchRow, userId: string): MatchHistoryItem {
+  const userTeam = row.matchParticipants[0]?.team === 'a' ? 'A' : 'B';
+
+  let userResult: MatchUserResult = MatchUserResult.Pending;
+  if (row.winningTeam) {
+    if (row.winningTeam === 'draw') {
+      userResult = MatchUserResult.Draw;
+    } else if (row.winningTeam === userTeam.toLowerCase()) {
+      userResult = MatchUserResult.Won;
+    } else {
+      userResult = MatchUserResult.Lost;
+    }
+  }
+
+  return {
+    id: row.id,
+    title: row.description ?? 'Partido sin título',
+    startTime: row.scheduledAt,
+    format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
+    club: row.clubs
+      ? { id: row.clubs.id, name: row.clubs.name, zone: row.clubs.zone ?? null }
+      : null,
+    userTeam,
+    userResult,
+    scoreA: row.scoreTeamA ?? null,
+    scoreB: row.scoreTeamB ?? null,
+    isOrganizer: row.organizerId === userId,
+  };
+}
+
+/**
+ * Return the authenticated player's completed match history, paginated.
+ *
+ * Decision Context:
+ * - Caching: keyed by userId + page + pageSize with USER_DATA TTL (5 min).
+ *   Per-user key prevents cross-user cache pollution. The 5-min TTL balances
+ *   freshness (match completions happen infrequently) against repeated queries.
+ * - Cache invalidation: currently not wired to the "completed" transition because
+ *   there is no explicit "mark completed" mutation yet. When that mutation is added,
+ *   invalidate `${CACHE_PREFIX.USER_MATCHES}${userId}*` for all participants.
+ * - hasMore: computed as offset + pageSize < total, which is the total count of
+ *   ALL matching rows returned by the count query (pre-pagination).
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getMyMatches(
+  ctx: ServiceContext,
+  page: number,
+  pageSize: number,
+): Promise<MatchHistoryConnection> {
+  if (!ctx.userId) throw new Error('Authentication required');
+
+  const offset = (page - 1) * pageSize;
+  const cacheKey = `${CACHE_PREFIX.USER_MATCHES}${ctx.userId}:page:${page}:size:${pageSize}`;
+  const userId = ctx.userId;
+
+  return cacheGetOrSet(
+    cacheKey,
+    async () => {
+      const result = await matchRepository.getCompletedMatchesByUser(userId, page, pageSize);
+      const items = result.rows.map((row) => toMatchHistoryItem(row, userId));
+      return {
+        items,
+        total: result.total,
+        page,
+        pageSize,
+        hasMore: offset + pageSize < result.total,
+      };
+    },
+    CACHE_TTL.USER_DATA,
+  );
+}
+
 export const matchService = {
   listMatches,
   listOpenMatches,
   listMatchesByStatus,
   getMatchById,
+  getMatchDetail,
+  joinMatch,
+  leaveMatch,
+  createMatch,
+  getMyMatches,
 };

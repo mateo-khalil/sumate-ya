@@ -1,0 +1,74 @@
+name: "🐞 Bug"
+description: "Reportar un bug en la plataforma"
+title: "🐞 <qué falla>"
+labels: ["🐞 bug"]
+projects: ["mateo-khalil/2"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área afectada
+      options:
+        - "⚽ partidos"
+        - "🏆 torneos"
+        - "🔐 autenticación"
+        - "🏢 club"
+        - "👤 perfil"
+        - "🗳️ votación"
+        - "⚙️ ajustes"
+        - "✨ extras"
+        - "🛠️ setup"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: ¿Qué está pasando?
+      description: Descripción clara y concisa del bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducir
+      value: |
+        1. Ir a ...
+        2. Hacer click en ...
+        3. Ver el error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamiento esperado
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamiento actual
+    validations:
+      required: true
+
+  - type: dropdown
+    id: env
+    attributes:
+      label: Entorno
+      options:
+        - local
+        - preview
+        - staging
+        - producción
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots / logs / contexto extra
+    validations:
+      required: false

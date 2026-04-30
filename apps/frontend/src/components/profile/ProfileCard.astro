@@ -1,0 +1,260 @@
+---
+/**
+ * ProfileCard — static Astro component that renders a player's FIFA-style card
+ *
+ * Decision Context:
+ * - Why Astro (not React): the card is purely presentational with no interactivity.
+ *   Using a .astro file means zero client JS for the card itself — the avatar upload
+ *   button and modal live in perfil.astro and AvatarUpload.tsx (React island), keeping
+ *   this component as a lightweight static shell.
+ * - Avatar fallback: renders a placeholder SVG when avatarUrl is null so the layout
+ *   never breaks due to a missing image. The placeholder matches the card's color scheme.
+ * - Position & role labels: converted from GraphQL enum strings to human-readable
+ *   Spanish labels inline in the template; no helper module needed for two static maps.
+ * - Winrate display: shown as "—" when null (0 matches played) to avoid misleading "0%".
+ * - Previously fixed bugs: none relevant.
+ */
+
+import type { Profile } from '../../graphql/operations/profile';
+
+interface Props {
+  profile: Profile;
+}
+
+const { profile } = Astro.props;
+
+const POSITION_LABEL: Record<string, string> = {
+  GOALKEEPER: 'Arquero',
+  DEFENDER: 'Defensor',
+  MIDFIELDER: 'Mediocampista',
+  FORWARD: 'Delantero',
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  PLAYER: 'Jugador',
+  CLUB_ADMIN: 'Club',
+};
+
+const positionLabel = profile.preferredPosition
+  ? (POSITION_LABEL[profile.preferredPosition] ?? profile.preferredPosition)
+  : null;
+const roleLabel = ROLE_LABEL[profile.role] ?? profile.role;
+const winrateDisplay =
+  profile.winrate !== null && profile.winrate !== undefined
+    ? `${profile.winrate.toFixed(1)}%`
+    : '—';
+
+const avatarSrc = profile.avatarUrl ?? null;
+---
+
+<article class="profile-card">
+  <!-- Header stripe -->
+  <div class="card-header">
+    <span class="division-badge">DIV {profile.division}</span>
+    <span class="role-badge">{roleLabel}</span>
+  </div>
+
+  <!-- Avatar -->
+  <div class="avatar-ring">
+    {avatarSrc ? (
+      <img
+        class="avatar-img"
+        src={avatarSrc}
+        alt={`Foto de ${profile.displayName}`}
+        width="120"
+        height="120"
+        loading="eager"
+      />
+    ) : (
+      <div class="avatar-placeholder" aria-label="Sin foto de perfil">
+        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+      </div>
+    )}
+  </div>
+
+  <!-- Name & position -->
+  <div class="player-identity">
+    <h2 class="player-name">{profile.displayName}</h2>
+    {positionLabel && <span class="position-tag">{positionLabel}</span>}
+  </div>
+
+  <!-- Stats grid -->
+  <div class="stats-grid">
+    <div class="stat-cell">
+      <span class="stat-value">{profile.matchesPlayed}</span>
+      <span class="stat-label">Partidos</span>
+    </div>
+    <div class="stat-cell stat-divider">
+      <span class="stat-value">{profile.matchesWon}</span>
+      <span class="stat-label">Victorias</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-value winrate">{winrateDisplay}</span>
+      <span class="stat-label">Efectividad</span>
+    </div>
+  </div>
+</article>
+
+<style>
+  .profile-card {
+    background: hsl(220 55% 11%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    overflow: hidden;
+    width: 100%;
+    max-width: 360px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  }
+
+  /* ---- Header ---- */
+  .card-header {
+    width: 100%;
+    padding: 0.75rem 1.25rem;
+    background: linear-gradient(135deg, hsl(216 85% 22%), hsl(220 72% 15%));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .division-badge {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.9rem;
+    letter-spacing: 0.12em;
+    color: hsl(35 100% 65%);
+    background: rgba(246, 164, 0, 0.12);
+    border: 1px solid rgba(246, 164, 0, 0.25);
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+  }
+
+  .role-badge {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(215 20% 65%);
+  }
+
+  /* ---- Avatar ---- */
+  .avatar-ring {
+    margin-top: 1.75rem;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    padding: 3px;
+    background: linear-gradient(135deg, hsl(35 100% 48%), hsl(216 85% 45%));
+    box-shadow: 0 0 20px rgba(246, 164, 0, 0.2);
+    flex-shrink: 0;
+  }
+
+  .avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    background: hsl(220 40% 16%);
+    display: block;
+  }
+
+  .avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: hsl(220 40% 16%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: hsl(215 20% 40%);
+  }
+
+  /* ---- Identity ---- */
+  .player-identity {
+    margin-top: 1.1rem;
+    text-align: center;
+    padding: 0 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .player-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1;
+  }
+
+  .position-tag {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: hsl(35 100% 55%);
+    background: rgba(246, 164, 0, 0.1);
+    border: 1px solid rgba(246, 164, 0, 0.2);
+    padding: 0.2rem 0.75rem;
+    border-radius: 20px;
+  }
+
+  /* ---- Stats ---- */
+  .stats-grid {
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: 1.25rem 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .stat-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .stat-divider {
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .stat-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    line-height: 1;
+  }
+
+  .stat-value.winrate {
+    color: hsl(35 100% 55%);
+  }
+
+  .stat-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(215 20% 50%);
+  }
+</style>

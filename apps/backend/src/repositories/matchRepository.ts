@@ -39,10 +39,26 @@ const MATCH_COLUMNS = `
   "clubId"
 `;
 
+// Used by list queries (matches, search) — omits phone to keep egress minimal.
 const CLUB_COLUMNS = `
   id,
   name,
-  zone
+  zone,
+  address,
+  lat,
+  lng
+`;
+
+// Used only by the detail query — adds phone for the ClubLocationCard.
+// Kept separate so list queries don't pay the phone egress cost.
+const CLUB_DETAIL_COLUMNS = `
+  id,
+  name,
+  zone,
+  address,
+  lat,
+  lng,
+  phone
 `;
 
 // =====================================================
@@ -64,6 +80,14 @@ export interface ClubRow {
   id: string;
   name: string;
   zone: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+/** Extended club row used only in detail queries — includes phone. */
+export interface ClubDetailRow extends ClubRow {
+  phone: string | null;
 }
 
 export interface MatchWithClub extends MatchRow {
@@ -303,10 +327,440 @@ export async function getOpenMatches(client: SupabaseClient = supabase): Promise
   return getMatchesWithFilters({ status: 'open' }, client);
 }
 
+// =====================================================
+// Match Detail with Participants
+// =====================================================
+
+// Columns for match detail (includes organizerId for ownership context)
+const MATCH_DETAIL_COLUMNS = `
+  id,
+  "organizerId",
+  description,
+  "scheduledAt",
+  format,
+  capacity,
+  status,
+  "createdAt"
+`;
+
+// Participant row joined with the player's profile
+const PARTICIPANT_COLUMNS = `
+  id,
+  team,
+  "joinedAt",
+  profiles(id, "displayName", "avatarUrl", "preferredPosition")
+`;
+
+export interface ParticipantProfileRow {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: string | null;
+}
+
+export interface ParticipantRow {
+  id: string;
+  team: 'a' | 'b';
+  joinedAt: string;
+  profiles: ParticipantProfileRow;
+}
+
+export interface MatchDetailRow {
+  id: string;
+  organizerId: string;
+  description: string | null;
+  scheduledAt: string;
+  format: string;
+  capacity: number;
+  status: string;
+  createdAt: string;
+  clubs: ClubDetailRow | null;
+  matchParticipants: ParticipantRow[];
+}
+
+/**
+ * Get a single match with club data AND participant list (profiles included).
+ * Used for the match detail page and after joinMatch to return updated state.
+ *
+ * Decision Context:
+ * - Why: The list query intentionally omits participants to avoid expensive joins.
+ *   This function is only called for the single-match detail route.
+ * - Participant profiles are joined via the matchParticipants.playerId → profiles.id FK.
+ *   PostgREST auto-resolves the FK because it is the only FK from matchParticipants to profiles.
+ * - Result is not cached here — caching happens in the service layer where the key and
+ *   TTL decisions live (backend.md "Cache at the service layer" rule).
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getMatchWithParticipants(
+  id: string,
+  client: SupabaseClient = supabase,
+): Promise<MatchDetailRow | null> {
+  const { data, error } = await client
+    .from('matches')
+    .select(`${MATCH_DETAIL_COLUMNS}, clubs(${CLUB_DETAIL_COLUMNS}), matchParticipants(${PARTICIPANT_COLUMNS})`)
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    console.error(`[matchRepository.getMatchWithParticipants] Supabase error matchId=${id}:`, error.message);
+    throw new Error(error.message);
+  }
+
+  return data as unknown as MatchDetailRow;
+}
+
+/**
+ * Update match status (used to set 'full' when capacity is reached, or 'cancelled', etc.).
+ * Uses the service-role singleton because this is a system-triggered status transition,
+ * not a user action — the player filling the last slot is not the match organizer, so
+ * the organizer-scoped RLS UPDATE policy would reject it.
+ *
+ * Decision Context:
+ * - Why service role: RLS `matches_organizer_update` only allows auth.uid() = organizerId.
+ *   When the last non-organizer player joins, their user-scoped client cannot UPDATE the
+ *   match status. Using service role here is intentional and documented.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function updateMatchStatus(
+  matchId: string,
+  status: 'open' | 'full' | 'in_progress' | 'completed' | 'cancelled',
+): Promise<void> {
+  const { error } = await supabase
+    .from('matches')
+    .update({ status })
+    .eq('id', matchId);
+
+  if (error) {
+    console.error(`[matchRepository.updateMatchStatus] Supabase error matchId=${matchId}:`, error.message);
+    throw new Error(error.message);
+  }
+}
+
+// =====================================================
+// Match Creation Types & Functions
+// =====================================================
+
+export interface CreateMatchInput {
+  organizerId: string;
+  clubId: string;
+  courtId: string;
+  clubSlotId: string;
+  format: string; // DB enum value: '5v5' | '7v7' | '10v10' | '11v11'
+  capacity: number;
+  scheduledAt: string; // ISO 8601 timestamp
+  description?: string | null;
+}
+
+export interface NewMatchRow {
+  id: string;
+  organizerId: string;
+  clubId: string;
+  courtId: string | null;
+  clubSlotId: string | null;
+  format: string;
+  capacity: number;
+  scheduledAt: string;
+  status: string;
+  description: string | null;
+  createdAt: string;
+}
+
+const NEW_MATCH_COLUMNS = `
+  id,
+  "organizerId",
+  "clubId",
+  "courtId",
+  "clubSlotId",
+  format,
+  capacity,
+  "scheduledAt",
+  status,
+  description,
+  "createdAt"
+`;
+
+/**
+ * Insert a new match row.
+ * Must be called with a user-scoped client so the INSERT RLS policy (`organizerId = auth.uid()`)
+ * is satisfied. Using the service-role singleton here would bypass that check.
+ *
+ * Decision Context:
+ * - Why user-scoped: INSERT RLS on matches requires `auth.uid() = organizerId`. If we used
+ *   the service-role singleton the policy would be bypassed — a bug that would allow any
+ *   authenticated user's token to create matches on behalf of any other user.
+ * - `status` defaults to 'open' in the DB; `resultStatus` defaults to 'pending'. We do not
+ *   pass those columns so the DB defaults apply and we don't hard-code enum strings here.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function createMatch(
+  input: CreateMatchInput,
+  client: SupabaseClient = supabase,
+): Promise<NewMatchRow> {
+  const { data, error } = await client
+    .from('matches')
+    .insert({
+      organizerId: input.organizerId,
+      clubId: input.clubId,
+      courtId: input.courtId,
+      clubSlotId: input.clubSlotId,
+      format: input.format,
+      capacity: input.capacity,
+      scheduledAt: input.scheduledAt,
+      description: input.description ?? null,
+    })
+    .select(NEW_MATCH_COLUMNS)
+    .single();
+
+  if (error) {
+    console.error('[matchRepository.createMatch] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return data as unknown as NewMatchRow;
+}
+
+/**
+ * Insert a row into matchParticipants to register a player on a team.
+ * Called immediately after createMatch to add the organizer to team A.
+ *
+ * Decision Context:
+ * - Uses user-scoped client so the INSERT RLS policy on matchParticipants is enforced.
+ * - If this insert fails after the match is already created, the match still exists but has
+ *   0 participants — a recoverable state. We log the error and re-throw so the service can
+ *   surface a clear message. A future improvement could wrap both inserts in a DB transaction.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function createMatchParticipant(
+  matchId: string,
+  playerId: string,
+  team: 'a' | 'b',
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('matchParticipants')
+    .insert({ matchId, playerId, team });
+
+  if (error) {
+    console.error(
+      `[matchRepository.createMatchParticipant] Supabase error matchId=${matchId} playerId=${playerId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
+// =====================================================
+// Leave Match — remove participant, count, delete
+// =====================================================
+
+/**
+ * Remove a single participant from matchParticipants.
+ * MUST be called with a user-scoped client so the DELETE RLS policy
+ * `participants_player_delete: USING (auth.uid() = "playerId")` is enforced.
+ * Using service-role here would bypass RLS and let any user remove any participant.
+ *
+ * Decision Context:
+ * - Why user-scoped: RLS DELETE requires auth.uid() = playerId. A service-role call would
+ *   silently succeed for any playerId, which is a privilege-escalation risk.
+ * - Returns true when a row was deleted, false when the participant was not found.
+ *   The service uses this to surface "No estás inscripto en este partido".
+ * - Previously fixed bugs: none relevant.
+ */
+export async function removeParticipant(
+  matchId: string,
+  playerId: string,
+  client: SupabaseClient,
+): Promise<boolean> {
+  const { error, count } = await client
+    .from('matchParticipants')
+    .delete({ count: 'exact' })
+    .eq('matchId', matchId)
+    .eq('playerId', playerId);
+
+  if (error) {
+    console.error(
+      `[matchRepository.removeParticipant] Supabase error matchId=${matchId} playerId=${playerId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return (count ?? 0) > 0;
+}
+
+/**
+ * Count the number of remaining participants for a match.
+ * Called after removeParticipant to decide whether to auto-delete or update status.
+ *
+ * Decision Context:
+ * - Uses service-role for a plain count read — no user-specific data is exposed.
+ * - head:true fetches only the count without returning rows (egress prevention).
+ * - Previously fixed bugs: none relevant.
+ */
+export async function countParticipants(matchId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('matchParticipants')
+    .select('id', { count: 'exact', head: true })
+    .eq('matchId', matchId);
+
+  if (error) {
+    console.error(
+      `[matchRepository.countParticipants] Supabase error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return count ?? 0;
+}
+
+/**
+ * Permanently delete a match and all its related rows (cascade).
+ * Uses service-role because there is no DELETE RLS policy on matches — this is
+ * a system-triggered auto-elimination, not a user-initiated delete action.
+ *
+ * Decision Context:
+ * - Why service-role: no DELETE policy exists on matches. This function is only called
+ *   when countParticipants returns 0, so business-logic authorization happens in the
+ *   service before this is invoked.
+ * - Cascade: matchParticipants, matchResultSubmissions, matchResultVotes all cascade
+ *   on match delete (per initial schema migration). Courts and club slots are not deleted.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function deleteMatch(matchId: string): Promise<void> {
+  const { error } = await supabase
+    .from('matches')
+    .delete()
+    .eq('id', matchId);
+
+  if (error) {
+    console.error(
+      `[matchRepository.deleteMatch] Supabase error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
+// =====================================================
+// Match History — completed matches for a specific player
+// =====================================================
+
+// Minimal columns selected for the history card — no capacity/createdAt/clubSlotId needed.
+// scoreTeamA/scoreTeamB/winningTeam added once "registrar resultado" US is implemented.
+const MATCH_HISTORY_COLUMNS = `
+  id,
+  description,
+  "scheduledAt",
+  format,
+  "organizerId",
+  "scoreTeamA",
+  "scoreTeamB",
+  "winningTeam"
+`;
+
+// Club columns for history — no lat/lng/phone, only display fields needed.
+const CLUB_HISTORY_COLUMNS = `
+  id,
+  name,
+  zone
+`;
+
+export interface HistoryClubRow {
+  id: string;
+  name: string;
+  zone: string | null;
+}
+
+export interface HistoryParticipantRow {
+  team: 'a' | 'b';
+}
+
+export interface CompletedMatchRow {
+  id: string;
+  description: string | null;
+  scheduledAt: string;
+  format: string;
+  organizerId: string;
+  scoreTeamA: number | null;
+  scoreTeamB: number | null;
+  winningTeam: 'a' | 'b' | 'draw' | null;
+  clubs: HistoryClubRow | null;
+  matchParticipants: HistoryParticipantRow[];
+}
+
+export interface CompletedMatchesResult {
+  rows: CompletedMatchRow[];
+  total: number;
+}
+
+/**
+ * Get paginated completed matches for a specific player.
+ * Queries from the `matches` side so we can order by scheduledAt DESC.
+ * The !inner join on matchParticipants filters to only matches where the player participated.
+ *
+ * Decision Context:
+ * - Why from `matches` (not `matchParticipants`): querying from the `matches` side lets us
+ *   ORDER BY "scheduledAt" DESC directly, which gives the user their history newest-first.
+ *   Querying from `matchParticipants` would only allow ordering by `joinedAt`, which is a
+ *   proxy for scheduledAt but not exact.
+ * - !inner on matchParticipants: ensures the outer WHERE clause (status = 'completed') and
+ *   the join filter (matchParticipants.playerId = userId) are both applied as INNER JOIN
+ *   conditions, so only matches the player participated in appear.
+ * - matchParticipants result array: with the !inner + playerId filter, PostgREST returns
+ *   only the participant row for this specific player — exactly one item per match.
+ * - count: 'exact' adds a Content-Range header with the total rows (pre-pagination).
+ *   Used by the service to compute hasMore.
+ * - Service-role client: reads are safe with service-role since match history is auth-gated
+ *   at the resolver layer. The user-scoped client could also be used but is not required.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getCompletedMatchesByUser(
+  userId: string,
+  page: number,
+  pageSize: number,
+  client: SupabaseClient = supabase,
+): Promise<CompletedMatchesResult> {
+  const offset = (page - 1) * pageSize;
+
+  const { data, error, count } = await client
+    .from('matches')
+    .select(
+      `${MATCH_HISTORY_COLUMNS}, clubs(${CLUB_HISTORY_COLUMNS}), matchParticipants!inner(team)`,
+      { count: 'exact' },
+    )
+    .eq('status', 'completed')
+    .eq('matchParticipants.playerId', userId)
+    .order('scheduledAt', { ascending: false })
+    .range(offset, offset + pageSize - 1);
+
+  if (error) {
+    console.error(
+      `[matchRepository.getCompletedMatchesByUser] Supabase error userId=${userId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return {
+    rows: (data as unknown as CompletedMatchRow[]) ?? [],
+    total: count ?? 0,
+  };
+}
+
 // Export repository as object for consistency
 export const matchRepository = {
   getMatchesWithFilters,
   getMatchesByStatus,
   getMatchById,
   getOpenMatches,
+  getMatchWithParticipants,
+  updateMatchStatus,
+  removeParticipant,
+  countParticipants,
+  deleteMatch,
+  createMatch,
+  createMatchParticipant,
+  getCompletedMatchesByUser,
 };

@@ -1,0 +1,35 @@
+# Join Match Schema
+#
+# Decision Context:
+# - Uses `extend type Mutation` because `type Mutation` is already declared in
+#   create-match.graphql. Apollo merges all .graphql files; the first file owns the base
+#   type, subsequent files extend it.
+# - MatchTeam enum uses uppercase A/B per GraphQL naming conventions. The service layer
+#   converts to lowercase 'a'/'b' before writing to the DB matchTeam enum.
+# - JoinMatchResult returns the updated Match (with participants populated) so the frontend
+#   can optimistically update the team lists without a second query. If the match is null
+#   (unexpected failure after a successful insert), the client should fall back to a refetch.
+# - Previously fixed bugs: none relevant.
+
+# Which team the player wants to join
+enum MatchTeam {
+  A
+  B
+}
+
+input JoinMatchInput {
+  matchId: ID!
+  team: MatchTeam!
+}
+
+type JoinMatchResult {
+  success: Boolean!
+  message: String
+  # Updated match with fresh participant counts (null on failure)
+  match: Match
+}
+
+extend type Mutation {
+  # Join a match as a player. Requires authentication and player role.
+  joinMatch(input: JoinMatchInput!): JoinMatchResult!
+}

@@ -1,0 +1,483 @@
+---
+/**
+ * /partidos/[id] — Detalle completo de un partido
+ *
+ * Decision Context:
+ * - SSR required: participant roster and auth-context flags (isCurrentUserJoined,
+ *   currentUserTeam, canJoin) change in real time. Pre-rendering would serve stale
+ *   data. Backend caches the DB row for 3 min (DYNAMIC_DATA TTL) so SSR load is low.
+ * - UUID guard: non-UUID params are redirected to /partidos immediately to avoid a
+ *   useless DB round-trip. The backend resolver also guards, but doing it here too
+ *   lets Astro issue a proper 302 instead of rendering an empty page.
+ * - Auth: the page is public (unauthenticated users can view the detail). The access
+ *   token is read from the HttpOnly cookie and forwarded to the backend only when
+ *   present, so auth-context flags are null for unauthenticated users.
+ * - Organizer detection: we find the organizer by matching participant.id with
+ *   match.organizerId from the GraphQL response. If the organizer left the match
+ *   they won't appear in participants — organizerName is null in that case.
+ * - JoinTeamButton and LeaveMatchButton use client:load (primary CTAs — must be
+ *   interactive immediately without waiting for scroll).
+ * - Components: MatchInfoCard, ClubLocationCard, PlayerCard are Astro (purely static).
+ * - Banner logic for enrolled users in cancelled matches (P1 audit fix):
+ *   The banner--joined is split into two cases:
+ *   1. isJoined && !matchCancelled → green "Ya estás anotado" + LeaveMatchButton
+ *   2. isJoined && matchCancelled  → gray "Estabas anotado, fue cancelado" (no leave button)
+ *   This prevents showing LeaveMatchButton on cancelled matches, which would always fail
+ *   because leaveMatch blocks changes to cancelled matches server-side.
+ * - Banners for IN_PROGRESS and COMPLETED added (P4 audit fix).
+ * - Previously fixed bugs:
+ *   - handleJoin in MatchList was a placeholder alert — fixed to navigate here.
+ *   - "Sumarme" button was disabled with "próximamente" — replaced with full join UI.
+ *   - availableSlots was hardcoded to capacity — now comes from the backend computed value.
+ *   - LeaveMatchButton shown on CANCELLED matches — always produced backend error (P1 fix).
+ *   - IN_PROGRESS / COMPLETED had no status banners — added (P4 fix).
+ */
+export const prerender = false;
+
+import Layout from '../../layouts/Layout.astro';
+import JoinTeamButton from '../../components/matches/JoinTeamButton.tsx';
+import LeaveMatchButton from '../../components/matches/LeaveMatchButton.tsx';
+import MatchInfoCard from '../../components/matches/MatchInfoCard.astro';
+import ClubLocationCard from '../../components/matches/ClubLocationCard.astro';
+import PlayerCard from '../../components/matches/PlayerCard.astro';
+import MatchResultsSection from '../../components/matches/MatchResultsSection.tsx';
+import { GET_MATCH_DETAIL } from '../../graphql/operations/matches';
+import type { MatchDetailData } from '../../graphql/operations/matches';
+import { readAccessToken } from '../../lib/auth';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const { id } = Astro.params;
+
+// Redirect non-UUID params immediately
+if (!id || !UUID_REGEX.test(id)) {
+  return Astro.redirect('/partidos');
+}
+
+const user = Astro.locals.user;
+const isPlayer = user?.role === 'player';
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+
+const backendUrl =
+  import.meta.env.PRIVATE_BACKEND_URL ||
+  (typeof process !== 'undefined' ? process.env.PRIVATE_BACKEND_URL : undefined) ||
+  'http://localhost:4000';
+
+let match: MatchDetailData | null = null;
+let fetchError: string | null = null;
+
+try {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+  const res = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ query: GET_MATCH_DETAIL, variables: { id } }),
+  });
+
+  const json = await res.json() as {
+    data?: { match: MatchDetailData | null };
+    errors?: { message: string }[];
+  };
+
+  if (json.errors?.length) fetchError = json.errors[0].message;
+  else match = json.data?.match ?? null;
+} catch {
+  fetchError = 'Error de red al cargar el partido.';
+}
+
+const participants = match?.participants;
+const teamA = participants?.teamA ?? [];
+const teamB = participants?.teamB ?? [];
+const spotsPerTeam = match ? Math.floor(match.totalSlots / 2) : 0;
+const teamAFull = participants ? participants.spotsLeftA === 0 : false;
+const teamBFull = participants ? participants.spotsLeftB === 0 : false;
+const isJoined = match?.isCurrentUserJoined ?? false;
+const canJoin = match?.canJoin ?? false;
+const matchOpen = match?.status === 'OPEN';
+const matchCancelled = match?.status === 'CANCELLED';
+const matchInProgress = match?.status === 'IN_PROGRESS';
+const matchCompleted = match?.status === 'COMPLETED';
+const currentUserTeam = match?.currentUserTeam ?? null;
+
+// Show result section when the match has already taken place:
+// - status is COMPLETED or IN_PROGRESS, OR
+// - match start time is in the past (slot already happened)
+// Only visible to participants of non-cancelled matches.
+// Previously fixed bugs: P1 audit — cancelled matches with past startTime were showing
+// the section; the !matchCancelled guard prevents proposals/votes on cancelled matches.
+const matchStarted = match
+  ? matchCompleted || matchInProgress || new Date(match.startTime) < new Date()
+  : false;
+const showResultSection = matchStarted && isJoined && isPlayer && !matchCancelled;
+
+const allParticipants = [...teamA, ...teamB];
+const organizerParticipant = match?.organizerId
+  ? allParticipants.find((p) => p.id === match!.organizerId)
+  : null;
+const organizerName = organizerParticipant?.displayName ?? null;
+const organizerAvatarUrl = organizerParticipant?.avatarUrl ?? null;
+const organizerPosition = organizerParticipant?.preferredPosition ?? null;
+---
+
+<Layout title={match ? `${match.title} — Sumate Ya` : 'Partido — Sumate Ya'}>
+  <div class="app-shell">
+
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <a href="/partidos" class="topbar-home">
+            <span>⚽</span>
+            <span class="topbar-name">SUMATE YA</span>
+          </a>
+        </div>
+        <div class="topbar-actions">
+          {user ? (
+            <>
+              {isPlayer && <a href="/partidos/crear" class="btn-crear">+ Crear partido</a>}
+              <a href="/perfil" class="nav-link">Mi Perfil</a>
+              <form method="POST" action="/api/auth/logout">
+                <button type="submit" class="btn-logout">Salir</button>
+              </form>
+            </>
+          ) : (
+            <a href="/login" class="btn-logout">Iniciar Sesión</a>
+          )}
+        </div>
+      </div>
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <main class="page-content">
+
+      {(!match || fetchError) && (
+        <div class="not-found">
+          {fetchError
+            ? <><p class="nf-title">Error al cargar</p><p class="nf-sub">{fetchError}</p></>
+            : <><p class="nf-title">Partido no encontrado</p><p class="nf-sub">Puede que haya sido cancelado o el enlace es incorrecto.</p></>
+          }
+          <a href="/partidos" class="btn-back">← Volver al listado</a>
+        </div>
+      )}
+
+      {match && (
+        <div class="match-detail">
+          <a href="/partidos" class="link-back">← Volver a partidos</a>
+
+          <!-- Section 1: Match info card -->
+          <MatchInfoCard
+            match={match}
+            organizerName={organizerName}
+            organizerAvatarUrl={organizerAvatarUrl}
+            organizerPosition={organizerPosition}
+          />
+
+          <!-- Section 2: Club location -->
+          {match.club && <ClubLocationCard club={match.club} />}
+
+          <!-- Section 3: User status banners -->
+
+          <!-- P1 fix: split joined banner by match status.
+               CANCELLED matches block leaveMatch server-side — never show the button there. -->
+          {isJoined && !matchCancelled && (
+            <div class="banner banner--joined" role="status">
+              <span class="banner-icon">✓</span>
+              <div class="banner-body">
+                <span class="banner-msg">
+                  Ya estás anotado en Equipo {currentUserTeam === 'A' ? 'A' : 'B'}
+                </span>
+                {isPlayer && (
+                  <LeaveMatchButton
+                    client:load
+                    matchId={match.id}
+                    matchDateTime={match.startTime}
+                    backendUrl={backendUrl}
+                    accessToken={accessToken}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {isJoined && matchCancelled && (
+            <div class="banner banner--enrolled-cancelled" role="status">
+              <span class="banner-icon">⚠️</span>
+              <span class="banner-msg">
+                Estabas anotado en Equipo {currentUserTeam === 'A' ? 'A' : 'B'}, pero este partido fue cancelado.
+              </span>
+            </div>
+          )}
+
+          {!isJoined && matchOpen && canJoin && isPlayer && (
+            <div class="banner banner--open" role="status">
+              <span class="banner-icon">⚽</span>
+              <span class="banner-msg">
+                Hay {match.availableSlots} cupo{match.availableSlots !== 1 ? 's' : ''} disponible{match.availableSlots !== 1 ? 's' : ''}.
+                Elegí tu equipo abajo.
+              </span>
+            </div>
+          )}
+
+          {!isJoined && match.status === 'FULL' && (
+            <div class="banner banner--full" role="status">
+              <span class="banner-icon">🔒</span>
+              <span class="banner-msg">Este partido está completo</span>
+            </div>
+          )}
+
+          {!isJoined && matchCancelled && (
+            <div class="banner banner--cancelled" role="alert">
+              <span class="banner-icon">❌</span>
+              <span class="banner-msg">Este partido fue cancelado</span>
+            </div>
+          )}
+
+          <!-- P4 fix: banners para IN_PROGRESS y COMPLETED -->
+          {matchInProgress && (
+            <div class="banner banner--inprogress" role="status">
+              <span class="banner-icon">🟡</span>
+              <span class="banner-msg">Este partido está en curso</span>
+            </div>
+          )}
+
+          {matchCompleted && (
+            <div class="banner banner--completed" role="status">
+              <span class="banner-icon">✅</span>
+              <span class="banner-msg">Este partido ya finalizó</span>
+            </div>
+          )}
+
+          {!user && matchOpen && (
+            <div class="banner banner--auth" role="status">
+              <span class="banner-icon">🔑</span>
+              <span class="banner-msg">
+                <a href="/login" class="banner-link">Iniciá sesión</a> para sumarte a este partido
+              </span>
+            </div>
+          )}
+
+          <!-- Section 4: Result voting — only after match has started, only for participants -->
+          {showResultSection && (
+            <MatchResultsSection
+              client:visible
+              matchId={match.id}
+              isParticipant={isJoined}
+              backendUrl={backendUrl}
+              accessToken={accessToken}
+            />
+          )}
+
+          <!-- Section 5: Teams -->
+          {participants ? (
+            <div class="teams-grid">
+
+              <div class="team-card">
+                <div class="team-header">
+                  <span class="team-label team-a">EQUIPO A</span>
+                  <span class="team-count">{participants.teamACount} / {spotsPerTeam}</span>
+                </div>
+                <ul class="player-list" role="list" aria-label="Jugadores Equipo A">
+                  {teamA.map((p) => (
+                    <PlayerCard player={p} isOrganizer={p.id === match!.organizerId} />
+                  ))}
+                  {participants.spotsLeftA > 0 && Array.from({ length: participants.spotsLeftA }).map((_, i) => (
+                    <li class="player-empty">
+                      <div class="empty-avatar"><span>+</span></div>
+                      <span class="empty-label">Lugar disponible</span>
+                    </li>
+                  ))}
+                </ul>
+                <div class="team-cta">
+                  {!user && matchOpen && <a href="/login" class="cta-link">Iniciá sesión para sumarte</a>}
+                  {user && !isPlayer && <p class="cta-disabled">Solo jugadores pueden sumarse</p>}
+                  {isPlayer && isJoined && (
+                    teamA.some((p) => p.id === user?.id)
+                      ? <p class="cta-in-team">✓ Estás en este equipo</p>
+                      : <p class="cta-disabled">Ya estás en el Equipo B</p>
+                  )}
+                  {isPlayer && !isJoined && matchOpen && (
+                    <JoinTeamButton
+                      client:load
+                      matchId={match.id}
+                      team="A"
+                      disabled={teamAFull || !canJoin}
+                      label={teamAFull ? 'Equipo completo' : 'Sumarme al Equipo A'}
+                      backendUrl={backendUrl}
+                      accessToken={accessToken}
+                    />
+                  )}
+                  {!matchOpen && !isJoined && <p class="cta-disabled">{matchCancelled ? 'Cancelado' : 'Completo'}</p>}
+                </div>
+              </div>
+
+              <div class="team-card">
+                <div class="team-header">
+                  <span class="team-label team-b">EQUIPO B</span>
+                  <span class="team-count">{participants.teamBCount} / {spotsPerTeam}</span>
+                </div>
+                <ul class="player-list" role="list" aria-label="Jugadores Equipo B">
+                  {teamB.map((p) => (
+                    <PlayerCard player={p} isOrganizer={p.id === match!.organizerId} />
+                  ))}
+                  {participants.spotsLeftB > 0 && Array.from({ length: participants.spotsLeftB }).map((_, i) => (
+                    <li class="player-empty">
+                      <div class="empty-avatar"><span>+</span></div>
+                      <span class="empty-label">Lugar disponible</span>
+                    </li>
+                  ))}
+                </ul>
+                <div class="team-cta">
+                  {!user && matchOpen && <a href="/login" class="cta-link">Iniciá sesión para sumarte</a>}
+                  {user && !isPlayer && <p class="cta-disabled">Solo jugadores pueden sumarse</p>}
+                  {isPlayer && isJoined && (
+                    teamB.some((p) => p.id === user?.id)
+                      ? <p class="cta-in-team">✓ Estás en este equipo</p>
+                      : <p class="cta-disabled">Ya estás en el Equipo A</p>
+                  )}
+                  {isPlayer && !isJoined && matchOpen && (
+                    <JoinTeamButton
+                      client:load
+                      matchId={match.id}
+                      team="B"
+                      disabled={teamBFull || !canJoin}
+                      label={teamBFull ? 'Equipo completo' : 'Sumarme al Equipo B'}
+                      backendUrl={backendUrl}
+                      accessToken={accessToken}
+                    />
+                  )}
+                  {!matchOpen && !isJoined && <p class="cta-disabled">{matchCancelled ? 'Cancelado' : 'Completo'}</p>}
+                </div>
+              </div>
+
+            </div>
+          ) : (
+            <div class="info-card-fallback">
+              <p class="cta-disabled">No se pudieron cargar los equipos.</p>
+            </div>
+          )}
+
+        </div>
+      )}
+    </main>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(7,15,31,0.85); backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .topbar-inner {
+    max-width: 1100px; margin: 0 auto; padding: 0 1.25rem;
+    height: 56px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar-brand { display: flex; align-items: center; }
+  .topbar-home { display: flex; align-items: center; gap: 0.5rem; text-decoration: none; }
+  .topbar-name { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; letter-spacing: 0.1em; color: #fff; }
+  .topbar-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .topbar-accent { height: 2px; background: linear-gradient(90deg, hsl(35 100% 48%), hsl(216 85% 45%), transparent); }
+
+  .nav-link {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: hsl(215 20% 65%);
+    text-decoration: none; padding: 0.3rem 0.6rem; border-radius: 6px; transition: color 0.15s, background 0.15s;
+  }
+  .nav-link:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 94%); }
+  .btn-crear {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; text-decoration: none;
+    padding: 0.35rem 0.875rem; border-radius: 6px;
+    background: hsl(35 100% 48%); color: hsl(220 72% 7%); transition: background 0.15s;
+  }
+  .btn-crear:hover { background: hsl(35 100% 55%); }
+  .btn-logout {
+    background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
+    padding: 0.3rem 0.75rem; font-size: 0.8125rem; font-family: 'Barlow', sans-serif;
+    font-weight: 500; cursor: pointer; color: hsl(215 20% 60%);
+    text-decoration: none; transition: background 0.15s, color 0.15s;
+  }
+  .btn-logout:hover { background: rgba(255,255,255,0.07); color: hsl(210 20% 90%); }
+
+  .page-content { flex: 1; max-width: 1100px; width: 100%; margin: 0 auto; padding: 2.5rem 1.25rem; }
+
+  .not-found { text-align: center; padding: 4rem 1rem; }
+  .nf-title { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: #fff; margin: 0 0 0.5rem; }
+  .nf-sub { font-family: 'Barlow', sans-serif; font-size: 0.95rem; color: hsl(215 20% 50%); margin: 0 0 2rem; }
+  .btn-back {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; font-size: 0.875rem; text-decoration: none;
+    color: hsl(35 100% 55%); border: 1px solid hsl(35 100% 48% / 0.4);
+    padding: 0.5rem 1.25rem; border-radius: 6px; transition: background 0.15s;
+  }
+  .btn-back:hover { background: hsl(35 100% 48% / 0.1); }
+
+  .match-detail { display: flex; flex-direction: column; gap: 1.25rem; }
+  .link-back {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 600;
+    letter-spacing: 0.08em; text-decoration: none; color: hsl(215 20% 55%); transition: color 0.15s;
+  }
+  .link-back:hover { color: hsl(210 20% 90%); }
+
+  /* Status banners */
+  .banner {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+    border-radius: 10px; padding: 0.9rem 1.25rem;
+    font-family: 'Barlow', sans-serif; font-size: 0.9rem;
+  }
+  .banner-icon { font-size: 1.1rem; line-height: 1.4; flex-shrink: 0; }
+  .banner-body { display: flex; flex-direction: column; gap: 0.65rem; }
+  .banner-msg { color: inherit; }
+  .banner-link { color: inherit; font-weight: 700; text-decoration: underline; }
+  .banner--joined { background: hsl(142 72% 50% / 0.1); border: 1px solid hsl(142 72% 50% / 0.3); color: hsl(142 72% 65%); }
+  .banner--open { background: hsl(216 85% 45% / 0.1); border: 1px solid hsl(216 85% 45% / 0.3); color: hsl(216 85% 70%); }
+  .banner--full { background: hsl(215 20% 20% / 0.5); border: 1px solid rgba(255,255,255,0.1); color: hsl(215 20% 55%); }
+  .banner--cancelled { background: hsl(0 72% 51% / 0.1); border: 1px solid hsl(0 72% 51% / 0.3); color: hsl(0 72% 70%); }
+  .banner--auth { background: hsl(35 100% 48% / 0.08); border: 1px solid hsl(35 100% 48% / 0.25); color: hsl(35 100% 65%); }
+  /* P1: enrolled in a cancelled match — warm muted warning, no action available */
+  .banner--enrolled-cancelled { background: hsl(35 20% 18% / 0.6); border: 1px solid hsl(35 30% 35% / 0.4); color: hsl(35 25% 60%); }
+  /* P4: match in progress — FIFA blue (same family as --open but distinct message) */
+  .banner--inprogress { background: hsl(216 85% 45% / 0.12); border: 1px solid hsl(216 85% 55% / 0.4); color: hsl(216 85% 72%); }
+  /* P4: match completed — neutral gray */
+  .banner--completed { background: hsl(215 15% 18% / 0.6); border: 1px solid rgba(255,255,255,0.1); color: hsl(215 15% 55%); }
+
+  /* Teams */
+  .teams-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 640px) { .teams-grid { grid-template-columns: 1fr; } }
+
+  .team-card {
+    background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 1rem; padding: 1.25rem 1.5rem;
+    display: flex; flex-direction: column; gap: 0.9rem;
+  }
+  .team-header { display: flex; align-items: center; justify-content: space-between; }
+  .team-label { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.1em; }
+  .team-a { color: hsl(35 100% 55%); }
+  .team-b { color: hsl(216 85% 65%); }
+  .team-count { font-family: 'Barlow Condensed', sans-serif; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.05em; color: hsl(215 20% 50%); }
+
+  .player-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+  .player-empty { display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0; opacity: 0.35; }
+  .empty-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1px dashed hsl(215 20% 35%); background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    color: hsl(215 20% 40%); font-size: 0.875rem; flex-shrink: 0;
+  }
+  .empty-label { font-family: 'Barlow', sans-serif; font-size: 0.875rem; color: hsl(215 20% 40%); font-style: italic; }
+
+  .team-cta { padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06); }
+  .cta-link { font-family: 'Barlow Condensed', sans-serif; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: hsl(35 100% 55%); text-decoration: none; }
+  .cta-link:hover { text-decoration: underline; }
+  .cta-disabled { font-family: 'Barlow', sans-serif; font-size: 0.825rem; color: hsl(215 20% 45%); margin: 0; }
+  .cta-in-team { font-family: 'Barlow', sans-serif; font-size: 0.825rem; color: hsl(142 72% 55%); margin: 0; }
+
+  .info-card-fallback {
+    background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 1rem; padding: 1.5rem 2rem;
+  }
+</style>

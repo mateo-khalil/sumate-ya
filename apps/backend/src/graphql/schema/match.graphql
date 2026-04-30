@@ -1,11 +1,57 @@
 # GraphQL Schema: Match and Club types with queries
+#
+# Decision Context:
+# - lat/lng added to support the map view on /partidos. Previously excluded from queries
+#   to save egress; now selectively included when the caller needs location data.
+# - address exposed so the map popup can show the street address without a second round-trip.
+# - Fields remain nullable because legacy club rows may lack coordinates — callers must
+#   filter out clubs where lat/lng are null before rendering markers.
+# - TeamMember / MatchParticipantsData added for the join-match US. They are optional on
+#   Match so the existing `matches` list query (which omits participants) keeps working
+#   without any extra DB round-trips or N+1 joins.
+# - isCurrentUserJoined / canJoin are resolver-computed from the GraphQL context user and
+#   the participant list; they are null when no auth context is present.
+# - organizerId added for the detail-page US so the frontend can badge the organizer player
+#   without a separate profile query. It is intentionally nullable so list queries can
+#   omit it without any schema change.
+# - currentUserTeam added so the detail page can show "Ya estás anotado en Equipo X"
+#   without having to scan the participant list on the client side.
+# - phone added to Club for the location card on the detail page.
+# - preferredPosition added to TeamMember as a raw String (not the PlayerPosition enum)
+#   so it passes through the DB value without a separate enum-mapping layer in this query
+#   path. Display mapping happens in the frontend PlayerCard component.
+# - Previously fixed bugs:
+#   - Botón "Sumarme" mostraba alert placeholder — replaced by navigation to detail page.
 
-# Club where matches are played
 type Club {
   id: ID!
   name: String!
   zone: String
+  address: String
+  lat: Float
+  lng: Float
   imageUrl: String
+  phone: String
+}
+
+# Minimal player info shown inside a team list
+type TeamMember {
+  id: ID!
+  displayName: String!
+  avatarUrl: String
+  preferredPosition: String
+}
+
+# Participants split by team with counts and available spots
+type MatchParticipantsData {
+  teamA: [TeamMember!]!
+  teamB: [TeamMember!]!
+  teamACount: Int!
+  teamBCount: Int!
+  totalCount: Int!
+  # Remaining spots per team (capacity/2 − current members)
+  spotsLeftA: Int!
+  spotsLeftB: Int!
 }
 
 # A football match that players can join
@@ -15,13 +61,23 @@ type Match {
   startTime: String!
   format: MatchFormat!
   totalSlots: Int!
+  # Computed: totalSlots − totalParticipants (or totalSlots when participants not loaded)
   availableSlots: Int!
   status: MatchStatus!
   club: Club
   createdAt: String!
+  # Nullable: only populated on single-match detail queries, not on list queries
+  description: String
+  participants: MatchParticipantsData
+  # Auth-context flags: null when user is not authenticated
+  isCurrentUserJoined: Boolean
+  canJoin: Boolean
+  # ID of the player who created the match — null on list queries that skip this field
+  organizerId: ID
+  # Team the current user is enrolled in — null when not joined or unauthenticated
+  currentUserTeam: MatchTeam
 }
 
-# Match format enum (players per team)
 enum MatchFormat {
   FIVE_VS_FIVE
   SEVEN_VS_SEVEN
@@ -29,7 +85,6 @@ enum MatchFormat {
   ELEVEN_VS_ELEVEN
 }
 
-# Match status enum
 enum MatchStatus {
   OPEN
   FULL
@@ -38,26 +93,16 @@ enum MatchStatus {
   CANCELLED
 }
 
-# Input for filtering matches
 input MatchFilters {
-  # Filter by status (default: OPEN)
   status: MatchStatus
-  # Filter by match format
   format: MatchFormat
-  # Filter by club zone
   zone: String
-  # Filter by date (from)
   dateFrom: String
-  # Filter by date (to)
   dateTo: String
-  # Search text in title/description
   search: String
 }
 
-# Root Query type
 type Query {
-  # Get matches with optional filters
   matches(filters: MatchFilters): [Match!]!
-  # Get a single match by ID
   match(id: ID!): Match
 }
