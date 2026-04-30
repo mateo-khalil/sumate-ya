@@ -12,11 +12,16 @@
  *   exists, the middleware silently calls /api/auth/refresh, overwrites both cookies in the
  *   response, and continues the request. Only if refresh also fails does it redirect to /login.
  *   This keeps sessions alive past the 1-hour JWT TTL without the user noticing.
+ * - Role gating: ROLE_RESTRICTED maps a path to the role that owns it. /panel-club is club-only,
+ *   /partidos and /partidos/crear are player-only. Mismatched roles get bounced via
+ *   getRoleRedirect so neither role can view the other's shell by typing the URL.
  * - Security: Frontend only trusts backend-validated session payloads. Tokens are forwarded
  *   to the backend /api/auth/session endpoint; we never call Supabase directly from here.
  * - Previously fixed bugs:
  *   - Missing /perfil in PROTECTED_ROUTES (added in M1 — placeholder for future page).
  *   - No refresh logic: expired tokens always redirected to /login. Fixed in P3 above.
+ *   - /partidos was unrestricted, so a club_admin who visited it directly saw the player UI.
+ *     Added the explicit player gate to mirror the existing club_admin gate on /panel-club.
  */
 
 import { defineMiddleware } from 'astro:middleware';
@@ -42,6 +47,7 @@ const PROTECTED_ROUTES: string[] = ['/panel-club', '/perfil', '/partidos/crear']
 /** Rutas restringidas por rol: sólo accesibles para el rol indicado */
 const ROLE_RESTRICTED: Record<string, UserRole> = {
   '/panel-club': 'club_admin',
+  '/partidos': 'player',
   '/partidos/crear': 'player',
 };
 

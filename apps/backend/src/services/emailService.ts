@@ -32,6 +32,16 @@ interface SendArgs {
 }
 
 async function send({ to, subject, html }: SendArgs): Promise<EmailResult> {
+  // Resend may be null in dev/CI when RESEND_API_KEY/RESEND_FROM_EMAIL are unset (see
+  // config/resend.ts). Email is non-blocking for the auth flow, so we no-op gracefully —
+  // the caller already handles `success: false` without rolling back persistence.
+  if (!resend) {
+    console.warn(
+      `[emailService.send] Skipped (Resend not configured) to=${to} subject="${subject}"`,
+    );
+    return { success: false, error: 'Email service not configured' };
+  }
+
   try {
     const { data, error } = await resend.emails.send({
       from: RESEND_FROM,
