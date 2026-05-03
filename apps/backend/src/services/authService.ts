@@ -72,10 +72,7 @@ export interface RegisterInput {
   password: string;
   clubName: string;
   address: string;
-  zone: string;
   phone: string;
-  lat: number;
-  lng: number;
 }
 
 export interface RegisterPlayerInput {
@@ -256,14 +253,14 @@ export const authService = {
     }
 
     // Step 3: Insert club linked to the new profile.
+    // zone/lat/lng are no longer collected at registration — they are nullable in the DB
+    // and can be filled in later via an admin profile flow. Map UI already filters clubs
+    // without coordinates, so omitting these here does not break the map view.
     const { error: clubError } = await supabase.from('clubs').insert({
       ownerId: userId,
       name: input.clubName,
       address: input.address,
-      zone: input.zone,
       phone: input.phone,
-      lat: input.lat,
-      lng: input.lng,
     });
 
     if (clubError) {

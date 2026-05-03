@@ -57,7 +57,7 @@ test.describe('Menu de vistazo rapido (/)', () => {
       'href',
       '/partidos',
     );
-    await expect(page.getByPlaceholder(/buscar por partido o club/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/buscar partido o club/i)).toBeVisible();
     await expect(page.locator('main select')).toHaveCount(3);
     await expect(page.getByText(/no hay partidos disponibles/i)).toBeVisible();
   });
@@ -67,12 +67,25 @@ test.describe('Menu de vistazo rapido (/)', () => {
   }) => {
     await page.goto(FRONTEND_URL);
 
-    await expect(page.getByText('500+')).toBeVisible();
-    await expect(page.getByText('Jugadores', { exact: true })).toBeVisible();
-    await expect(page.getByText('120+')).toBeVisible();
-    await expect(page.getByText('Partidos activos', { exact: true })).toBeVisible();
-    await expect(page.getByText('30+')).toBeVisible();
-    await expect(page.getByText('Clubes', { exact: true })).toBeVisible();
+    // Las metricas viven en cards con label visible (Jugadores/Partidos activos/Clubes).
+    // Localizamos cada card por su label y validamos el numero adentro — `500+` aparece
+    // tambien en el ticker del hero, asi que hay que scopear o el selector es ambiguo.
+    const playersCard = page
+      .locator('div', { has: page.getByText('Jugadores', { exact: true }) })
+      .filter({ hasText: '500+' })
+      .first();
+    const matchesCard = page
+      .locator('div', { has: page.getByText('Partidos activos', { exact: true }) })
+      .filter({ hasText: '120+' })
+      .first();
+    const clubsCard = page
+      .locator('div', { has: page.getByText('Clubes', { exact: true }) })
+      .filter({ hasText: '30+' })
+      .first();
+
+    await expect(playersCard).toBeVisible();
+    await expect(matchesCard).toBeVisible();
+    await expect(clubsCard).toBeVisible();
 
     await expect(page.getByRole('heading', { name: /c.mo funciona/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: /crea tu perfil/i })).toBeVisible();

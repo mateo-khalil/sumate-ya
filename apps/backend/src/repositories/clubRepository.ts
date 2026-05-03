@@ -33,7 +33,7 @@ const CLUB_DETAIL_COLUMNS = `
 export interface ClubDetailRow {
   id: string;
   name: string;
-  zone: string;
+  zone: string | null;
   address: string;
   phone: string | null;
   description: string | null;

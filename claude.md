@@ -31,6 +31,19 @@ apps/
 packages/      → Shared code (types, utils, GraphQL fragments)
 ```
 
+## Hard Rule: No Emojis in UI (Mandatory)
+
+**Never use emoji characters in any user-facing UI** (`.tsx`, `.astro`, JSX templates, button labels, banner text, status indicators, page content, etc.). Emojis render inconsistently across OSes/fonts and break the FIFA stadium aesthetic.
+
+### Required behavior
+
+1. ALWAYS use icons from **`lucide-react`** for every icon, glyph, or pictogram. The library is already installed in `apps/frontend`.
+2. In `.astro` files, import lucide icons and use them like Astro components — Astro renders React components statically (no `client:*` directive needed) so they ship as inline SVG with zero JS cost.
+3. NEVER install a second icon library (Heroicons, Material Icons, FontAwesome, react-icons, etc.) — one library, one visual language.
+4. NEVER inline raw `<svg>` markup for icons that exist in lucide-react.
+5. The full guidance (sizing, color tokens, accessibility, common name mappings) lives in `.claude/rules/design-system.md` under the **Iconography** section. Read that section before adding any icon.
+6. Comments documenting _replacements_ of legacy emoji code (e.g. "replaced 🧤 with `Hand`") are allowed — the prohibition applies to UI-rendered text only.
+
 ## Hard Rule: Frontend Rules First (Mandatory)
 
 Before working on any file under `apps/frontend/**`, always read `.claude/rules/frontend.md` first.
@@ -188,6 +201,16 @@ After any task that edits files in the workspace, the agent MUST run `turbo type
 2. Treat a non-zero exit code as a blocking failure.
 3. Do not mark the task complete, successful, or ready for review unless the command passes.
 4. If the command fails, continue fixing issues until it passes or explicitly report the blocker.
+
+## Hard Rule: E2E Regression Check Before Completion (Mandatory)
+
+Before finishing any functionality or behavior change, the agent MUST run the relevant e2e tests in background mode with `showreport off` to check for regressions in the touched flow.
+
+### Required behavior
+
+1. Start with the narrowest e2e coverage that exercises the changed path.
+2. If the e2e run finds regressions, fix them in the same task before marking the work complete.
+3. Do not mark the task complete, successful, or ready for review until the relevant e2e checks pass or are clearly blocked by an external dependency.
 
 ## Hard Rule: Decision Context Comment Blocks (Mandatory)
 

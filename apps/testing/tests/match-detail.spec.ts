@@ -190,6 +190,28 @@ async function findMatch(
 async function gotoMatchDetail(page: Page, matchId: string): Promise<void> {
   await page.goto(`${FRONTEND_URL}/partidos/${matchId}`);
   await expect(page.locator('.match-detail')).toBeVisible();
+  await waitForIslandsHydrated(page);
+}
+
+// Decision Context: las React islands del detalle (JoinTeamButton, LeaveMatchButton)
+// usan client:load. Astro renderiza el HTML del boton en el SSR pero el handler
+// onClick recien se attachea cuando la island termina de hidratar. Si Playwright
+// hace click antes de la hidratacion, el evento se dispatchea sobre un boton sin
+// listener y la mutation no se ejecuta nunca, fallando el `expect.poll(payloads.length)`
+// con timeout. El web component <astro-island> trackea su estado: mientras hidrata
+// expone el atributo `ssr` y/o `await-children`; al completar la hidratacion los
+// remueve. Esperamos a que TODAS las islands del detalle hayan terminado para que
+// los clicks aterricen sobre handlers de React reales.
+// Previously fixed bugs: tests "Sumarme por equipo" y "error inline al salir" fallaban
+// con `expected 1, received 0` porque el click se hacia antes de la hidratacion.
+async function waitForIslandsHydrated(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const islands = Array.from(document.querySelectorAll('astro-island'));
+    if (islands.length === 0) return true;
+    return islands.every(
+      (island) => !island.hasAttribute('ssr') && !island.hasAttribute('await-children'),
+    );
+  }, { timeout: 10_000 });
 }
 
 function allPlayers(match: MatchDetail): TeamMember[] {
@@ -276,8 +298,17 @@ test.describe('Detalle de Partido (/partidos/[id])', () => {
 
     await expect(page.getByText(`EQUIPO A`)).toBeVisible();
     await expect(page.getByText(`EQUIPO B`)).toBeVisible();
-    await expect(page.getByText(`${match.participants?.teamACount ?? 0} / ${Math.floor(match.totalSlots / 2)}`)).toBeVisible();
-    await expect(page.getByText(`${match.participants?.teamBCount ?? 0} / ${Math.floor(match.totalSlots / 2)}`)).toBeVisible();
+    // Scope a cada `.team-card` para evitar strict-mode violations cuando ambos
+    // equipos comparten el mismo conteo (p.ej. partido lleno con teams balanceados).
+    const spotsPerTeam = Math.floor(match.totalSlots / 2);
+    const teamACard = page.locator('.team-card').filter({ hasText: 'EQUIPO A' });
+    const teamBCard = page.locator('.team-card').filter({ hasText: 'EQUIPO B' });
+    await expect(teamACard.locator('.team-count')).toHaveText(
+      `${match.participants?.teamACount ?? 0} / ${spotsPerTeam}`,
+    );
+    await expect(teamBCard.locator('.team-count')).toHaveText(
+      `${match.participants?.teamBCount ?? 0} / ${spotsPerTeam}`,
+    );
 
     for (const player of allPlayers(match).slice(0, 4)) {
       await expect(page.getByText(player.displayName).first()).toBeVisible();

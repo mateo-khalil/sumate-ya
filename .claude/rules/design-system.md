@@ -100,6 +100,79 @@ The color system is defined in `apps/frontend/src/styles/globals.css`. **Never i
 | Muted Text         | —                   | `muted-foreground`       | —                   |
 | Error State        | `destructive`       | `destructive-foreground` | —                   |
 
+## Iconography (MANDATORY)
+
+**NEVER use emojis in the UI.** Emojis render inconsistently across operating systems, fonts, and screen readers, and they break the FIFA stadium aesthetic. Use **lucide-react** SVG icons exclusively.
+
+### Rules
+
+1. **ALWAYS use icons from `lucide-react`** for any icon, glyph, or pictogram in the UI (navbar logos, banner status icons, button affordances, sidebar menu items, position markers, empty-state illustrations, loading spinners, etc.).
+2. **NEVER use emoji characters** (⚽, ✓, ✗, ⚠, 📍, 🗺️, 📅, 👥, 🏟️, 🟡, ✅, ❌, 🔒, 🔑, 🏗️, 🧤, 🛡️, ⚡, 🎯, ☰, etc.) in JSX, Astro templates, or string content rendered to users.
+3. **NEVER inline raw `<svg>` markup** for stock icons that already exist in lucide-react — import the React component instead so size/strokeWidth/color stay consistent.
+4. **NEVER add a different icon library** (Heroicons, Material Icons, FontAwesome, react-icons, etc.). One library keeps the bundle lean and the visual language uniform.
+
+### Usage in `.tsx` (React)
+
+```tsx
+import { Calendar, MapPin } from 'lucide-react';
+
+<Calendar size={18} strokeWidth={2} aria-hidden="true" />
+```
+
+### Usage in `.astro` (Astro pages and components)
+
+Astro renders React components statically when no `client:*` directive is used — so lucide icons ship as inline SVG with **zero JS cost**.
+
+```astro
+---
+import { Volleyball } from 'lucide-react';
+---
+<span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
+```
+
+### Sizing & color
+
+- Default sizes: `14` (inline with text), `16` (sidebar/list items), `18` (banner/stat row), `20` (navbar/brand), `28+` (hero/empty states).
+- Default `strokeWidth`: `2` (regular), `2.25–2.5` (small icons that need more weight).
+- Color comes from `currentColor` — set the wrapper's `color` to a theme token (`hsl(35 100% 55%)` orange, `hsl(216 85% 65%)` blue, `hsl(42 100% 60%)` gold, etc.) instead of hardcoding fills on the SVG.
+- Wrap inline icons in a `display: inline-flex; align-items: center;` span so they align with adjacent text.
+
+### Accessibility
+
+- Decorative icons: `aria-hidden="true"`.
+- Standalone icon-only buttons (no visible label): add `aria-label` with the action.
+- Status icons paired with text (banners, badges) stay `aria-hidden` — the surrounding text already conveys meaning.
+
+### Picking the right icon
+
+Common mappings used in the codebase — reuse these to keep the visual language consistent:
+
+| Concept | Icon |
+| --- | --- |
+| Brand / soccer ball | `Volleyball` |
+| Calendar / date | `Calendar` |
+| Players / team | `Users` |
+| Location pin | `MapPin` |
+| Map view | `Map` |
+| Success / check | `Check`, `CheckCircle` |
+| Failure / dismiss | `X`, `XCircle` |
+| Warning | `TriangleAlert` |
+| Locked / full | `Lock` |
+| Login key | `Key` |
+| In progress | `Activity` |
+| Goalkeeper | `Hand` |
+| Defender | `Shield` |
+| Midfielder | `Zap` |
+| Forward | `Target` |
+| Stadium / club | `Landmark` |
+| Stats / charts | `BarChart3` |
+| Construction / coming soon | `Construction` |
+| Loading spinner | `Loader2` (with `animation: spin`) |
+| List view toggle | `List` |
+| Geolocate | `LocateFixed` |
+
+If a needed icon is not in the table, search lucide.dev and add it to the table once used.
+
 ## Accessibility
 
 - Ensure sufficient contrast ratios (WCAG AA minimum)

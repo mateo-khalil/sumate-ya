@@ -118,6 +118,7 @@ export interface MatchDetailData {
     lat: number | null;
     lng: number | null;
     phone: string | null;
+    imageUrl: string | null;
   } | null;
   participants: MatchParticipantsData | null;
   isCurrentUserJoined: boolean | null;
@@ -165,6 +166,7 @@ export const GET_MATCHES = /* GraphQL */ `
       club {
         name
         zone
+        imageUrl
       }
     }
   }
@@ -191,6 +193,7 @@ export const GET_MATCHES_WITH_COORDS = /* GraphQL */ `
         address
         lat
         lng
+        imageUrl
       }
     }
   }
@@ -285,6 +288,7 @@ export const GET_MATCH_DETAIL = /* GraphQL */ `
         lat
         lng
         phone
+        imageUrl
       }
       participants {
         teamA { id displayName avatarUrl preferredPosition }

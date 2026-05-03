@@ -4,15 +4,24 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "pretest": "bash ../../scripts/kill-dev-ports.sh",
     "test": "playwright test",
-    "test:headed": "playwright test --headed"
+    "pretest:headed": "bash ../../scripts/kill-dev-ports.sh",
+    "test:headed": "playwright test --headed",
+    "seed": "ts-node scripts/seed.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.101.1",
+    "dotenv": "^17.4.1"
+  },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "@types/node": "^25.6.0"
+    "@types/node": "^25.6.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
   }
 }

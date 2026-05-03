@@ -154,8 +154,16 @@ async function gotoCreateMatch(page: Page): Promise<void> {
 async function selectFirstClubAndContinue(page: Page): Promise<void> {
   const firstClub = page.locator('.club-card').first();
   await expect(firstClub).toBeVisible();
+  // Esperamos a que la React island del wizard este hidratada antes de hacer clic.
+  // El wizard se renderiza con `client:load`, pero la primera visita a /partidos/crear
+  // puede tardar segundos en hidratar (Vite compila on-demand) y los clicks anteriores
+  // a la hidratacion no disparan el onClick — por eso polleamos `aria-pressed` que la
+  // React component setea cuando el club queda seleccionado.
   await firstClub.click();
-  await page.getByRole('button', { name: /continuar/i }).click();
+  await expect(firstClub).toHaveAttribute('aria-pressed', 'true');
+  const continueBtn = page.getByRole('button', { name: /continuar/i });
+  await expect(continueBtn).toBeEnabled();
+  await continueBtn.click();
   await expect(page.getByLabel(/fecha del partido/i)).toBeVisible();
 }
 

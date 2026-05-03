@@ -10,10 +10,18 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * Decision Context:
- * - `screenshot: 'only-on-failure'` captures a PNG of the failing page into the
- *   HTML report / test-results dir. We now run with `screenshot: 'on'` and
- *   `video: 'on'` so every execution includes visual artifacts in the HTML
- *   report, which makes debugging non-deterministic UI issues easier.
+ * - `screenshot: 'only-on-failure'` and `video: 'retain-on-failure'` — we keep
+ *   visual evidence ONLY when a test fails. We previously ran with
+ *   `screenshot: 'on'` and `video: 'on'` to always have artifacts, but that hit
+ *   the known Playwright hang documented in microsoft/playwright#27048: with
+ *   `video: 'on'` + nested describe blocks + per-test browser context (Playwright
+ *   defaults) + `mode: 'serial'`, the worker reliably wedges on the LAST test in
+ *   the serial chain while flushing/finalizing video recordings. In our suite
+ *   this manifested as profile-avatar-upload's "permite cerrar el modal" test
+ *   (the 8th and final test of a serial describe) hanging indefinitely while
+ *   ports stayed alive and the dev server kept responding to other workers.
+ *   Switching to on-failure capture eliminates the per-test video flush that
+ *   triggers the bug while preserving evidence on actual failures.
  * - `webServer` boots `npm run dev` from the monorepo root (two levels up from
  *   `apps/testing`) so Playwright brings up frontend + backend (turbo dev) before
  *   any spec runs. The frontend serves on :4321 — we wait on that URL because the
@@ -22,21 +30,53 @@ import { defineConfig, devices } from '@playwright/test';
  *   up, we don't double-boot); CI always gets a fresh stack.
  * - `timeout: 180_000` — turbo dev cold-start (install + codegen + Astro + Apollo)
  *   can take well over a minute on first run; the default 60s was flaky.
+ * - WebServer output is redirected to `apps/testing/server.log` via shell redirection
+ *   inside the command (`> file 2>&1`), and Playwright's `stdout`/`stderr` are set
+ *   to `'ignore'`. Otherwise turbo dev would flood the test reporter output with
+ *   `[WebServer]`-prefixed lines (Astro/Apollo/Redis logs) and bury the actual test
+ *   results. Tail `apps/testing/server.log` to debug a failing test's server side.
+ *   The file is overwritten on every run (single `>`) so it never grows unbounded.
  * - Single `chrome` project (channel: 'chrome') — we intentionally target only
  *   Google Chrome. Firefox/WebKit were dropped because our user base runs Chrome
  *   and cross-browser runs tripled CI time without catching real regressions.
  *   Using `channel: 'chrome'` pins the real Chrome build rather than bare
  *   chromium, so what CI tests matches what users actually run.
- * - Previously fixed bugs: none relevant.
+ * - `workers: 4` (locally) — Playwright is backed by Astro's dev server which is
+ *   single-thread JS plus on-demand Vite compilation. Eight Chrome workers all
+ *   issuing concurrent SSR/`/api/graphql` requests saturated the dev server and
+ *   produced multi-minute action hangs (notably profile-avatar-upload [54/60] /
+ *   [81/90] sat indefinitely on `click()` because `actionTimeout: 0` lets actions
+ *   wait the full test timeout). Four workers keeps things parallel without
+ *   starving the dev stack.
+ * - `actionTimeout: 15_000` and `navigationTimeout: 30_000` — the Playwright
+ *   defaults are `0` (= cap at test timeout, 90s). With explicit caps a stuck
+ *   action fails fast with a real error ("element not actionable") instead of
+ *   appearing to hang for 90s+. This is what surfaced the dev-server saturation
+ *   bug above and prevents a single flaky action from looking like a frozen run.
+ * - Previously fixed bugs:
+ *   1. profile-avatar-upload close-modal test sitting at [81/90] for 5+ minutes
+ *      when the dev server was overwhelmed by 8 workers — action waits had no
+ *      upper bound and Playwright never surfaced the underlying slow-response
+ *      error. Fixed by `actionTimeout: 15_000` + `workers: 4`.
+ *   2. SAME test then sat at [84/90] permanently with workers=4 — root cause
+ *      was the microsoft/playwright#27048 hang, not dev server saturation. The
+ *      `video: 'on'` + nested-describe + serial pattern wedged worker teardown
+ *      on the last test of the chain. Fixed by switching to on-failure capture.
  */
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const SERVER_LOG = path.resolve(__dirname, 'server.log');
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
   testDir: './tests',
+  /* Seed determinista de fixtures de DB antes de cualquier test. Garantiza que los
+   * casos de match-detail.spec.ts no se queden en `test.skip` por falta de data
+   * (usuario inscripto / partido completo). El script es idempotente y se ejecuta
+   * con ts-node desde apps/testing/scripts/seed.ts. */
+  globalSetup: require.resolve('./scripts/seed'),
   /* Keep the test budget above the assertion budget so slow UI waits can finish cleanly. */
   timeout: 90_000,
   /* Run tests in files in parallel */
@@ -45,8 +85,16 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Opt out of parallel tests on CI. Locally we cap at 4 to avoid saturating Astro's
+   * single-thread dev server (see decision context above).
+   *
+   * Decision Context (2026-05-03): bajamos de 8 → 4 workers porque con 8 workers el
+   * dev server de Astro/Apollo se saturaba y producia hangs multi-minuto en el ULTIMO
+   * test de las describes en `serial mode` (concretamente match-detail.spec.ts:383
+   * quedaba colgado ~5 min). El comentario del bloque arriba ya documentaba `workers:4`
+   * como el valor correcto, pero el codigo decia 8 — fix incoherencia.
+   * Previously fixed bugs: see #1 in the Decision Context block above (test 91/91 hang). */
+  workers: process.env.CI ? 1 : 4,
   /* Give UI assertions enough time for Astro islands + GraphQL mocks to settle. */
   expect: {
     timeout: 30_000,
@@ -61,9 +109,16 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
 
-    /* Always attach screenshots and videos so the HTML report has full visual evidence. */
-    screenshot: 'on',
-    video: 'on',
+    /* Capture visual evidence ONLY when a test fails. `screenshot: 'on'` +
+     * `video: 'on'` triggers the microsoft/playwright#27048 hang on the last
+     * test of a nested+serial describe (see decision context above). */
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+
+    /* Explicit upper bounds so a stuck action surfaces as a fast actionable error
+     * instead of hanging until the 90s test timeout (see decision context). */
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
   },
 
   /* Run tests only in Google Chrome. */
@@ -76,12 +131,12 @@ export default defineConfig({
 
   /* Boot the full monorepo dev stack (turbo dev) from the repo root before tests run. */
   webServer: {
-    command: 'npm run dev',
+    command: `npm run dev > "${SERVER_LOG}" 2>&1`,
     cwd: REPO_ROOT,
     url: 'http://localhost:4321',
     reuseExistingServer: !process.env.CI,
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdout: 'ignore',
+    stderr: 'ignore',
     timeout: 180_000,
   },
 });

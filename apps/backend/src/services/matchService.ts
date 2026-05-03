@@ -14,8 +14,17 @@
  *   raw DB rows.
  * - Filter mapping: GraphQL enums (FIVE_VS_FIVE) are mapped to DB values (5v5) via lookup
  *   tables. This keeps the API clean while matching legacy DB schema.
- * - `availableSlots` is currently `capacity` — participant counting is a TODO that requires
- *   joining `matchPlayers`. Do NOT ship join logic without adding RLS policies for that table.
+ * - `availableSlots` on list rows = `capacity − matchParticipants(count)`. The repo selects
+ *   the relation aggregate `matchParticipants(count)` so list cards render real availability
+ *   without an N+1 fan-out on participants. Detail path uses the actual participant list
+ *   (already loaded for the team rosters).
+ * - `effectiveStatus()` collapses stale 'open'/'full' DB rows whose scheduledAt has passed
+ *   into COMPLETED at presentation time. There is no scheduler that flips that column today,
+ *   so without this override the list and detail page were rendering past matches as
+ *   "Abierto" with a working "Sumarme" button.
+ * - List ordering (`listMatches`): future + active (OPEN/FULL) sorted ASC by scheduledAt,
+ *   then past/cancelled below sorted DESC (most-recent first). Active matches must dominate
+ *   the first screen.
  * - Uses generated GraphQL `Match` type so schema changes break this file at build time.
  * - Previously fixed bugs: removed ad-hoc console.log debugging that ran on every request —
  *   those were left from initial scaffolding and polluted prod logs.
@@ -92,16 +101,40 @@ const DB_TO_STATUS: Record<string, MatchStatus> = {
 // Data Transformation (DB row -> GraphQL contract)
 // =====================================================
 
+/**
+ * Decide the user-facing status for a match.
+ *
+ * Why: the DB transitions from 'open' → 'full' on the last join, but it never auto-flips
+ * to 'completed' once the scheduled time passes — there is no scheduler doing that today.
+ * The match detail and list previously rendered such past matches as "Abierto" with a
+ * green "Sumarme" button, even though nobody could actually play them anymore. We override
+ * those stale 'open'/'full' rows to COMPLETED here at presentation time so the contract
+ * stays correct without needing a background job. CANCELLED, IN_PROGRESS, and explicit
+ * COMPLETED rows are passed through untouched.
+ */
+function effectiveStatus(dbStatus: string, scheduledAt: string): MatchStatus {
+  const mapped = DB_TO_STATUS[dbStatus] ?? MatchStatus.Open;
+  if (mapped === MatchStatus.Open || mapped === MatchStatus.Full) {
+    if (new Date(scheduledAt).getTime() < Date.now()) {
+      return MatchStatus.Completed;
+    }
+  }
+  return mapped;
+}
+
 function toMatch(row: MatchWithClub): Match {
+  // PostgREST returns matchParticipants(count) as a single-element array `[{ count: N }]`.
+  // Older cached rows (pre-fix) may not have this field — default to 0 then so the UI
+  // doesn't show NaN until the cache rolls over (3-min TTL).
+  const participantCount = row.matchParticipants?.[0]?.count ?? 0;
   return {
     id: row.id,
     title: row.description ?? 'Partido sin título',
     startTime: row.scheduledAt,
     format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
     totalSlots: row.capacity,
-    // TODO: subtract `matchPlayers` count once participants are modelled
-    availableSlots: row.capacity,
-    status: DB_TO_STATUS[row.status] ?? MatchStatus.Open,
+    availableSlots: Math.max(0, row.capacity - participantCount),
+    status: effectiveStatus(row.status, row.scheduledAt),
     createdAt: row.createdAt,
     club: row.clubs
       ? {
@@ -111,6 +144,7 @@ function toMatch(row: MatchWithClub): Match {
           address: row.clubs.address ?? null,
           lat: row.clubs.lat ?? null,
           lng: row.clubs.lng ?? null,
+          imageUrl: row.clubs.imageUrl ?? null,
           // phone is not fetched by CLUB_COLUMNS (list path) — omitted intentionally.
         }
       : null,
@@ -174,7 +208,25 @@ export async function listMatches(
     CACHE_TTL.DYNAMIC_DATA,
   );
 
-  return matches.map(toMatch);
+  // Prioritize active matches (still joinable, in the future) over past/cancelled ones.
+  //
+  // Decision Context:
+  // - Why: a stale 'open' DB row whose scheduledAt is in the past is rendered as COMPLETED
+  //   by toMatch (see effectiveStatus). Without this sort it would still appear at the top
+  //   of the list ordered by scheduledAt ASC, displacing real upcoming matches. The user
+  //   reported this as a UX bug — old games drowning out the active ones.
+  // - Sort key: (isActive desc, scheduledAt asc-for-active / desc-for-past). Active matches
+  //   are ordered soonest-first; past matches are ordered most-recent-first so users still
+  //   see context but they sit at the bottom of the list.
+  const mapped = matches.map(toMatch);
+  return mapped.sort((a, b) => {
+    const aActive = a.status === MatchStatus.Open || a.status === MatchStatus.Full;
+    const bActive = b.status === MatchStatus.Open || b.status === MatchStatus.Full;
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    const aTime = new Date(a.startTime).getTime();
+    const bTime = new Date(b.startTime).getTime();
+    return aActive ? aTime - bTime : bTime - aTime;
+  });
 }
 
 /**
@@ -258,14 +310,20 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
     ? (userParticipant.team === 'a' ? MatchTeam.A : MatchTeam.B)
     : null;
 
+  // effectiveStatus collapses stale 'open'/'full' DB rows whose scheduledAt has already
+  // passed into COMPLETED — see the helper docstring. canJoin must mirror that override
+  // so the detail page never shows a join button for a match that is effectively over.
+  const status = effectiveStatus(row.status, row.scheduledAt);
+  const isPlayable = status === MatchStatus.Open;
+
   return {
     id: row.id,
     title: row.description ?? 'Partido sin título',
     startTime: row.scheduledAt,
     format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
     totalSlots: row.capacity,
-    availableSlots: row.capacity - totalCount,
-    status: DB_TO_STATUS[row.status] ?? MatchStatus.Open,
+    availableSlots: Math.max(0, row.capacity - totalCount),
+    status,
     createdAt: row.createdAt,
     description: row.description ?? null,
     organizerId: row.organizerId ?? null,
@@ -279,6 +337,7 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
           lat: row.clubs.lat ?? null,
           lng: row.clubs.lng ?? null,
           phone: row.clubs.phone ?? null,
+          imageUrl: row.clubs.imageUrl ?? null,
         }
       : null,
     participants: {
@@ -291,7 +350,7 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
       spotsLeftB: Math.max(0, spotsPerTeam - teamB.length),
     },
     isCurrentUserJoined,
-    canJoin: !!userId && row.status === 'open' && !isCurrentUserJoined && totalCount < row.capacity,
+    canJoin: !!userId && isPlayable && !isCurrentUserJoined && totalCount < row.capacity,
   };
 }
 

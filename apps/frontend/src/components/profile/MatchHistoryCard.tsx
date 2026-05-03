@@ -15,6 +15,7 @@
  * - Previously fixed bugs: none relevant.
  */
 
+import { MapPin } from 'lucide-react';
 import type { MatchHistoryItem, MatchUserResult } from '../../graphql/operations/profile';
 
 interface MatchHistoryCardProps {
@@ -61,7 +62,7 @@ export function MatchHistoryCard({ item }: MatchHistoryCardProps) {
       {/* Club info */}
       {item.club && (
         <div style={clubRowStyle}>
-          <span style={clubIconStyle}>📍</span>
+          <span style={clubIconStyle}><MapPin size={12} strokeWidth={2.25} aria-hidden="true" /></span>
           <span style={clubNameStyle}>{item.club.name}</span>
           {item.club.zone && <span style={clubZoneStyle}>· {item.club.zone}</span>}
         </div>
@@ -145,8 +146,9 @@ const clubRowStyle: React.CSSProperties = {
 };
 
 const clubIconStyle: React.CSSProperties = {
-  fontSize: '0.75rem',
-  lineHeight: 1,
+  display: 'inline-flex',
+  alignItems: 'center',
+  color: 'hsl(0 72% 65%)',
 };
 
 const clubNameStyle: React.CSSProperties = {

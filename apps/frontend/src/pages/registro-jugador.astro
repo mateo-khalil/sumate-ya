@@ -17,6 +17,7 @@
  */
 export const prerender = false;
 
+import { Volleyball, TriangleAlert } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
 import {
   readAccessToken,
@@ -77,7 +78,7 @@ if (Astro.request.method === 'POST') {
 
       <div class="reg-header">
         <div class="brand-lockup">
-          <span>⚽</span>
+          <span class="brand-icon"><Volleyball size={28} strokeWidth={2} aria-hidden="true" /></span>
           <h1 class="brand-name">SUMATE YA</h1>
         </div>
         <p class="reg-subtitle">Registrate y sumate a los partidos</p>
@@ -85,7 +86,7 @@ if (Astro.request.method === 'POST') {
 
       {globalError && (
         <div class="error-banner" role="alert">
-          <span>⚠</span> {globalError}
+          <span class="error-icon"><TriangleAlert size={16} strokeWidth={2.25} aria-hidden="true" /></span> {globalError}
         </div>
       )}
 
@@ -225,6 +226,8 @@ if (Astro.request.method === 'POST') {
     gap: 0.5rem;
     margin-bottom: 0.5rem;
   }
+  .brand-icon { display: inline-flex; color: hsl(35 100% 55%); line-height: 1; }
+  .error-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
 
   .brand-name {
     font-family: 'Bebas Neue', sans-serif;

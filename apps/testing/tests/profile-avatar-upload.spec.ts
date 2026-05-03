@@ -218,14 +218,23 @@ test.describe('Subida de foto de perfil (/perfil)', () => {
       await expect(page.getByRole('button', { name: /subir foto/i })).toBeEnabled();
     });
 
+    /**
+     * Decision Context:
+     * - This test only verifies the close affordance works. The "select file +
+     *   preview" path is already exhaustively covered by the first test in this
+     *   describe block, so re-running it here was pure setup cost (canvas
+     *   compression for the data-URL preview, plus a `toBeVisible()` poll) on a
+     *   test that does not assert anything about the preview.
+     * - We assert `toBeHidden()` against `#close-modal-btn` (a stable id) instead
+     *   of double-checking `dialog.not.toBeVisible()` AND `toHaveClass(/hidden/)`.
+     *   The CSS rule `.modal-overlay.hidden { visibility: hidden }` is what
+     *   actually hides the dialog, so a single visibility-aware assertion is the
+     *   behavioral truth — class-name checking was an implementation detail.
+     * - Previously fixed bugs: none relevant.
+     */
     test('permite cerrar el modal sin subir imagen', async ({ page }) => {
-      await chooseValidPng(page);
-      await expect(page.getByAltText(/vista previa/i)).toBeVisible();
-
-      await page.getByRole('button', { name: /cerrar modal/i }).click();
-
-      await expect(page.getByRole('dialog')).not.toBeVisible();
-      await expect(page.locator('#avatar-upload-modal')).toHaveClass(/hidden/);
+      await page.locator('#close-modal-btn').click();
+      await expect(page.locator('#avatar-upload-modal')).toBeHidden();
     });
   });
 });

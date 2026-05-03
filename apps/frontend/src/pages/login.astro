@@ -11,6 +11,7 @@
  */
 export const prerender = false;
 
+import { Volleyball, Check, TriangleAlert } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
 import {
   ACCESS_TOKEN_COOKIE,
@@ -96,7 +97,7 @@ if (Astro.request.method === 'POST') {
     <div class="login-card">
       <div class="login-header">
         <div class="brand-lockup">
-          <span class="brand-icon">⚽</span>
+          <span class="brand-icon"><Volleyball size={28} strokeWidth={2} aria-hidden="true" /></span>
           <h1 class="brand-name">SUMATE YA</h1>
         </div>
         <p class="login-subtitle">Iniciá sesión para continuar</p>
@@ -105,7 +106,7 @@ if (Astro.request.method === 'POST') {
       {
         registered && (
           <div class="success-banner" role="status">
-            <span>✓</span>
+            <span class="success-icon"><Check size={16} strokeWidth={2.5} aria-hidden="true" /></span>
             <span>Registro exitoso. Ya podés iniciar sesión.</span>
           </div>
         )
@@ -114,7 +115,7 @@ if (Astro.request.method === 'POST') {
       {
         errorMessage && (
           <div class="error-banner" role="alert">
-            <span class="error-icon">⚠</span>
+            <span class="error-icon"><TriangleAlert size={16} strokeWidth={2.25} aria-hidden="true" /></span>
             <span>{errorMessage}</span>
           </div>
         )
@@ -241,8 +242,14 @@ if (Astro.request.method === 'POST') {
   }
 
   .brand-icon {
-    font-size: 1.75rem;
     line-height: 1;
+    display: inline-flex;
+    color: hsl(35 100% 55%);
+  }
+  .success-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
   }
 
   .brand-name {
@@ -280,6 +287,8 @@ if (Astro.request.method === 'POST') {
 
   .error-icon {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
   }
 
   /* ---- Form fields ---- */

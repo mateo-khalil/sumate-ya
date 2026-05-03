@@ -34,6 +34,16 @@
  */
 export const prerender = false;
 
+import {
+  Volleyball,
+  Check,
+  TriangleAlert,
+  Lock,
+  XCircle,
+  CheckCircle,
+  Key,
+  Activity,
+} from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import JoinTeamButton from '../../components/matches/JoinTeamButton.tsx';
 import LeaveMatchButton from '../../components/matches/LeaveMatchButton.tsx';
@@ -99,6 +109,17 @@ const matchOpen = match?.status === 'OPEN';
 const matchCancelled = match?.status === 'CANCELLED';
 const matchInProgress = match?.status === 'IN_PROGRESS';
 const matchCompleted = match?.status === 'COMPLETED';
+// Decision Context: el estado "completo" se deriva del status FULL del backend O del
+// hecho de que no queden cupos. La DB puede devolver una fila con status='open' pero
+// participantes == capacity (p.ej. cuando el seed inserta participantes directos sin
+// pasar por joinMatch que es quien actualiza a 'full'). Para evitar mostrar CTAs de
+// "Sumarme" o banners equivocados en ese borde, tratamos availableSlots === 0 como
+// equivalente a FULL en toda la pagina.
+// Previously fixed bugs: el banner "Este partido está completo" y el badge PARTIDO
+// COMPLETO solo aparecian con status === 'FULL', dejando un partido sin cupos pero
+// status='open' sin ninguna senal visual de "completo".
+const matchFull = match?.status === 'FULL' || (match != null && match.availableSlots === 0 && matchOpen);
+const matchJoinable = matchOpen && !matchFull;
 const currentUserTeam = match?.currentUserTeam ?? null;
 
 // Show result section when the match has already taken place:
@@ -128,7 +149,7 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
       <div class="topbar-inner">
         <div class="topbar-brand">
           <a href="/partidos" class="topbar-home">
-            <span>⚽</span>
+            <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
             <span class="topbar-name">SUMATE YA</span>
           </a>
         </div>
@@ -182,7 +203,7 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
                CANCELLED matches block leaveMatch server-side — never show the button there. -->
           {isJoined && !matchCancelled && (
             <div class="banner banner--joined" role="status">
-              <span class="banner-icon">✓</span>
+              <span class="banner-icon"><Check size={18} strokeWidth={2.5} aria-hidden="true" /></span>
               <div class="banner-body">
                 <span class="banner-msg">
                   Ya estás anotado en Equipo {currentUserTeam === 'A' ? 'A' : 'B'}
@@ -202,16 +223,16 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
 
           {isJoined && matchCancelled && (
             <div class="banner banner--enrolled-cancelled" role="status">
-              <span class="banner-icon">⚠️</span>
+              <span class="banner-icon"><TriangleAlert size={18} strokeWidth={2.25} aria-hidden="true" /></span>
               <span class="banner-msg">
                 Estabas anotado en Equipo {currentUserTeam === 'A' ? 'A' : 'B'}, pero este partido fue cancelado.
               </span>
             </div>
           )}
 
-          {!isJoined && matchOpen && canJoin && isPlayer && (
+          {!isJoined && matchJoinable && canJoin && isPlayer && (
             <div class="banner banner--open" role="status">
-              <span class="banner-icon">⚽</span>
+              <span class="banner-icon"><Volleyball size={18} strokeWidth={2} aria-hidden="true" /></span>
               <span class="banner-msg">
                 Hay {match.availableSlots} cupo{match.availableSlots !== 1 ? 's' : ''} disponible{match.availableSlots !== 1 ? 's' : ''}.
                 Elegí tu equipo abajo.
@@ -219,16 +240,16 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
             </div>
           )}
 
-          {!isJoined && match.status === 'FULL' && (
+          {!isJoined && matchFull && (
             <div class="banner banner--full" role="status">
-              <span class="banner-icon">🔒</span>
+              <span class="banner-icon"><Lock size={18} strokeWidth={2.25} aria-hidden="true" /></span>
               <span class="banner-msg">Este partido está completo</span>
             </div>
           )}
 
           {!isJoined && matchCancelled && (
             <div class="banner banner--cancelled" role="alert">
-              <span class="banner-icon">❌</span>
+              <span class="banner-icon"><XCircle size={18} strokeWidth={2.25} aria-hidden="true" /></span>
               <span class="banner-msg">Este partido fue cancelado</span>
             </div>
           )}
@@ -236,21 +257,21 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
           <!-- P4 fix: banners para IN_PROGRESS y COMPLETED -->
           {matchInProgress && (
             <div class="banner banner--inprogress" role="status">
-              <span class="banner-icon">🟡</span>
+              <span class="banner-icon"><Activity size={18} strokeWidth={2.25} aria-hidden="true" /></span>
               <span class="banner-msg">Este partido está en curso</span>
             </div>
           )}
 
           {matchCompleted && (
             <div class="banner banner--completed" role="status">
-              <span class="banner-icon">✅</span>
+              <span class="banner-icon"><CheckCircle size={18} strokeWidth={2.25} aria-hidden="true" /></span>
               <span class="banner-msg">Este partido ya finalizó</span>
             </div>
           )}
 
-          {!user && matchOpen && (
+          {!user && matchJoinable && (
             <div class="banner banner--auth" role="status">
-              <span class="banner-icon">🔑</span>
+              <span class="banner-icon"><Key size={18} strokeWidth={2.25} aria-hidden="true" /></span>
               <span class="banner-msg">
                 <a href="/login" class="banner-link">Iniciá sesión</a> para sumarte a este partido
               </span>
@@ -289,14 +310,14 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
                   ))}
                 </ul>
                 <div class="team-cta">
-                  {!user && matchOpen && <a href="/login" class="cta-link">Iniciá sesión para sumarte</a>}
+                  {!user && matchJoinable && <a href="/login" class="cta-link">Iniciá sesión para sumarte</a>}
                   {user && !isPlayer && <p class="cta-disabled">Solo jugadores pueden sumarse</p>}
                   {isPlayer && isJoined && (
                     teamA.some((p) => p.id === user?.id)
-                      ? <p class="cta-in-team">✓ Estás en este equipo</p>
+                      ? <p class="cta-in-team"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Estás en este equipo</p>
                       : <p class="cta-disabled">Ya estás en el Equipo B</p>
                   )}
-                  {isPlayer && !isJoined && matchOpen && (
+                  {isPlayer && !isJoined && matchJoinable && (
                     <JoinTeamButton
                       client:load
                       matchId={match.id}
@@ -307,7 +328,7 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
                       accessToken={accessToken}
                     />
                   )}
-                  {!matchOpen && !isJoined && <p class="cta-disabled">{matchCancelled ? 'Cancelado' : 'Completo'}</p>}
+                  {!matchJoinable && !isJoined && <p class="cta-disabled">{matchCancelled ? 'Cancelado' : 'Completo'}</p>}
                 </div>
               </div>
 
@@ -328,14 +349,14 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
                   ))}
                 </ul>
                 <div class="team-cta">
-                  {!user && matchOpen && <a href="/login" class="cta-link">Iniciá sesión para sumarte</a>}
+                  {!user && matchJoinable && <a href="/login" class="cta-link">Iniciá sesión para sumarte</a>}
                   {user && !isPlayer && <p class="cta-disabled">Solo jugadores pueden sumarse</p>}
                   {isPlayer && isJoined && (
                     teamB.some((p) => p.id === user?.id)
-                      ? <p class="cta-in-team">✓ Estás en este equipo</p>
+                      ? <p class="cta-in-team"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Estás en este equipo</p>
                       : <p class="cta-disabled">Ya estás en el Equipo A</p>
                   )}
-                  {isPlayer && !isJoined && matchOpen && (
+                  {isPlayer && !isJoined && matchJoinable && (
                     <JoinTeamButton
                       client:load
                       matchId={match.id}
@@ -346,7 +367,7 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
                       accessToken={accessToken}
                     />
                   )}
-                  {!matchOpen && !isJoined && <p class="cta-disabled">{matchCancelled ? 'Cancelado' : 'Completo'}</p>}
+                  {!matchJoinable && !isJoined && <p class="cta-disabled">{matchCancelled ? 'Cancelado' : 'Completo'}</p>}
                 </div>
               </div>
 
@@ -428,7 +449,9 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
     border-radius: 10px; padding: 0.9rem 1.25rem;
     font-family: 'Barlow', sans-serif; font-size: 0.9rem;
   }
-  .banner-icon { font-size: 1.1rem; line-height: 1.4; flex-shrink: 0; }
+  .banner-icon { line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; padding-top: 0.1rem; }
+  .topbar-ball { line-height: 1; display: inline-flex; color: hsl(35 100% 55%); }
+  .cta-in-team :global(svg) { vertical-align: middle; margin-right: 0.2rem; display: inline-block; }
   .banner-body { display: flex; flex-direction: column; gap: 0.65rem; }
   .banner-msg { color: inherit; }
   .banner-link { color: inherit; font-weight: 700; text-decoration: underline; }

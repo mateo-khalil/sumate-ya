@@ -40,13 +40,16 @@ const MATCH_COLUMNS = `
 `;
 
 // Used by list queries (matches, search) — omits phone to keep egress minimal.
+// imageUrl included so list cards (MatchCard) can render the club avatar without a
+// second round-trip; the column is small (TEXT, ~100B) and required by every list view.
 const CLUB_COLUMNS = `
   id,
   name,
   zone,
   address,
   lat,
-  lng
+  lng,
+  "imageUrl"
 `;
 
 // Used only by the detail query — adds phone for the ClubLocationCard.
@@ -58,7 +61,8 @@ const CLUB_DETAIL_COLUMNS = `
   address,
   lat,
   lng,
-  phone
+  phone,
+  "imageUrl"
 `;
 
 // =====================================================
@@ -83,6 +87,7 @@ export interface ClubRow {
   address: string | null;
   lat: number | null;
   lng: number | null;
+  imageUrl: string | null;
 }
 
 /** Extended club row used only in detail queries — includes phone. */
@@ -92,6 +97,11 @@ export interface ClubDetailRow extends ClubRow {
 
 export interface MatchWithClub extends MatchRow {
   clubs: ClubRow | null;
+  // PostgREST returns relation aggregates as a single-element array shaped `[{ count: N }]`
+  // when the SELECT includes `matchParticipants(count)`. Older cached rows (pre-fix) may
+  // omit this field — service-layer mappers must default to 0 in that case so list cards
+  // don't render NaN slots while the cache warms up.
+  matchParticipants?: Array<{ count: number }>;
 }
 
 /**
@@ -136,7 +146,12 @@ export async function getMatchesWithFilters(
   // Standard query without search
   const clubJoin = filters.zone ? `clubs!inner(${CLUB_COLUMNS})` : `clubs(${CLUB_COLUMNS})`;
 
-  let query = client.from('matches').select(`${MATCH_COLUMNS}, ${clubJoin}`);
+  // matchParticipants(count) returns a relation aggregate, NOT participant rows — it lets
+  // the list query show the correct "filled/total" jugadores ratio without N+1 round-trips
+  // and without the egress cost of pulling every participant row.
+  let query = client
+    .from('matches')
+    .select(`${MATCH_COLUMNS}, ${clubJoin}, matchParticipants(count)`);
 
   // Apply status filter (default to 'open' if not provided)
   const statusFilter = filters.status || 'open';
@@ -192,7 +207,7 @@ async function getMatchesWithSearch(
   // Query 1: Search in match description
   let descriptionQuery = client
     .from('matches')
-    .select(`${MATCH_COLUMNS}, clubs(${CLUB_COLUMNS})`)
+    .select(`${MATCH_COLUMNS}, clubs(${CLUB_COLUMNS}), matchParticipants(count)`)
     .eq('status', filters.status || 'open');
 
   if (filters.format) {
@@ -212,7 +227,7 @@ async function getMatchesWithSearch(
   // Query 2: Search in club name (requires inner join)
   let clubQuery = client
     .from('matches')
-    .select(`${MATCH_COLUMNS}, clubs!inner(${CLUB_COLUMNS})`)
+    .select(`${MATCH_COLUMNS}, clubs!inner(${CLUB_COLUMNS}), matchParticipants(count)`)
     .eq('status', filters.status || 'open');
 
   if (filters.format) {
@@ -237,7 +252,7 @@ async function getMatchesWithSearch(
     // So we use inner join version for zone filtering
     let descriptionZoneQuery = client
       .from('matches')
-      .select(`${MATCH_COLUMNS}, clubs!inner(${CLUB_COLUMNS})`)
+      .select(`${MATCH_COLUMNS}, clubs!inner(${CLUB_COLUMNS}), matchParticipants(count)`)
       .eq('status', filters.status || 'open');
 
     if (filters.format) {
@@ -306,7 +321,7 @@ export async function getMatchById(
 ): Promise<MatchWithClub | null> {
   const { data, error } = await client
     .from('matches')
-    .select(`${MATCH_COLUMNS}, clubs(${CLUB_COLUMNS})`)
+    .select(`${MATCH_COLUMNS}, clubs(${CLUB_COLUMNS}), matchParticipants(count)`)
     .eq('id', id)
     .single();
 

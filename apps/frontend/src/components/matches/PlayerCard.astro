@@ -13,8 +13,20 @@
  *   at all breakpoints — the badge uses a small font (0.6rem) so it fits alongside the
  *   player name even on narrow screens without truncation.
  * - Avatar fallback: shows the first letter of displayName when avatarUrl is null.
+ * - Position icons: replaced raw emojis (🧤/🛡️/⚡/⚽) with lucide-react SVG icons
+ *   (Hand / Shield / Zap / Target). Astro statically renders React components without
+ *   client:* directive, so this stays JS-free at runtime while keeping a consistent
+ *   visual style. Emojis varied across platforms and looked unprofessional.
  * - Previously fixed bugs: none relevant.
  */
+import { Hand, Shield, Zap, Target } from 'lucide-react';
+
+const POSITION_ICON_COMPONENT: Record<string, typeof Hand> = {
+  goalkeeper: Hand, GOALKEEPER: Hand,
+  defender: Shield, DEFENDER: Shield,
+  midfielder: Zap, MIDFIELDER: Zap,
+  forward: Target, FORWARD: Target,
+};
 
 export interface PlayerCardPlayer {
   id: string;
@@ -41,23 +53,12 @@ const POSITION_LABEL: Record<string, string> = {
   FORWARD: 'Delantero',
 };
 
-const POSITION_ICON: Record<string, string> = {
-  goalkeeper: '🧤',
-  defender: '🛡️',
-  midfielder: '⚡',
-  forward: '⚽',
-  GOALKEEPER: '🧤',
-  DEFENDER: '🛡️',
-  MIDFIELDER: '⚡',
-  FORWARD: '⚽',
-};
-
 const posLabel = player.preferredPosition
   ? (POSITION_LABEL[player.preferredPosition] ?? player.preferredPosition)
   : null;
-const posIcon = player.preferredPosition
-  ? (POSITION_ICON[player.preferredPosition] ?? '')
-  : '';
+const PosIcon = player.preferredPosition
+  ? (POSITION_ICON_COMPONENT[player.preferredPosition] ?? null)
+  : null;
 
 function initial(name: string) {
   return name.charAt(0).toUpperCase();
@@ -77,7 +78,10 @@ function initial(name: string) {
       {isOrganizer && <span class="badge-organizer">Organizador</span>}
     </div>
     {posLabel && (
-      <span class="player-position">{posIcon} {posLabel}</span>
+      <span class="player-position">
+        {PosIcon && <PosIcon size={12} strokeWidth={2.25} aria-hidden="true" />}
+        {posLabel}
+      </span>
     )}
   </div>
 </li>
@@ -159,5 +163,11 @@ function initial(name: string) {
     font-family: 'Barlow', sans-serif;
     font-size: 0.72rem;
     color: hsl(215 20% 50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .player-position :global(svg) {
+    color: hsl(215 20% 60%);
   }
 </style>

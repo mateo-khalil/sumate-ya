@@ -17,6 +17,7 @@
  */
 
 import { useState } from 'react';
+import { Landmark } from 'lucide-react';
 import { MatchHistoryCard } from './MatchHistoryCard';
 import {
   GET_MY_MATCHES,
@@ -82,7 +83,7 @@ export function MatchHistoryList({ initialData, backendUrl, accessToken }: Match
   if (initialData.items.length === 0) {
     return (
       <div style={emptyStyle}>
-        <span style={emptyIconStyle}>🏟️</span>
+        <span style={emptyIconStyle}><Landmark size={32} strokeWidth={1.75} aria-hidden="true" /></span>
         <p style={emptyTitleStyle}>Aún no tenés partidos jugados</p>
         <p style={emptySubStyle}>
           Tus partidos completados aparecerán aquí con el resultado y el puntaje.
@@ -199,8 +200,10 @@ const emptyStyle: React.CSSProperties = {
 };
 
 const emptyIconStyle: React.CSSProperties = {
-  fontSize: '2rem',
-  lineHeight: 1,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'hsl(215 20% 45%)',
   marginBottom: '0.25rem',
 };
 

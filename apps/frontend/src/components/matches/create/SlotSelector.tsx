@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Check } from 'lucide-react';
 import { GET_CLUB_SLOTS, type ClubSlot } from '../../../graphql/operations/matches';
 
 interface Props {
@@ -129,7 +130,7 @@ export default function SlotSelector({ clubId, clubName, selectedSlot, onSelect 
                 {slot.priceArs != null && (
                   <div className="slot-price">${slot.priceArs.toLocaleString('es-AR')}</div>
                 )}
-                {isSelected && <span className="slot-check" aria-hidden="true">✓</span>}
+                {isSelected && <span className="slot-check" aria-hidden="true"><Check size={16} strokeWidth={2.5} /></span>}
               </button>
             );
           })}

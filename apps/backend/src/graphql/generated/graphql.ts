@@ -37,7 +37,7 @@ export type ClubDetail = {
   imageUrl?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   phone?: Maybe<Scalars['String']['output']>;
-  zone: Scalars['String']['output'];
+  zone?: Maybe<Scalars['String']['output']>;
 };
 
 export type ClubSlot = {
@@ -526,7 +526,7 @@ export type ClubDetailResolvers<ContextType = GraphQLContext, ParentType extends
   imageUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   phone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
-  zone?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  zone?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;
 
 export type ClubSlotResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ClubSlot'] = ResolversParentTypes['ClubSlot']> = ResolversObject<{

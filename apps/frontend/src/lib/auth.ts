@@ -166,10 +166,7 @@ export interface RegisterClubInput {
   confirmPassword: string;
   clubName: string;
   address: string;
-  zone: string;
   phone: string;
-  lat?: number;
-  lng?: number;
 }
 
 export interface RegisterFieldErrors {

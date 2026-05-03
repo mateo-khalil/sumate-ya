@@ -10,6 +10,7 @@
  */
 export const prerender = false;
 
+import { Volleyball, Landmark, Calendar, Users, BarChart3, Construction } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 
 // User is verified and attached by middleware — no redundant getUser() call needed
@@ -23,7 +24,7 @@ const nombre = user.displayName || user.email;
     <nav class="topbar">
       <div class="topbar-inner">
         <div class="topbar-brand">
-          <span class="topbar-ball">⚽</span>
+          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
           <span class="topbar-name">SUMATE YA</span>
           <span class="topbar-role-pill">CLUB</span>
         </div>
@@ -48,19 +49,19 @@ const nombre = user.displayName || user.email;
           <div class="sidebar-label">GESTIÓN</div>
           <nav class="sidebar-nav">
             <a href="#" class="sidebar-link sidebar-link--active">
-              <span class="sidebar-icon">🏟️</span>
+              <span class="sidebar-icon"><Landmark size={16} strokeWidth={2} aria-hidden="true" /></span>
               Panel principal
             </a>
             <a href="#" class="sidebar-link">
-              <span class="sidebar-icon">📅</span>
+              <span class="sidebar-icon"><Calendar size={16} strokeWidth={2} aria-hidden="true" /></span>
               Turnos
             </a>
             <a href="#" class="sidebar-link">
-              <span class="sidebar-icon">⚽</span>
+              <span class="sidebar-icon"><Volleyball size={16} strokeWidth={2} aria-hidden="true" /></span>
               Canchas
             </a>
             <a href="#" class="sidebar-link">
-              <span class="sidebar-icon">👥</span>
+              <span class="sidebar-icon"><Users size={16} strokeWidth={2} aria-hidden="true" /></span>
               Jugadores
             </a>
           </nav>
@@ -69,7 +70,7 @@ const nombre = user.displayName || user.email;
           <div class="sidebar-label">REPORTES</div>
           <nav class="sidebar-nav">
             <a href="#" class="sidebar-link">
-              <span class="sidebar-icon">📊</span>
+              <span class="sidebar-icon"><BarChart3 size={16} strokeWidth={2} aria-hidden="true" /></span>
               Estadísticas
             </a>
           </nav>
@@ -102,7 +103,7 @@ const nombre = user.displayName || user.email;
 
         <!-- Placeholder content -->
         <div class="coming-soon-card">
-          <div class="coming-soon-icon">🏗️</div>
+          <div class="coming-soon-icon"><Construction size={40} strokeWidth={1.75} aria-hidden="true" /></div>
           <p class="coming-soon-text">Próximamente: gestión de turnos y canchas del club.</p>
         </div>
       </main>
@@ -146,8 +147,9 @@ const nombre = user.displayName || user.email;
   }
 
   .topbar-ball {
-    font-size: 1.25rem;
     line-height: 1;
+    display: inline-flex;
+    color: hsl(42 100% 60%);
   }
 
   .topbar-name {
@@ -307,8 +309,10 @@ const nombre = user.displayName || user.email;
   }
 
   .sidebar-icon {
-    font-size: 1rem;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    color: inherit;
   }
 
   /* ---- Page content ---- */
@@ -415,8 +419,9 @@ const nombre = user.displayName || user.email;
   }
 
   .coming-soon-icon {
-    font-size: 2.5rem;
     line-height: 1;
+    display: inline-flex;
+    color: hsl(215 20% 45%);
   }
 
   .coming-soon-text {

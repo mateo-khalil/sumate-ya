@@ -40,6 +40,16 @@ After any task that edits files in the workspace, run `turbo typecheck --force` 
 - If typecheck fails, continue working until the failure is resolved or clearly blocked.
 - Do not claim success, completion, or readiness for review while typecheck is failing.
 
+## E2E Regression Check Before Completion (MANDATORY)
+
+Before finishing any functionality or behavior change, run the relevant e2e tests in background mode with `showreport off` to verify the touched flow did not regress.
+
+### Rules
+
+- Run the narrowest e2e coverage that exercises the changed path first; widen the scope only if the change crosses shared flows.
+- If the e2e run exposes regressions, fix them in the same task before marking the work complete.
+- Do not close the task until the e2e checks pass or the failure is clearly blocked by an external dependency.
+
 ## Decision Context Comment Blocks (MANDATORY)
 
 After any feature implementation or business logic change, add or update a decision context comment block in the changed code.

@@ -21,6 +21,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { LocateFixed } from 'lucide-react';
 import type { Match } from './MatchCard';
 import { executeQuery } from '@/lib/urql-client';
 import { GET_MATCHES_WITH_COORDS } from '@/graphql/operations/matches';
@@ -102,11 +103,11 @@ function LocationButton() {
             background: 'hsl(220 55% 11%)',
             border: 'none',
             color: 'hsl(35 100% 55%)',
-            fontSize: '1rem',
             cursor: 'pointer',
           }}
+          aria-label="Centrar en mi ubicación"
         >
-          📍
+          <LocateFixed size={16} strokeWidth={2.25} aria-hidden="true" />
         </button>
       </div>
       {tooltip && (
