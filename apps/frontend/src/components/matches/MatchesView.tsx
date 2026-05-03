@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
+import { List, Map as MapIcon } from 'lucide-react';
 import { MatchList } from './MatchList';
 import { MatchFilters } from './MatchFilters';
 import {
@@ -69,7 +70,7 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
           onClick={() => setView('list')}
           aria-pressed={view === 'list'}
         >
-          <span className="view-toggle-icon">☰</span>
+          <span className="view-toggle-icon"><List size={16} strokeWidth={2.25} aria-hidden="true" /></span>
           Lista
         </button>
         <button
@@ -77,7 +78,7 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
           onClick={() => setView('map')}
           aria-pressed={view === 'map'}
         >
-          <span className="view-toggle-icon">🗺</span>
+          <span className="view-toggle-icon"><MapIcon size={16} strokeWidth={2.25} aria-hidden="true" /></span>
           Mapa
         </button>
       </div>

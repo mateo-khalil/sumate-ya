@@ -11,9 +11,13 @@
  * - organizerName is derived from the participants list in the parent page
  *   (the participant whose id === match.organizerId). Passed as a separate prop
  *   to keep this component stateless and not dependent on MatchDetailData shape.
+ * - Icons: emojis (📅/👥) replaced with lucide-react Calendar/Users SVGs.
+ *   Astro renders React components statically (no client:* directive) so no JS ships.
+ *   Emojis rendered inconsistently across platforms — SVG icons keep a uniform look.
  * - Previously fixed bugs: none relevant.
  */
 
+import { Calendar, Users } from 'lucide-react';
 import type { MatchDetailData, MatchFormat } from '../../graphql/operations/matches';
 
 interface Props {
@@ -64,8 +68,16 @@ const dateStr = dt.toLocaleDateString('es-AR', {
 });
 const timeStr = dt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
-const statusColor = STATUS_COLOR[match.status] ?? '#fff';
-const statusLabel = STATUS_LABEL[match.status] ?? match.status;
+// Decision Context: tratamos availableSlots === 0 como FULL aunque la fila DB venga
+// con status='open' (p.ej. seed E2E que inserta participantes directos sin pasar por
+// joinMatch que actualiza el status). Asi el badge "Completo" aparece siempre que el
+// partido este lleno, no solo cuando el backend ya transiciono el status.
+// Previously fixed bugs: el badge "PARTIDO COMPLETO" solo se renderizaba con
+// status === 'FULL', ocultando partidos llenos cuyo status DB seguia siendo 'open'.
+const isFullByCount = match.availableSlots === 0 && match.status !== 'CANCELLED' && match.status !== 'COMPLETED' && match.status !== 'IN_PROGRESS';
+const effectiveStatus = match.status === 'FULL' || isFullByCount ? 'FULL' : match.status;
+const statusColor = STATUS_COLOR[effectiveStatus] ?? '#fff';
+const statusLabel = STATUS_LABEL[effectiveStatus] ?? effectiveStatus;
 const formatLabel = FORMAT_LABEL[match.format] ?? match.format;
 
 function initial(name: string) {
@@ -83,7 +95,7 @@ function initial(name: string) {
     >
       {statusLabel}
     </span>
-    {match.status === 'FULL' && (
+    {effectiveStatus === 'FULL' && (
       <span class="full-badge">PARTIDO COMPLETO</span>
     )}
   </div>
@@ -93,7 +105,7 @@ function initial(name: string) {
 
   <!-- Date / time -->
   <div class="stat-row">
-    <span class="stat-icon">📅</span>
+    <span class="stat-icon"><Calendar size={18} strokeWidth={2} aria-hidden="true" /></span>
     <div>
       <span class="stat-label">Fecha y hora</span>
       <span class="stat-value">{dateStr} · {timeStr}</span>
@@ -102,7 +114,7 @@ function initial(name: string) {
 
   <!-- Player count -->
   <div class="stat-row">
-    <span class="stat-icon">👥</span>
+    <span class="stat-icon"><Users size={18} strokeWidth={2} aria-hidden="true" /></span>
     <div>
       <span class="stat-label">Jugadores</span>
       <span class="stat-value">
@@ -209,10 +221,11 @@ function initial(name: string) {
   }
 
   .stat-icon {
-    font-size: 1.1rem;
     line-height: 1;
     margin-top: 0.15rem;
     flex-shrink: 0;
+    display: inline-flex;
+    color: hsl(216 85% 65%);
   }
 
   .stat-label {

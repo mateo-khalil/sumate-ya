@@ -7,6 +7,8 @@
 #   for embedded use in Match queries (id/name/zone only). ClubDetail is the rich version
 #   for the "select a club" step — adding address, phone, description so the player can
 #   make an informed choice without a second round-trip.
+# - zone is nullable: clubs registered after the registration-form simplification (zone
+#   removed) won't have a value. UI components handle null zone gracefully.
 # - CourtSurface mirrors the `courtSurface` DB enum exactly (grass/synthetic/concrete/indoor).
 # - ClubSlot.dayOfWeek is a String (not a custom enum) so it serialises as "monday"/"tuesday"
 #   etc. — the frontend already converts a Date to a day name for the filter.
@@ -27,7 +29,7 @@ enum CourtSurface {
 type ClubDetail {
   id: ID!
   name: String!
-  zone: String!
+  zone: String
   address: String!
   phone: String
   description: String

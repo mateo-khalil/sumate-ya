@@ -10,6 +10,7 @@
  * - Previously fixed bugs: none relevant.
  */
 
+import { Check } from 'lucide-react';
 import type { ClubDetail } from '../../../graphql/operations/matches';
 
 interface Props {
@@ -56,7 +57,7 @@ export default function ClubSelector({ clubs, selectedId, onSelect }: Props) {
               )}
             </div>
             {isSelected && (
-              <span className="club-check" aria-hidden="true">✓</span>
+              <span className="club-check" aria-hidden="true"><Check size={18} strokeWidth={2.5} /></span>
             )}
           </button>
         );

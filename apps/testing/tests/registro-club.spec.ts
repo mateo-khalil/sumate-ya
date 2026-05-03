@@ -4,8 +4,6 @@ import { test, expect, type Page } from '@playwright/test';
 const FRONTEND_URL = 'http://localhost:4321';
 const REGISTRO_URL = `${FRONTEND_URL}/registro-club`;
 
-const SKIP_BACKEND = process.env.SKIP_BACKEND_TESTS === '1';
-
 /**
  * Genera un email único por corrida para evitar colisiones cuando el test de POST
  * efectivamente llega al backend (aunque esperamos un 400 por contraseñas que no
@@ -57,20 +55,18 @@ test.describe('Registro de club (/registro-club) — render y estructura', () =>
 
     await expect(page.getByLabel('Nombre del club')).toBeVisible();
     await expect(page.getByLabel('Dirección')).toBeVisible();
-    await expect(page.getByLabel('Zona')).toBeVisible();
     await expect(page.getByLabel('Teléfono')).toBeVisible();
-    await expect(page.getByLabel(/Latitud/)).toBeVisible();
-    await expect(page.getByLabel(/Longitud/)).toBeVisible();
   });
 
-  test('marca latitud y longitud como opcionales', async ({ page }) => {
+  test('los campos de zona, latitud y longitud ya no existen en el form', async ({ page }) => {
     await gotoRegistro(page);
 
-    // Hay exactamente 2 marcadores "(opcional)" — uno por cada coordenada.
-    await expect(page.locator('span.optional')).toHaveCount(2);
-    // Son inputs numéricos (step=any para permitir decimales).
-    await expect(page.locator('input#lat')).toHaveAttribute('type', 'number');
-    await expect(page.locator('input#lng')).toHaveAttribute('type', 'number');
+    // Decisión de producto (2026-05-03): zona / lat / lng se sacaron del registro.
+    // Las columnas siguen existiendo en DB pero nullable; el form no las pide.
+    await expect(page.locator('input#lat')).toHaveCount(0);
+    await expect(page.locator('input#lng')).toHaveCount(0);
+    await expect(page.locator('input#zone')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Usar mi ubicación/i })).toHaveCount(0);
   });
 
   test('el form usa method POST y tiene el botón de submit con el copy correcto', async ({ page }) => {
@@ -111,25 +107,23 @@ test.describe('Registro de club (/registro-club) — render y estructura', () =>
     await gotoRegistro(page);
 
     await page.getByLabel('Nombre completo').fill('Juan Pérez');
-    await page.getByLabel('Email').fill('juan@miclub.com');
+    await page.getByLabel('Email').fill('juan@miclub.com.uy');
     await page.getByLabel('Nombre del club').fill('Club Atletico Sur');
-    await page.getByLabel('Zona').fill('Sur');
+    await page.getByLabel('Dirección').fill('Av. 18 de Julio 1234, Montevideo');
 
     await expect(page.getByLabel('Nombre completo')).toHaveValue('Juan Pérez');
-    await expect(page.getByLabel('Email')).toHaveValue('juan@miclub.com');
+    await expect(page.getByLabel('Email')).toHaveValue('juan@miclub.com.uy');
     await expect(page.getByLabel('Nombre del club')).toHaveValue('Club Atletico Sur');
-    await expect(page.getByLabel('Zona')).toHaveValue('Sur');
+    await expect(page.getByLabel('Dirección')).toHaveValue('Av. 18 de Julio 1234, Montevideo');
   });
 });
 
 /**
- * Tests que requieren el backend Express levantado en :4000. Se saltan con
- * `SKIP_BACKEND_TESTS=1` cuando se corren los tests sin backend disponible (ej. CI
- * minimal o ambiente local sin Supabase configurado).
+ * Tests que requieren el backend Express levantado en :4000.
+ * `playwright.config.ts` levanta `npm run dev` (turbo) antes de correr la suite,
+ * así que el backend siempre está disponible cuando se ejecutan estos tests.
  */
 test.describe('Registro de club — submit con datos inválidos (requiere backend)', () => {
-  test.skip(SKIP_BACKEND, 'Backend no disponible — set SKIP_BACKEND_TESTS=0 para correr');
-
   test('contraseñas que no coinciden → muestra error inline en confirmPassword', async ({ page }) => {
     await gotoRegistro(page);
 
@@ -138,9 +132,8 @@ test.describe('Registro de club — submit con datos inválidos (requiere backen
     await page.getByLabel('Contraseña', { exact: true }).fill('Password123');
     await page.getByLabel('Confirmar contraseña').fill('Otracosa999');
     await page.getByLabel('Nombre del club').fill('Club Test QA');
-    await page.getByLabel('Dirección').fill('Av. Siempre Viva 742');
-    await page.getByLabel('Zona').fill('Norte');
-    await page.getByLabel('Teléfono').fill('+54 11 4000-0000');
+    await page.getByLabel('Dirección').fill('Av. 18 de Julio 1234, Montevideo');
+    await page.getByLabel('Teléfono').fill('+598 2 400 1234');
 
     await page.getByRole('button', { name: 'REGISTRAR CLUB' }).click();
 

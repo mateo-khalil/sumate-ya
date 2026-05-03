@@ -143,7 +143,7 @@ async function mockMatchesError(page: Page, message = 'Error al cargar partidos'
 async function gotoMatchesPage(page: Page): Promise<void> {
   await page.goto(MATCHES_URL);
   await page.locator('.matches-section').scrollIntoViewIfNeeded();
-  await expect(page.getByRole('button', { name: /lista/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Lista', exact: true })).toBeVisible();
 }
 
 async function waitForListToHydrate(page: Page): Promise<void> {
@@ -155,9 +155,15 @@ async function waitForListToHydrate(page: Page): Promise<void> {
     .toBe(true);
 }
 
+// Decision Context: usamos `name: 'Mapa', exact: true` (no regex) porque el accesible
+// name "Mapa" tambien matchea cards con aria-label como "Ver detalle del partido F5
+// sin mapa", produciendo strict-mode violations. El toggle es el unico boton con
+// nombre exactamente "Mapa", asi que el matcher exact deja la query sin ambiguedad.
+// Previously fixed bugs: switchToMap fallaba por strict-mode violation cuando el
+// listado incluia un partido con la palabra "mapa" en el titulo.
 async function switchToMap(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /mapa/i }).click();
-  await expect(page.getByRole('button', { name: /mapa/i })).toHaveAttribute(
+  await page.getByRole('button', { name: 'Mapa', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Mapa', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -177,7 +183,7 @@ test.describe('Vista mapa de partidos (/partidos)', () => {
     await gotoMatchesPage(page);
     await waitForListToHydrate(page);
 
-    await expect(page.getByRole('button', { name: /lista/i })).toHaveAttribute(
+    await expect(page.getByRole('button', { name: 'Lista', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     );

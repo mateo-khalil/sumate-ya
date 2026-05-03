@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 import type { ClubDetail, ClubSlot, MatchFormat } from '../../../graphql/operations/matches';
 import ClubSelector from './ClubSelector';
 import SlotSelector from './SlotSelector';
@@ -114,7 +115,7 @@ export default function CreateMatchFlow({ initialClubs, redirectBase = '/partido
             className={`step-item${s === step ? ' step-item--active' : ''}${s < step ? ' step-item--done' : ''}`}
             aria-current={s === step ? 'step' : undefined}
           >
-            <span className="step-num">{s < step ? '✓' : s}</span>
+            <span className="step-num">{s < step ? <Check size={14} strokeWidth={2.5} aria-hidden="true" /> : s}</span>
             <span className="step-lbl">{STEP_LABELS[s]}</span>
           </li>
         ))}

@@ -8,10 +8,14 @@
  * - register() is mounted at POST /api/auth/register-club (renamed from /register — P3 audit).
  *   Validates body with Zod, maps field-level errors to a structured JSON response
  *   so the Astro form can display inline errors without a full page reload.
+ * - zona, latitud, longitud removed from the registration flow per product decision: clubs
+ *   are now registered without map coordinates. The clubs table columns were made nullable;
+ *   the map UI already filters clubs without coords before rendering markers.
  * - Previously fixed bugs:
  *   - password min was 6 chars — raised to 8 for stronger account security (P5).
  *   - lat/lng were optional with no range check — made required and validated within Uruguay
  *     so the map never receives impossible or off-territory coordinates (P2, P6).
+ *     [Superseded] lat/lng/zone removed from registration entirely.
  *   - email-duplicate error revealed that the specific email existed ("Este email ya está
  *     registrado") — changed to a neutral message to avoid account enumeration (P9).
  *   - phone had only min(6) with no format check — added regex to reject non-phone strings (P4).
@@ -24,7 +28,6 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 
 import { authService } from '../services/authService.js';
-import { isInUruguay, URUGUAY_BOUNDS_DESCRIPTION } from '../utils/uruguayBounds.js';
 
 // ---------------------------------------------------------------------------
 // Zod schema for club admin registration
@@ -38,26 +41,16 @@ const RegisterSchema = z
     confirmPassword: z.string().min(1, 'Confirmá tu contraseña'),
     clubName: z.string().min(2, 'Nombre del club requerido (mínimo 2 caracteres)'),
     address: z.string().min(5, 'Dirección requerida'),
-    zone: z.string().min(1, 'Zona requerida'),
     // P4: regex ensures only phone-like strings pass — digits, spaces, dashes, parens, and +.
     // Minimum 8 chars gives enough room for short local formats while blocking garbage input.
     phone: z
       .string()
       .min(1, 'Teléfono requerido')
-      .regex(/^[+]?[\d\s\-()+]{8,}$/, 'Formato de teléfono inválido (ej: +54 11 4222-1111)'),
-    // P2, P6: lat/lng are required and validated within Uruguay so the map never receives
-    // impossible or out-of-territory coordinates. Uruguay bounds replace global ±90/±180 to
-    // also prevent inadvertently registering clubs with Buenos Aires-area coordinates.
-    lat: z.number(),
-    lng: z.number(),
+      .regex(/^[+]?[\d\s\-()+]{8,}$/, 'Formato de teléfono inválido (ej: +598 2 400 1234)'),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: 'Las contraseñas no coinciden',
     path: ['confirmPassword'],
-  })
-  .refine((d) => isInUruguay(d.lat, d.lng), {
-    message: URUGUAY_BOUNDS_DESCRIPTION,
-    path: ['lat'],
   });
 
 // ---------------------------------------------------------------------------

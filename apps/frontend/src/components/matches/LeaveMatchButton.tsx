@@ -20,6 +20,7 @@
  */
 
 import { useState } from 'react';
+import { Loader2, TriangleAlert } from 'lucide-react';
 import { LEAVE_MATCH } from '../../graphql/operations/matches';
 import type { LeaveMatchResult } from '../../graphql/operations/matches';
 
@@ -107,7 +108,9 @@ export default function LeaveMatchButton({
     return (
       <div className="leave-wrapper">
         <button disabled className="leave-btn leave-btn--loading" aria-busy>
-          <span aria-label="Procesando…">⏳ Procesando…</span>
+          <span aria-label="Procesando…" className="leave-loading">
+            <Loader2 size={14} strokeWidth={2.25} aria-hidden="true" className="leave-spin" /> Procesando…
+          </span>
         </button>
         <style>{styles}</style>
       </div>
@@ -120,7 +123,7 @@ export default function LeaveMatchButton({
         <div className="confirm-box" role="dialog" aria-modal="true">
           {isUrgent && (
             <div className="confirm-urgent" role="alert">
-              ⚠ Falta menos de 1 hora para el partido
+              <TriangleAlert size={14} strokeWidth={2.25} aria-hidden="true" /> Falta menos de 1 hora para el partido
             </div>
           )}
           <p className="confirm-question">
@@ -188,7 +191,11 @@ const styles = `
     background: hsl(35 100% 48% / 0.1);
     border: 1px solid hsl(35 100% 48% / 0.25);
     border-radius: 6px; padding: 0.4rem 0.75rem;
+    display: inline-flex; align-items: center; gap: 0.4rem;
   }
+  .leave-loading { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .leave-spin { animation: leave-spin 0.9s linear infinite; }
+  @keyframes leave-spin { to { transform: rotate(360deg); } }
 
   .confirm-question {
     font-family: 'Barlow', sans-serif;

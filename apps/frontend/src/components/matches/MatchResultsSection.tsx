@@ -26,6 +26,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Check, X } from 'lucide-react';
 import type { MatchResultSubmission } from '../../graphql/operations/match-results.js';
 import {
   GET_MATCH_RESULT_SUBMISSIONS,
@@ -93,8 +94,8 @@ function ScoreBadge({
 function StatusBadge({ status }: { status: string }) {
   if (status === 'CONFIRMED') {
     return (
-      <span className="font-condensed text-[0.75rem] font-bold tracking-[0.07em] uppercase px-[0.65rem] py-[0.25rem] rounded-full bg-success/15 border border-success/40 text-success-foreground">
-        ✓ Resultado oficial
+      <span className="inline-flex items-center gap-1 font-condensed text-[0.75rem] font-bold tracking-[0.07em] uppercase px-[0.65rem] py-[0.25rem] rounded-full bg-success/15 border border-success/40 text-success-foreground">
+        <Check size={12} strokeWidth={2.5} aria-hidden="true" /> Resultado oficial
       </span>
     );
   }
@@ -148,11 +149,11 @@ function SubmissionCard({ submission, isParticipant, onVote, voting }: Submissio
       </p>
 
       <div className="flex gap-4">
-        <span className="font-body text-[0.825rem] text-success-foreground">
-          ✓ {submission.approveCount} aprobaciones
+        <span className="inline-flex items-center gap-1 font-body text-[0.825rem] text-success-foreground">
+          <Check size={14} strokeWidth={2.5} aria-hidden="true" /> {submission.approveCount} aprobaciones
         </span>
-        <span className="font-body text-[0.825rem] text-destructive">
-          ✗ {submission.rejectCount} rechazos
+        <span className="inline-flex items-center gap-1 font-body text-[0.825rem] text-destructive">
+          <X size={14} strokeWidth={2.5} aria-hidden="true" /> {submission.rejectCount} rechazos
         </span>
       </div>
 
@@ -163,24 +164,28 @@ function SubmissionCard({ submission, isParticipant, onVote, voting }: Submissio
               <button
                 onClick={() => onVote(submission.id, 'APPROVE')}
                 disabled={isVoting}
-                className="rounded-md font-condensed text-[0.85rem] font-bold tracking-[0.07em] px-4 py-[0.4rem] cursor-pointer bg-success/15 border border-success/40 text-success-foreground disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded-md font-condensed text-[0.85rem] font-bold tracking-[0.07em] px-4 py-[0.4rem] cursor-pointer bg-success/15 border border-success/40 text-success-foreground disabled:opacity-60"
               >
-                {isVoting ? '…' : '✓ Aprobar'}
+                {isVoting ? '…' : <><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Aprobar</>}
               </button>
               <button
                 onClick={() => onVote(submission.id, 'REJECT')}
                 disabled={isVoting}
-                className="rounded-md font-condensed text-[0.85rem] font-bold tracking-[0.07em] px-4 py-[0.4rem] cursor-pointer bg-destructive/12 border border-destructive/35 text-destructive disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded-md font-condensed text-[0.85rem] font-bold tracking-[0.07em] px-4 py-[0.4rem] cursor-pointer bg-destructive/12 border border-destructive/35 text-destructive disabled:opacity-60"
               >
-                {isVoting ? '…' : '✗ Rechazar'}
+                {isVoting ? '…' : <><X size={14} strokeWidth={2.5} aria-hidden="true" /> Rechazar</>}
               </button>
             </>
           ) : (
             <div className="flex items-center gap-3 flex-wrap font-body text-[0.85rem] text-muted-foreground">
-              <span>
+              <span className="inline-flex items-center gap-1">
                 Tu voto:{' '}
-                <strong>
-                  {submission.userVote === 'APPROVE' ? 'Aprobado ✓' : 'Rechazado ✗'}
+                <strong className="inline-flex items-center gap-1">
+                  {submission.userVote === 'APPROVE' ? (
+                    <>Aprobado <Check size={12} strokeWidth={2.5} aria-hidden="true" /></>
+                  ) : (
+                    <>Rechazado <X size={12} strokeWidth={2.5} aria-hidden="true" /></>
+                  )}
                 </strong>
               </span>
               <button
@@ -217,11 +222,15 @@ function SubmissionCard({ submission, isParticipant, onVote, voting }: Submissio
                   <span
                     className={
                       v.vote === 'APPROVE'
-                        ? 'font-body text-[0.825rem] text-success-foreground'
-                        : 'font-body text-[0.825rem] text-destructive'
+                        ? 'inline-flex items-center font-body text-[0.825rem] text-success-foreground'
+                        : 'inline-flex items-center font-body text-[0.825rem] text-destructive'
                     }
                   >
-                    {v.vote === 'APPROVE' ? '✓' : '✗'}
+                    {v.vote === 'APPROVE' ? (
+                      <Check size={14} strokeWidth={2.5} aria-hidden="true" />
+                    ) : (
+                      <X size={14} strokeWidth={2.5} aria-hidden="true" />
+                    )}
                   </span>
                   <span className="font-body text-[0.825rem] text-muted-foreground">
                     {v.voter.displayName}

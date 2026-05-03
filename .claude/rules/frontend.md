@@ -56,6 +56,13 @@ Before writing code, ask:
 - Keep shadcn/Radix primitives as the base for accessible components.
 - Use consistent composition patterns and avoid one-off visual implementations.
 
+## Iconography (MANDATORY)
+
+- **NEVER** use emoji characters in UI (no ⚽, ✓, ⚠, 📍, 📅, 👥, 🏟️, 🟡, ✅, ❌, 🔒, etc.).
+- **ALWAYS** use icons from `lucide-react` (already installed). In `.astro` files, import the component and use it inline — Astro renders it statically as SVG with zero JS cost.
+- **NEVER** add a second icon library. **NEVER** inline raw `<svg>` markup for icons available in lucide-react.
+- See `.claude/rules/design-system.md` (Iconography section) for sizing conventions, color tokens, accessibility rules, and a name-mapping table for common concepts (brand → `Volleyball`, location → `MapPin`, success → `Check`, etc.).
+
 ## GraphQL Rules
 
 - Never use inline GraphQL strings inside UI components.

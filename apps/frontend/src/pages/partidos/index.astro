@@ -11,6 +11,7 @@
  */
 export const prerender = false;
 
+import { Volleyball } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import { MatchesView } from '../../components/matches';
 
@@ -25,7 +26,7 @@ const nombre = user?.displayName || user?.email;
     <nav class="topbar">
       <div class="topbar-inner">
         <div class="topbar-brand">
-          <span class="topbar-ball">⚽</span>
+          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
           <span class="topbar-name">SUMATE YA</span>
         </div>
         <div class="topbar-actions">
@@ -103,8 +104,9 @@ const nombre = user?.displayName || user?.email;
   }
 
   .topbar-ball {
-    font-size: 1.25rem;
     line-height: 1;
+    display: inline-flex;
+    color: hsl(35 100% 55%);
   }
 
   .topbar-name {

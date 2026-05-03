@@ -131,27 +131,27 @@ test.describe('Listado de partidos (/partidos)', () => {
   test('muestra los controles de filtros principales', async ({ page }) => {
     await gotoMatchesPage(page);
 
-    await expect(page.getByPlaceholder(/Buscar por partido o club/i)).toBeVisible();
-    // 3 selects: formato, zona, estado.
+    await expect(page.getByPlaceholder(/Buscar partido o club/i)).toBeVisible();
+    // 3 selects (formato, zona, horario) + 2 date pickers (desde, hasta) + boton "Limpiar".
     // Scope a `main` para ignorar el Astro dev toolbar (que puede inyectar un <select>).
     await expect(page.locator('main select')).toHaveCount(3);
-    await expect(page.getByRole('button', { name: /Más filtros/i })).toBeVisible();
+    await expect(page.locator('main input[type="date"]')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: /Limpiar/i })).toBeVisible();
   });
 
-  test('"Más filtros" expande los date pickers y cambia el label del botón', async ({ page }) => {
+  test('los date pickers de rango de fecha estan visibles por defecto', async ({ page }) => {
     await gotoMatchesPage(page);
 
-    // Esperar a que MatchList termine el fetch y hidrate antes de clickear — de lo
-    // contrario el click llega antes que React enganche el handler y setShowAdvanced
-    // nunca se dispara.
+    // Esperar a que MatchList termine el fetch y hidrate antes de validar inputs —
+    // de lo contrario los handlers todavia no estan enganchados.
+    // Decision Context: el filtro avanzado dejo de estar oculto detras de "Mas filtros";
+    // ahora los date pickers se renderizan junto al boton "Limpiar" en una segunda fila.
     await expect(page.getByText('No hay partidos disponibles')).toBeVisible();
 
-    await page.getByRole('button', { name: /Más filtros/i }).click();
-
-    await expect(page.getByText('Desde:')).toBeVisible();
-    await expect(page.getByText('Hasta:')).toBeVisible();
-    await expect(page.locator('input[type="date"]')).toHaveCount(2);
-    await expect(page.getByRole('button', { name: /Menos filtros/i })).toBeVisible();
+    const dateInputs = page.locator('main input[type="date"]');
+    await expect(dateInputs).toHaveCount(2);
+    await expect(dateInputs.first()).toBeVisible();
+    await expect(dateInputs.nth(1)).toBeVisible();
   });
 
   test('al aplicar un filtro aparece "Limpiar" y al clickearlo se resetea la búsqueda', async ({ page }) => {
@@ -162,15 +162,19 @@ test.describe('Listado de partidos (/partidos)', () => {
     // el fill() dispara antes de la hidratación y React no actualiza el estado.
     await expect(page.getByText('No hay partidos disponibles')).toBeVisible();
 
-    const search = page.getByPlaceholder(/Buscar por partido o club/i);
+    const search = page.getByPlaceholder(/Buscar partido o club/i);
     await search.fill('river');
 
     const clearBtn = page.getByRole('button', { name: /Limpiar/i });
     await expect(clearBtn).toBeVisible();
+    await expect(clearBtn).toBeEnabled();
 
     await clearBtn.click();
     await expect(search).toHaveValue('');
-    await expect(clearBtn).not.toBeVisible();
+    // El boton "Limpiar" siempre esta renderizado (vive junto a los filtros), pero
+    // se deshabilita cuando no hay filtros activos. Antes asertabamos `not.toBeVisible()`
+    // asumiendo que desaparecia, pero el componente nunca tuvo ese comportamiento.
+    await expect(clearBtn).toBeDisabled();
   });
 
   test('renderiza cards cuando la query devuelve partidos', async ({ page }) => {
@@ -195,7 +199,13 @@ test.describe('Listado de partidos (/partidos)', () => {
     await expect(page.getByRole('button', { name: /Sumarme/i }).first()).toBeEnabled();
   });
 
-  test('partido lleno muestra "Completo" con el botón deshabilitado', async ({ page }) => {
+  test('partido lleno muestra badge "Completo" y CTA "Ver detalle" que navega al detalle', async ({ page }) => {
+    // Decision Context: para partidos llenos el card debe seguir siendo accionable.
+    // El badge "Completo" comunica el estado y el CTA inferior pasa a "Ver detalle"
+    // (en vez de un botón "Completo" deshabilitado e inservible) para que el usuario
+    // pueda clickear y ver quiénes están anotados antes de decidir si esperar un cupo.
+    // Previously fixed bugs: el CTA anterior era un botón disabled "Completo" — los
+    // usuarios no tenían forma de abrir el detalle de un partido 10/10 desde el listado.
     await mockMatchesQuery(page, [
       buildMatch({
         id: 'full-1',
@@ -207,10 +217,41 @@ test.describe('Listado de partidos (/partidos)', () => {
 
     await gotoMatchesPage(page);
 
-    const fullBtn = page.getByRole('button', { name: /Completo/i });
-    await expect(fullBtn).toBeVisible();
-    await expect(fullBtn).toBeDisabled();
+    // El status sigue comunicándose mediante el badge en el header del card
+    await expect(page.getByText('Completo').first()).toBeVisible();
     await expect(page.getByText('10/10 jugadores')).toBeVisible();
+
+    // Decision Context: usamos `name: 'Ver detalle', exact: true` (no regex /Ver detalle/i)
+    // porque la card tiene aria-label="Ver detalle del partido Partido lleno" y matchearia
+    // tambien al contenedor role="button" de la propia card, generando strict-mode
+    // violations. El boton CTA es el unico elemento con accesible name exactamente
+    // "Ver detalle", asi que el matcher exact deja la query sin ambiguedad.
+    // Previously fixed bugs: el test fallaba por strict-mode violation entre el boton
+    // y la card cuyo aria-label arranca con "Ver detalle del partido ...".
+    const detailBtn = page.getByRole('button', { name: 'Ver detalle', exact: true });
+    await expect(detailBtn).toBeVisible();
+    await expect(detailBtn).toBeEnabled();
+
+    // Click en el CTA navega al detalle
+    await detailBtn.click();
+    await expect(page).toHaveURL(/\/partidos\/full-1$/);
+  });
+
+  test('partido lleno: clickear el card también navega al detalle', async ({ page }) => {
+    await mockMatchesQuery(page, [
+      buildMatch({
+        id: 'full-2',
+        title: 'Otro partido lleno',
+        totalSlots: 10,
+        availableSlots: 0,
+      }),
+    ]);
+
+    await gotoMatchesPage(page);
+
+    // Clickear el título (parte de la card, fuera del botón) navega al detalle
+    await page.getByText('Otro partido lleno').click();
+    await expect(page).toHaveURL(/\/partidos\/full-2$/);
   });
 
   test('empty-state muestra mensaje amigable cuando no hay partidos', async ({ page }) => {
