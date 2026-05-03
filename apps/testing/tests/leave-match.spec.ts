@@ -221,6 +221,7 @@ test.describe('Salirme del partido (LeaveMatchButton)', () => {
     const token = await readAccessToken(page);
     const matchId = await ensureJoinedMatch(request, token);
     test.skip(!matchId, 'No hay partidos OPEN con cupo en la DB para inscribir al player.');
+    if (!matchId) return; // narrowing para TS — `test.skip` ya tiró arriba.
 
     await gotoMatchDetail(page, matchId);
 
@@ -241,6 +242,7 @@ test.describe('Salirme del partido (LeaveMatchButton)', () => {
     const token = await readAccessToken(page);
     const matchId = await ensureJoinedMatch(request, token);
     test.skip(!matchId, 'No hay partidos OPEN con cupo en la DB para inscribir al player.');
+    if (!matchId) return; // narrowing para TS — `test.skip` ya tiró arriba.
 
     await gotoMatchDetail(page, matchId);
 
@@ -262,6 +264,7 @@ test.describe('Salirme del partido (LeaveMatchButton)', () => {
     const token = await readAccessToken(page);
     const matchId = await ensureJoinedMatch(request, token);
     test.skip(!matchId, 'No hay partidos OPEN con cupo en la DB para inscribir al player.');
+    if (!matchId) return; // narrowing para TS — `test.skip` ya tiró arriba.
 
     // El flujo real haría leave de verdad y se quedaría sin partido — para no romper
     // el seed de la DB mockeamos la respuesta exitosa SIN borrar el partido.
@@ -299,6 +302,7 @@ test.describe('Salirme del partido (LeaveMatchButton)', () => {
     const token = await readAccessToken(page);
     const matchId = await ensureJoinedMatch(request, token);
     test.skip(!matchId, 'No hay partidos OPEN con cupo en la DB para inscribir al player.');
+    if (!matchId) return; // narrowing para TS — `test.skip` ya tiró arriba.
 
     const leave = await mockLeaveMatch(page, {
       data: {
@@ -328,6 +332,7 @@ test.describe('Salirme del partido (LeaveMatchButton)', () => {
     const token = await readAccessToken(page);
     const matchId = await ensureJoinedMatch(request, token);
     test.skip(!matchId, 'No hay partidos OPEN con cupo en la DB para inscribir al player.');
+    if (!matchId) return; // narrowing para TS — `test.skip` ya tiró arriba.
 
     await mockLeaveMatch(page, {
       errors: [{ message: 'No se pudo procesar la solicitud.' }],
@@ -353,6 +358,7 @@ test.describe('Salirme del partido (LeaveMatchButton)', () => {
     const token = await readAccessToken(page);
     const matchId = await ensureJoinedMatch(request, token);
     test.skip(!matchId, 'No hay partidos OPEN con cupo en la DB para inscribir al player.');
+    if (!matchId) return; // narrowing para TS — `test.skip` ya tiró arriba.
 
     // Demoramos la respuesta 1.5s para poder ver el estado "loading".
     await mockLeaveMatch(
