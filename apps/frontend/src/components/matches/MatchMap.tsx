@@ -201,14 +201,34 @@ export function MatchMap({ filters = DEFAULT_MATCH_FILTERS }: MatchMapProps) {
   );
   const mapStyle = useMemo(() => ({ height: mapHeight, width: '100%' }), [mapHeight]);
 
+  // Re-fetch when the server-side filter dimensions (status / onlyMine) change so
+  // the map respects timeframe + "Solo los míos" toggles from MatchesView. Local-only
+  // filters (format, zone, search, time range) keep applying via filterMatches without
+  // hitting the network — same architecture as MatchList.
+  const serverFilters = useMemo(() => toServerMatchFilters(filters), [filters]);
+  const serverFiltersKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
+
   useEffect(() => {
-    executeQuery<{ matches: Match[] }>(GET_MATCHES_WITH_COORDS, {
-      filters: toServerMatchFilters(DEFAULT_MATCH_FILTERS),
-    })
-      .then((data) => setMatches(data.matches))
-      .catch((err) => setError(err instanceof Error ? err.message : 'Error al cargar el mapa'))
-      .finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    executeQuery<{ matches: Match[] }>(GET_MATCHES_WITH_COORDS, { filters: serverFilters })
+      .then((data) => {
+        if (!cancelled) setMatches(data.matches);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Error al cargar el mapa');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverFiltersKey]);
 
   const filteredMatches = useMemo(() => filterMatches(matches, filters), [matches, filters]);
 

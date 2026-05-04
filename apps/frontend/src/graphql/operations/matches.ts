@@ -31,6 +31,13 @@ export interface MatchFilters {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  /**
+   * Restrict the result to matches the authenticated user joined.
+   * Backend silently ignores this when no auth context is present, so the
+   * frontend must hide the toggle for unauthenticated users to avoid
+   * confusing empty results.
+   */
+  onlyMine?: boolean;
 }
 
 export interface ClubDetail {

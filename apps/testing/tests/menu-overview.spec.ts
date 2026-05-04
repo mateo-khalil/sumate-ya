@@ -1,91 +1,52 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, GRAPHQL_PROXY_ROUTE, mockGraphQLAll, test } from './support';
 
 /**
- * Tests E2E del menu/vistazo rapido de la app en la home (/).
+ * Tests E2E del menu/vistazo rápido en la home (/).
  *
  * Decision Context:
- * - La historia pide que el usuario pueda ver un menu con un vistazo rapido de
- *   que trata la app. En el producto actual esa experiencia vive en la home:
- *   hero + CTA, partidos disponibles, metricas, "Como funciona" y CTA final.
- * - Mockeamos /api/graphql porque la home hidrata MatchList y dispara una query
- *   publica. El objetivo de estos tests es validar navegacion/contenido del menu,
- *   no el estado de Supabase ni del backend.
- * - El mock acepta GET y POST para cubrir el comportamiento de urql/fetchExchange.
+ * - La home hidrata MatchList y dispara una query pública. Mockeamos
+ *   `/api/graphql` con una lista vacía para que la home rinda contra un
+ *   contrato controlado y los tests no dependan del estado de Supabase.
+ * - El objetivo de estos tests es navegación y contenido del menu, no el
+ *   estado del backend.
+ * - Previously fixed bugs: none relevant.
  */
-
-const FRONTEND_URL = 'http://localhost:4321';
-
-async function mockHomeGraphQL(page: Page): Promise<void> {
-  await page.route('**/api/graphql**', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ data: { matches: [] } }),
-    });
-  });
-}
 
 test.describe('Menu de vistazo rapido (/)', () => {
   test.beforeEach(async ({ page }) => {
-    await mockHomeGraphQL(page);
+    await mockGraphQLAll(page, GRAPHQL_PROXY_ROUTE, { data: { matches: [] } });
   });
 
-  test('muestra el resumen principal de la app y sus acciones para visitantes', async ({
+  test('muestra el resumen principal y CTAs para visitantes', async ({ homePage }) => {
+    await homePage.goto();
+
+    await expect(homePage.hero).toBeVisible();
+    await expect(homePage.loginLink).toHaveAttribute('href', '/login');
+    await expect(homePage.registerLink).toHaveAttribute('href', '/registro-jugador');
+  });
+
+  test('incluye accesos y contenido para explorar partidos disponibles', async ({
+    homePage,
     page,
   }) => {
-    await page.goto(FRONTEND_URL);
+    await homePage.goto();
 
-    await expect(page.getByRole('heading', { name: /sumate\s+al juego/i })).toBeVisible();
-    await expect(
-      page.getByText(/plataforma para conectar jugadores de f.tbol/i),
-    ).toBeVisible();
-
-    const loginLink = page.getByRole('link', { name: /iniciar sesi/i }).first();
-    const registerLink = page.getByRole('link', { name: /registrarse/i }).first();
-
-    await expect(loginLink).toHaveAttribute('href', '/login');
-    await expect(registerLink).toHaveAttribute('href', '/registro-jugador');
-  });
-
-  test('incluye accesos y contenido para explorar partidos disponibles', async ({ page }) => {
-    await page.goto(FRONTEND_URL);
-
-    await expect(
-      page.getByRole('heading', { name: /partidos disponibles/i }),
-    ).toBeVisible();
-    await expect(page.getByRole('link', { name: /ver todos/i })).toHaveAttribute(
-      'href',
-      '/partidos',
-    );
-    await expect(page.getByPlaceholder(/buscar partido o club/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /partidos disponibles/i })).toBeVisible();
+    await expect(homePage.viewAllMatchesLink).toHaveAttribute('href', '/partidos');
+    await expect(homePage.searchInput).toBeVisible();
     await expect(page.locator('main select')).toHaveCount(3);
     await expect(page.getByText(/no hay partidos disponibles/i)).toBeVisible();
   });
 
   test('presenta metricas y pasos que explican rapidamente como funciona', async ({
+    homePage,
     page,
   }) => {
-    await page.goto(FRONTEND_URL);
+    await homePage.goto();
 
-    // Las metricas viven en cards con label visible (Jugadores/Partidos activos/Clubes).
-    // Localizamos cada card por su label y validamos el numero adentro — `500+` aparece
-    // tambien en el ticker del hero, asi que hay que scopear o el selector es ambiguo.
-    const playersCard = page
-      .locator('div', { has: page.getByText('Jugadores', { exact: true }) })
-      .filter({ hasText: '500+' })
-      .first();
-    const matchesCard = page
-      .locator('div', { has: page.getByText('Partidos activos', { exact: true }) })
-      .filter({ hasText: '120+' })
-      .first();
-    const clubsCard = page
-      .locator('div', { has: page.getByText('Clubes', { exact: true }) })
-      .filter({ hasText: '30+' })
-      .first();
-
-    await expect(playersCard).toBeVisible();
-    await expect(matchesCard).toBeVisible();
-    await expect(clubsCard).toBeVisible();
+    await expect(homePage.metricCard('Jugadores', '500+')).toBeVisible();
+    await expect(homePage.metricCard('Partidos activos', '120+')).toBeVisible();
+    await expect(homePage.metricCard('Clubes', '30+')).toBeVisible();
 
     await expect(page.getByRole('heading', { name: /c.mo funciona/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: /crea tu perfil/i })).toBeVisible();
@@ -94,24 +55,23 @@ test.describe('Menu de vistazo rapido (/)', () => {
   });
 
   test('permite navegar desde el vistazo rapido hacia login, registro y partidos', async ({
+    homePage,
     page,
   }) => {
-    await page.goto(FRONTEND_URL);
+    await homePage.goto();
 
-    await page.getByRole('link', { name: /registrarse/i }).first().click();
+    await homePage.registerLink.click();
     await expect(page).toHaveURL(/\/registro-jugador$/);
     await expect(page.locator('#displayName')).toBeVisible();
 
-    await page.goto(FRONTEND_URL);
-    await page.getByRole('link', { name: /iniciar sesi/i }).first().click();
+    await homePage.goto();
+    await homePage.loginLink.click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.locator('#email')).toBeVisible();
 
-    await page.goto(FRONTEND_URL);
-    await page.getByRole('link', { name: /ver todos/i }).click();
+    await homePage.goto();
+    await homePage.viewAllMatchesLink.click();
     await expect(page).toHaveURL(/\/partidos$/);
-    await expect(
-      page.getByRole('heading', { name: /partidos disponibles/i }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: /partidos disponibles/i })).toBeVisible();
   });
 });

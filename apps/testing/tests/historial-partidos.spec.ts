@@ -1,105 +1,68 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import {
+  BACKEND_GRAPHQL_ROUTE,
+  expect,
+  FRONTEND_URL,
+  mockGraphQLOperation,
+  test,
+  TEST_USERS,
+} from './support';
 
 /**
  * Tests E2E del Historial de partidos jugados (sección de /perfil).
  *
  * Decision Context:
- * - La página /perfil es SSR: Astro pide en paralelo `myProfile` y la primera página de
- *   `myMatches` al backend, y le pasa esa data a la React island MatchHistoryList como
- *   `initialData`. NO podemos mockear la primera carga desde el browser (page.route()
- *   sólo intercepta requests que salen del navegador).
- * - El botón "Cargar más", en cambio, dispara `fetch` desde la island al endpoint
- *   /graphql del backend → SÍ es mockeable. Aprovechamos eso para los tests de
- *   loading/error/append.
- * - Adaptive design: ricardo (player de prueba) probablemente tenga 0 partidos
- *   completados → para los tests del empty state alcanza con eso. Para los tests que
- *   requieren cards renderizadas, miramos lo que la DB devuelva en el SSR y skipeamos
+ * - La página /perfil es SSR: Astro pide `myProfile` y la primera página de
+ *   `myMatches` en el servidor y se las pasa a la React island como
+ *   `initialData`. NO podemos mockear esa primera carga desde el browser.
+ * - El botón "Cargar más" SI dispara fetch desde el browser → mockeable. Lo
+ *   aprovechamos para los tests de loading/error/append.
+ * - Adaptive design: Ricardo (player de prueba) probablemente tenga 0
+ *   partidos completados → para empty state alcanza con eso. Los tests que
+ *   requieren cards renderizadas miran lo que la DB devuelva en SSR y skipean
  *   con mensaje claro si no hay data.
- * - El test de "Cargar más" requiere que initialData.hasMore=true (si no, el botón ni
- *   aparece). Eso depende de tener > pageSize partidos completados en la cuenta.
- * - Assumptions:
- *   * Frontend en :4321 y backend en :4000.
- *   * Player de prueba: ricardo@gmail.com / bbbb1234.
- *   * El middleware redirige /perfil a /login si no hay cookie de auth.
- * - Previously fixed bugs: none relevant.
+ * - El test de "Cargar más" requiere `initialData.hasMore=true`; eso depende
+ *   de tener > pageSize partidos completados.
+ * - Previously fixed bugs:
+ *   - "sin login redirige a /login" fallaba porque el `test.use({ storageState })`
+ *     a nivel de archivo se propaga a `browser.newContext()` sin argumentos en
+ *     Playwright 1.59 — el contexto "anónimo" arrancaba con la cookie de
+ *     Ricardo y el middleware lo dejaba pasar a /perfil. Fix: pasar
+ *     `storageState: { cookies: [], origins: [] }` explícitamente para forzar
+ *     un contexto realmente vacío.
  */
 
-const FRONTEND_URL = 'http://localhost:4321';
-const BACKEND_GRAPHQL_ROUTE = '**/graphql';
-const PERFIL_URL = `${FRONTEND_URL}/perfil`;
+test.use({ storageState: TEST_USERS.playerRicardo.storageStatePath });
 
-const TEST_PLAYER = {
-  email: 'ricardo@gmail.com',
-  password: 'bbbb1234',
-};
-
-async function login(page: Page): Promise<void> {
-  await page.goto(`${FRONTEND_URL}/login`);
-  await page.getByRole('textbox', { name: 'Email' }).fill(TEST_PLAYER.email);
-  await page.getByRole('textbox', { name: /contrase/i }).fill(TEST_PLAYER.password);
-  await page.getByRole('button', { name: /ingresar/i }).click();
-  await page.waitForURL((url) => !url.pathname.endsWith('/login'), { timeout: 10_000 });
-}
-
-/**
- * Mockea SOLO la query `myMatches` (la usa "Cargar más"). Deja pasar el resto del
- * tráfico GraphQL — incluyendo la primera carga del SSR, que va por el server de
- * Astro y no por el browser.
- */
-async function mockMyMatchesQuery(
-  page: Page,
-  body: unknown,
-  options: { delayMs?: number } = {},
-): Promise<{ payloads: unknown[] }> {
-  const payloads: unknown[] = [];
-
-  await page.route(BACKEND_GRAPHQL_ROUTE, async (route: Route) => {
-    const raw = route.request().postData() ?? '{}';
-    const parsed = JSON.parse(raw) as { query?: string };
-
-    if (!parsed.query?.includes('myMatches')) {
-      await route.continue();
-      return;
-    }
-
-    payloads.push(parsed);
-    if (options.delayMs) {
-      await new Promise((resolve) => setTimeout(resolve, options.delayMs));
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(body),
-    });
-  });
-
-  return { payloads };
-}
-
-/**
- * Devuelve la cantidad de cards visibles en el historial. Se usa para detectar si
- * la cuenta tiene partidos jugados o no antes de correr tests adaptativos.
- */
 async function countHistoryCards(page: Page): Promise<number> {
-  return await page.locator('.history-section article').count();
+  return page.locator('.history-section article').count();
 }
 
 test.describe('Historial de partidos (/perfil → sección Historial)', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test('sin login redirige a /login antes de mostrar el perfil', async ({ page }) => {
-    await page.goto(PERFIL_URL);
-
-    // El middleware (PROTECTED_ROUTES incluye '/perfil') debe rebotar a /login.
-    await expect(page).toHaveURL(/\/login/);
+  test('sin login redirige a /login antes de mostrar el perfil', async ({ browser }) => {
+    // Override the file-level storageState so this context starts truly anonymous.
+    // Playwright 1.59 propagates `test.use({ storageState })` into bare
+    // `browser.newContext()` calls; pasar un estado vacío explícito lo bloquea.
+    const anonContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    const anonPage = await anonContext.newPage();
+    try {
+      await anonPage.goto(`${FRONTEND_URL}/perfil`);
+      await expect(anonPage).toHaveURL(/\/login/);
+    } finally {
+      await anonContext.close();
+    }
   });
 
-  test('renderiza el header de la sección "Historial de partidos"', async ({ page }) => {
-    await login(page);
-    await page.goto(PERFIL_URL);
-
-    // Wait for hidratación de la island (client:visible) — scrolleamos para que entre.
-    await page.locator('.history-section').scrollIntoViewIfNeeded();
+  test('renderiza el header de la sección "Historial de partidos"', async ({
+    profilePage,
+    page,
+  }) => {
+    await profilePage.goto();
+    await profilePage.historySection.scrollIntoViewIfNeeded();
 
     await expect(page.getByText('ACTIVIDAD', { exact: true })).toBeVisible();
     await expect(
@@ -107,76 +70,68 @@ test.describe('Historial de partidos (/perfil → sección Historial)', () => {
     ).toBeVisible();
   });
 
-  test('el subtítulo refleja la cantidad: "X en total" o "sin partidos aún"', async ({ page }) => {
-    await login(page);
-    await page.goto(PERFIL_URL);
+  test('el subtítulo refleja la cantidad: "X en total" o "sin partidos aún"', async ({
+    profilePage,
+  }) => {
+    await profilePage.goto();
 
-    const sub = page.locator('.history-section .history-sub');
+    const sub = profilePage.historySection.locator('.history-sub');
     await expect(sub).toBeVisible();
-    // Una de las dos formas: o cuenta total, o el placeholder.
     await expect(sub).toHaveText(/(\d+ en total|sin partidos aún)/i);
   });
 
-  test('si el player no tiene historial, muestra el empty state con el icono y el mensaje', async ({
+  test('si el player no tiene historial, muestra el empty state', async ({
+    profilePage,
     page,
   }) => {
-    await login(page);
-    await page.goto(PERFIL_URL);
-    await page.locator('.history-section').scrollIntoViewIfNeeded();
+    await profilePage.goto();
+    await profilePage.historySection.scrollIntoViewIfNeeded();
 
-    const cardsCount = await countHistoryCards(page);
+    const cards = await countHistoryCards(page);
     test.skip(
-      cardsCount > 0,
-      `El player ${TEST_PLAYER.email} tiene ${cardsCount} partidos en su historial — el empty state no aplica.`,
+      cards > 0,
+      `El player Ricardo tiene ${cards} partidos en su historial — el empty state no aplica.`,
     );
 
     await expect(page.getByText(/Aún no tenés partidos jugados/i)).toBeVisible();
     await expect(page.getByText(/aparecerán aquí con el resultado/i)).toBeVisible();
-    // Y NO debe haber botón "Cargar más".
     await expect(page.getByRole('button', { name: /cargar más/i })).toHaveCount(0);
   });
 
-  test('si el player tiene partidos, las cards renderizan estructura básica (fecha + formato + resultado)', async ({
+  test('si el player tiene partidos, las cards renderizan estructura básica', async ({
+    profilePage,
     page,
   }) => {
-    await login(page);
-    await page.goto(PERFIL_URL);
-    await page.locator('.history-section').scrollIntoViewIfNeeded();
+    await profilePage.goto();
+    await profilePage.historySection.scrollIntoViewIfNeeded();
 
-    const cardsCount = await countHistoryCards(page);
-    test.skip(
-      cardsCount === 0,
-      `El player ${TEST_PLAYER.email} no tiene partidos jugados — no hay cards que validar.`,
-    );
+    const cards = await countHistoryCards(page);
+    test.skip(cards === 0, 'El player Ricardo no tiene partidos jugados — no hay cards que validar.');
 
-    const firstCard = page.locator('.history-section article').first();
-    // Cada card tiene un badge de formato (5v5/7v7/10v10/11v11) en el top-right.
+    const firstCard = profilePage.historySection.locator('article').first();
     await expect(firstCard.getByText(/^(5v5|7v7|10v10|11v11)$/)).toBeVisible();
-    // Y un badge de equipo A o B.
     await expect(firstCard.getByText(/Equipo (A|B)/i)).toBeVisible();
-    // Y un badge de resultado (Ganado/Perdido/Empate/Sin resultado).
-    await expect(
-      firstCard.getByText(/^(Ganado|Perdido|Empate|Sin resultado)$/i),
-    ).toBeVisible();
+    await expect(firstCard.getByText(/^(Ganado|Perdido|Empate|Sin resultado)$/i)).toBeVisible();
   });
 
   test('al clickear "Cargar más" la mutation se dispara y aparece el estado loading', async ({
+    profilePage,
     page,
   }) => {
-    await login(page);
-    await page.goto(PERFIL_URL);
-    await page.locator('.history-section').scrollIntoViewIfNeeded();
+    await profilePage.goto();
+    await profilePage.historySection.scrollIntoViewIfNeeded();
 
     const loadMore = page.getByRole('button', { name: /^cargar más$/i });
     const loadMoreVisible = await loadMore.isVisible().catch(() => false);
     test.skip(
       !loadMoreVisible,
-      `El player ${TEST_PLAYER.email} no tiene suficientes partidos para que aparezca "Cargar más" (necesita > pageSize=10).`,
+      'Ricardo no tiene suficientes partidos para que aparezca "Cargar más" (necesita > pageSize=10).',
     );
 
-    // Mockeamos la respuesta de la página 2 con 1 item nuevo, para detectar el append.
-    const tracker = await mockMyMatchesQuery(
+    const tracker = await mockGraphQLOperation(
       page,
+      BACKEND_GRAPHQL_ROUTE,
+      'myMatches',
       {
         data: {
           myMatches: {
@@ -207,40 +162,36 @@ test.describe('Historial de partidos (/perfil → sección Historial)', () => {
     const cardsBefore = await countHistoryCards(page);
     await loadMore.click();
 
-    // Estado loading: el botón cambia el texto y queda deshabilitado.
     await expect(page.getByRole('button', { name: /cargando/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /cargando/i })).toBeDisabled();
 
-    // Eventualmente la mutation se ejecuta y appendea el item nuevo.
     await expect.poll(() => tracker.payloads.length, { timeout: 10_000 }).toBe(1);
     await expect.poll(() => countHistoryCards(page), { timeout: 5_000 }).toBe(cardsBefore + 1);
 
-    // hasMore=false en el mock → ya no debe estar el botón "Cargar más", aparece el end label.
     await expect(page.getByText(/Mostrando todos tus partidos/i)).toBeVisible();
   });
 
-  test('si "Cargar más" devuelve error, se muestra el mensaje role=alert y el botón vuelve disponible', async ({
+  test('si "Cargar más" devuelve error, se muestra el mensaje y el botón vuelve disponible', async ({
+    profilePage,
     page,
   }) => {
-    await login(page);
-    await page.goto(PERFIL_URL);
-    await page.locator('.history-section').scrollIntoViewIfNeeded();
+    await profilePage.goto();
+    await profilePage.historySection.scrollIntoViewIfNeeded();
 
     const loadMore = page.getByRole('button', { name: /^cargar más$/i });
     const loadMoreVisible = await loadMore.isVisible().catch(() => false);
     test.skip(
       !loadMoreVisible,
-      `El player ${TEST_PLAYER.email} no tiene suficientes partidos para que aparezca "Cargar más".`,
+      'Ricardo no tiene suficientes partidos para que aparezca "Cargar más".',
     );
 
-    await mockMyMatchesQuery(page, {
+    await mockGraphQLOperation(page, BACKEND_GRAPHQL_ROUTE, 'myMatches', {
       errors: [{ message: 'Falla simulada del backend' }],
     });
 
     await loadMore.click();
 
     await expect(page.getByRole('alert')).toContainText(/falla simulada del backend/i);
-    // El botón vuelve a su estado inicial (no se queda en loading).
     await expect(page.getByRole('button', { name: /^cargar más$/i })).toBeEnabled();
   });
 });

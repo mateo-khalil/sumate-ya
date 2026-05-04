@@ -129,6 +129,7 @@ export type MatchFilters = {
   dateFrom?: InputMaybe<Scalars['String']['input']>;
   dateTo?: InputMaybe<Scalars['String']['input']>;
   format?: InputMaybe<MatchFormat>;
+  onlyMine?: InputMaybe<Scalars['Boolean']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<MatchStatus>;
   zone?: InputMaybe<Scalars['String']['input']>;

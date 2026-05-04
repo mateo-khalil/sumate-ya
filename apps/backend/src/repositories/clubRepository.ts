@@ -77,4 +77,38 @@ export async function getClubById(
   return data as unknown as ClubDetailRow;
 }
 
-export const clubRepository = { listClubs, getClubById };
+/**
+ * Persist geocoded coordinates for a club.
+ *
+ * Decision Context:
+ * - Why service-role: this is a backfill-on-read driven by geocodingService and runs in
+ *   read-path resolvers where no user-scoped client is guaranteed (the matches list is
+ *   public). Coordinates are derived from a public address, not a sensitive write — RLS
+ *   would only complicate the read path without protecting anything new.
+ * - Best-effort: errors are logged but never thrown. A failed persist just means the
+ *   next request will re-geocode (Redis cache still avoids the network hit) — that's
+ *   strictly better than poisoning the read path.
+ * - Idempotent: callers only invoke this when lat/lng are null on read; concurrent
+ *   updates with the same value are safe.
+ */
+export async function updateClubCoords(
+  clubId: string,
+  lat: number,
+  lng: number,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('clubs')
+    .update({ lat, lng })
+    .eq('id', clubId);
+
+  if (error) {
+    console.error(
+      `[clubRepository.updateClubCoords] Failed to persist coords for clubId=${clubId}:`,
+      error.message,
+    );
+    // Intentionally do not throw — see Decision Context above.
+  }
+}
+
+export const clubRepository = { listClubs, getClubById, updateClubCoords };

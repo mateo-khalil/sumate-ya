@@ -43,9 +43,19 @@ const Query: QueryResolvers = {
   /**
    * Get matches with optional filters. Public endpoint - no auth required.
    * Returns lightweight Match objects (no participant data) for list performance.
+   *
+   * Decision Context:
+   * - `onlyMine`: when the client requests only-my-matches we forward the authenticated
+   *   user id to the service so the repo can constrain `id IN (matchIds the user joined)`.
+   *   Anonymous callers passing `onlyMine=true` get the unfiltered public list because
+   *   `ctx.user?.id` is undefined — the service silently drops the flag in that case.
+   *   This intentionally avoids surfacing an "auth required" error so the frontend toggle
+   *   can stay enabled without forcing a sign-in redirect — the UI hides the toggle for
+   *   anonymous users as the primary guard.
+   * - Previously fixed bugs: none relevant.
    */
-  matches: async (_parent, args, _ctx) => {
-    return matchService.listMatches({}, args.filters);
+  matches: async (_parent, args, ctx) => {
+    return matchService.listMatches({ userId: ctx.user?.id }, args.filters);
   },
 
   /**

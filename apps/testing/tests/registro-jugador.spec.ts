@@ -1,52 +1,31 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
+import {
+  expect,
+  FRONTEND_URL,
+  test,
+  VALID_PLAYER_REGISTER,
+  type PlayerRegisterValues,
+} from './support';
 
 /**
  * Tests E2E del registro de jugador (/registro-jugador).
  *
  * Decision Context:
- * - La pagina usa SSR: el submit del form va a Astro y Astro llama al backend.
- *   Por eso `page.route()` no puede mockear el fetch interno al backend; solo puede
- *   interceptar la navegacion POST del navegador hacia /registro-jugador.
- * - Validaciones Zod de forma/campos se prueban contra el flujo SSR real porque no
- *   llegan a Supabase: el backend responde 400 antes de llamar authService.
- * - Casos que crearian o consultarian usuarios reales (exito, email duplicado,
- *   password debil de proveedor, rate limit) se prueban interceptando el POST del
- *   navegador. Asi verificamos el contrato visible de la pantalla sin ensuciar
- *   auth.users/profiles ni depender del estado de Supabase.
- * - Complementa los tests unitarios del backend que verifican createUser(),
- *   insert en profiles con role='player' y rollback ante fallas.
+ * - La página usa SSR: el submit del form va a Astro, que llama al backend.
+ *   Por eso `page.route()` no puede mockear el fetch interno al backend; sólo
+ *   intercepta la navegación POST del navegador hacia /registro-jugador.
+ * - Validaciones Zod de forma/campos se prueban contra el flujo SSR real porque
+ *   el backend responde 400 antes de llamar a authService.
+ * - Casos que crearían usuarios reales (éxito, email duplicado, password débil,
+ *   rate limit) interceptan el POST del navegador. Validamos el contrato visible
+ *   sin ensuciar auth.users/profiles ni depender del estado de Supabase.
+ * - Previously fixed bugs: none relevant.
  */
 
-const FRONTEND_URL = 'http://localhost:4321';
 const REGISTER_URL = `${FRONTEND_URL}/registro-jugador`;
 
-type RegisterValues = {
-  displayName: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-};
-
-const VALID_PLAYER: RegisterValues = {
-  displayName: 'Mateo Duran',
-  email: 'mateo.e2e@example.com',
-  password: 'Hola12345',
-  confirmPassword: 'Hola12345',
-};
-
-async function fillRegisterForm(page: Page, values: Partial<RegisterValues> = {}): Promise<void> {
-  const input = { ...VALID_PLAYER, ...values };
-
-  await page.locator('#displayName').fill(input.displayName);
-  await page.locator('#email').fill(input.email);
-  await page.locator('#password').fill(input.password);
-  await page.locator('#confirmPassword').fill(input.confirmPassword);
-}
-
-function parseFormBody(route: Route): RegisterValues {
-  const body = route.request().postData() ?? '';
-  const params = new URLSearchParams(body);
-
+function parseFormBody(route: Route): PlayerRegisterValues {
+  const params = new URLSearchParams(route.request().postData() ?? '');
   return {
     displayName: params.get('displayName') ?? '',
     email: params.get('email') ?? '',
@@ -55,21 +34,14 @@ function parseFormBody(route: Route): RegisterValues {
   };
 }
 
-async function submitAndWait(page: Page): Promise<void> {
-  await Promise.all([
-    page.waitForLoadState('domcontentloaded'),
-    page.getByRole('button', { name: /crear cuenta/i }).click(),
-  ]);
-}
-
 function errorPageHtml({
   values,
   globalError = '',
   fieldErrors = {},
 }: {
-  values: Pick<RegisterValues, 'displayName' | 'email'>;
+  values: Pick<PlayerRegisterValues, 'displayName' | 'email'>;
   globalError?: string;
-  fieldErrors?: Partial<Record<keyof RegisterValues, string>>;
+  fieldErrors?: Partial<Record<keyof PlayerRegisterValues, string>>;
 }): string {
   return `<!doctype html>
 <html lang="es">
@@ -107,28 +79,26 @@ function errorPageHtml({
 
 async function mockRegisterPost(
   page: Page,
-  handler: (route: Route, submitted: RegisterValues) => Promise<void>,
+  handler: (route: Route, submitted: PlayerRegisterValues) => Promise<void>,
 ): Promise<void> {
   await page.route('**/registro-jugador', async (route) => {
     if (route.request().method() !== 'POST') {
       await route.continue();
       return;
     }
-
     await handler(route, parseFormBody(route));
   });
 }
 
 test.describe('Registro de jugador (/registro-jugador)', () => {
-  test('renderiza el formulario y los links esperados', async ({ page }) => {
-    await page.goto(REGISTER_URL);
+  test('renderiza el formulario y los links esperados', async ({ registerPlayerPage, page }) => {
+    await registerPlayerPage.goto();
 
-    await expect(page.getByRole('heading', { name: /sumate ya/i })).toBeVisible();
-    await expect(page.locator('#displayName')).toBeVisible();
-    await expect(page.locator('#email')).toBeVisible();
-    await expect(page.locator('#password')).toBeVisible();
-    await expect(page.locator('#confirmPassword')).toBeVisible();
-    await expect(page.getByRole('button', { name: /crear cuenta/i })).toBeVisible();
+    await expect(registerPlayerPage.displayName).toBeVisible();
+    await expect(registerPlayerPage.email).toBeVisible();
+    await expect(registerPlayerPage.password).toBeVisible();
+    await expect(registerPlayerPage.confirmPassword).toBeVisible();
+    await expect(registerPlayerPage.submitButton).toBeVisible();
     await expect(page.getByRole('link', { name: /inici/i })).toHaveAttribute('href', '/login');
     await expect(page.getByRole('link', { name: /club/i })).toHaveAttribute(
       'href',
@@ -137,45 +107,44 @@ test.describe('Registro de jugador (/registro-jugador)', () => {
   });
 
   test('muestra errores Zod para email invalido, password corta y nombre incompleto', async ({
+    registerPlayerPage,
     page,
   }) => {
-    await page.goto(REGISTER_URL);
-
-    await fillRegisterForm(page, {
+    await registerPlayerPage.goto();
+    await registerPlayerPage.fillForm({
       displayName: 'M',
       email: 'no-es-email',
       password: '1234567',
       confirmPassword: '',
     });
-    await submitAndWait(page);
+    await registerPlayerPage.submitAndWait();
 
     await expect(page).toHaveURL(/\/registro-jugador$/);
     await expect(page.getByText(/nombre completo requerido/i)).toBeVisible();
     await expect(page.getByText(/email inv/i)).toBeVisible();
     await expect(page.getByText(/al menos 8 caracteres/i)).toBeVisible();
     await expect(page.getByText(/confirm[aá] tu contrase/i)).toBeVisible();
-    await expect(page.locator('#displayName')).toHaveValue('M');
-    await expect(page.locator('#email')).toHaveValue('no-es-email');
+    await expect(registerPlayerPage.displayName).toHaveValue('M');
+    await expect(registerPlayerPage.email).toHaveValue('no-es-email');
   });
 
-  test('muestra error cuando las contrasenas no coinciden', async ({ page }) => {
-    await page.goto(REGISTER_URL);
-
-    await fillRegisterForm(page, {
-      password: 'Hola12345',
-      confirmPassword: 'Otra12345',
-    });
-    await submitAndWait(page);
+  test('muestra error cuando las contrasenas no coinciden', async ({
+    registerPlayerPage,
+    page,
+  }) => {
+    await registerPlayerPage.goto();
+    await registerPlayerPage.fillForm({ password: 'Hola12345', confirmPassword: 'Otra12345' });
+    await registerPlayerPage.submitAndWait();
 
     await expect(page).toHaveURL(/\/registro-jugador$/);
     await expect(page.getByText(/contras.*no coinciden/i)).toBeVisible();
   });
 
   test('envia el payload correcto y redirige a login cuando el registro es exitoso', async ({
+    registerPlayerPage,
     page,
   }) => {
-    let submitted: RegisterValues | undefined;
-
+    let submitted: PlayerRegisterValues | undefined;
     await mockRegisterPost(page, async (route, formValues) => {
       submitted = formValues;
       await route.fulfill({
@@ -184,16 +153,17 @@ test.describe('Registro de jugador (/registro-jugador)', () => {
       });
     });
 
-    await page.goto(REGISTER_URL);
-    await fillRegisterForm(page);
-    await page.getByRole('button', { name: /crear cuenta/i }).click();
+    await registerPlayerPage.goto();
+    await registerPlayerPage.fillForm();
+    await registerPlayerPage.submitButton.click();
 
     await page.waitForURL('**/login?registered=1');
     await expect(page.getByText(/registro exitoso/i)).toBeVisible();
-    expect(submitted).toEqual(VALID_PLAYER);
+    expect(submitted).toEqual(VALID_PLAYER_REGISTER);
   });
 
   test('muestra error inline para email duplicado y conserva los datos no sensibles', async ({
+    registerPlayerPage,
     page,
   }) => {
     await mockRegisterPost(page, async (route, formValues) => {
@@ -207,18 +177,21 @@ test.describe('Registro de jugador (/registro-jugador)', () => {
       });
     });
 
-    await page.goto(REGISTER_URL);
-    await fillRegisterForm(page);
-    await submitAndWait(page);
+    await registerPlayerPage.goto();
+    await registerPlayerPage.fillForm();
+    await registerPlayerPage.submitAndWait();
 
     await expect(page.getByText(/email ya esta registrado/i)).toBeVisible();
-    await expect(page.locator('#displayName')).toHaveValue(VALID_PLAYER.displayName);
-    await expect(page.locator('#email')).toHaveValue(VALID_PLAYER.email);
-    await expect(page.locator('#password')).toHaveValue('');
-    await expect(page.locator('#confirmPassword')).toHaveValue('');
+    await expect(registerPlayerPage.displayName).toHaveValue(VALID_PLAYER_REGISTER.displayName);
+    await expect(registerPlayerPage.email).toHaveValue(VALID_PLAYER_REGISTER.email);
+    await expect(registerPlayerPage.password).toHaveValue('');
+    await expect(registerPlayerPage.confirmPassword).toHaveValue('');
   });
 
-  test('muestra error inline cuando Supabase rechaza una contrasena debil', async ({ page }) => {
+  test('muestra error inline cuando Supabase rechaza una contrasena debil', async ({
+    registerPlayerPage,
+    page,
+  }) => {
     await mockRegisterPost(page, async (route, formValues) => {
       await route.fulfill({
         status: 200,
@@ -230,17 +203,17 @@ test.describe('Registro de jugador (/registro-jugador)', () => {
       });
     });
 
-    await page.goto(REGISTER_URL);
-    await fillRegisterForm(page, {
-      password: 'password',
-      confirmPassword: 'password',
-    });
-    await submitAndWait(page);
+    await registerPlayerPage.goto();
+    await registerPlayerPage.fillForm({ password: 'password', confirmPassword: 'password' });
+    await registerPlayerPage.submitAndWait();
 
     await expect(page.getByText(/contrasena no cumple/i)).toBeVisible();
   });
 
-  test('muestra error global ante rate limit del proveedor de auth', async ({ page }) => {
+  test('muestra error global ante rate limit del proveedor de auth', async ({
+    registerPlayerPage,
+    page,
+  }) => {
     await mockRegisterPost(page, async (route, formValues) => {
       await route.fulfill({
         status: 200,
@@ -252,10 +225,11 @@ test.describe('Registro de jugador (/registro-jugador)', () => {
       });
     });
 
-    await page.goto(REGISTER_URL);
-    await fillRegisterForm(page);
-    await submitAndWait(page);
+    await registerPlayerPage.goto();
+    await registerPlayerPage.fillForm();
+    await registerPlayerPage.submitAndWait();
 
     await expect(page.getByRole('alert')).toContainText(/demasiados intentos/i);
   });
 });
+
