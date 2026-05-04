@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sumate Ya — Entrega de Progreso</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 18mm 16mm;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+        color: #1a1a1a;
+        font-size: 11.5pt;
+        line-height: 1.55;
+        margin: 0;
+      }
+      h1 {
+        font-size: 26pt;
+        margin: 0 0 4pt 0;
+        color: #0a3d62;
+        letter-spacing: -0.5px;
+      }
+      h2 {
+        font-size: 16pt;
+        margin: 22pt 0 6pt 0;
+        color: #0a3d62;
+        border-bottom: 2px solid #0a3d62;
+        padding-bottom: 3pt;
+      }
+      h3 {
+        font-size: 13pt;
+        margin: 14pt 0 4pt 0;
+        color: #1e5f8e;
+      }
+      .subtitle {
+        color: #555;
+        font-size: 12pt;
+        margin-bottom: 6pt;
+      }
+      .meta {
+        color: #777;
+        font-size: 9.5pt;
+        margin-bottom: 18pt;
+      }
+      .links {
+        background: #f3f7fb;
+        border-left: 4px solid #0a3d62;
+        padding: 10pt 12pt;
+        margin: 10pt 0 16pt 0;
+        border-radius: 3px;
+        font-size: 10.5pt;
+      }
+      .links a {
+        color: #0a3d62;
+        text-decoration: none;
+        word-break: break-all;
+      }
+      .links div {
+        margin: 3pt 0;
+      }
+      code,
+      pre {
+        font-family: 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 9.5pt;
+      }
+      code {
+        background: #f1f1f3;
+        padding: 1pt 4pt;
+        border-radius: 3px;
+      }
+      pre {
+        background: #1f2430;
+        color: #e6e6e6;
+        padding: 10pt 12pt;
+        border-radius: 5px;
+        overflow-x: auto;
+        line-height: 1.45;
+        font-size: 9pt;
+      }
+      pre .c {
+        color: #7a8595;
+      }
+      pre .k {
+        color: #ffb86c;
+      }
+      pre .s {
+        color: #a3e88e;
+      }
+      ul,
+      ol {
+        padding-left: 20pt;
+        margin: 6pt 0;
+      }
+      li {
+        margin: 3pt 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8pt 0;
+        font-size: 10pt;
+      }
+      th,
+      td {
+        border: 1px solid #d8dde3;
+        padding: 6pt 8pt;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #f3f7fb;
+        color: #0a3d62;
+        font-weight: 600;
+      }
+      .warn {
+        background: #fff8e1;
+        border-left: 4px solid #f5a623;
+        padding: 8pt 12pt;
+        margin: 10pt 0;
+        border-radius: 3px;
+        font-size: 10.5pt;
+      }
+      .ok {
+        background: #e8f5e9;
+        border-left: 4px solid #2e7d32;
+        padding: 8pt 12pt;
+        margin: 10pt 0;
+        border-radius: 3px;
+        font-size: 10.5pt;
+      }
+      .badge {
+        display: inline-block;
+        padding: 1pt 6pt;
+        background: #0a3d62;
+        color: white;
+        border-radius: 3px;
+        font-size: 8.5pt;
+        margin-right: 4pt;
+      }
+      .pagebreak {
+        page-break-before: always;
+      }
+      .footer {
+        margin-top: 20pt;
+        padding-top: 10pt;
+        border-top: 1px solid #ddd;
+        color: #888;
+        font-size: 9pt;
+        text-align: center;
+      }
+      .env-block {
+        background: #1f2430;
+        color: #f8f8f2;
+        padding: 12pt;
+        border-radius: 5px;
+        font-family: 'SF Mono', Menlo, monospace;
+        font-size: 9pt;
+        line-height: 1.6;
+      }
+      .env-block .key {
+        color: #ffb86c;
+      }
+      .env-block .eq {
+        color: #ff79c6;
+      }
+      .env-block .val {
+        color: #a3e88e;
+        word-break: break-all;
+      }
+      .env-path {
+        font-family: 'SF Mono', Menlo, monospace;
+        background: #0a3d62;
+        color: white;
+        padding: 4pt 10pt;
+        border-radius: 4px 4px 0 0;
+        font-size: 10pt;
+        display: inline-block;
+        margin-top: 8pt;
+      }
+      .env-wrap {
+        margin: 6pt 0 14pt 0;
+      }
+      .env-wrap .env-block {
+        border-radius: 0 5px 5px 5px;
+        margin-top: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sumate Ya</h1>
+    <div class="subtitle">Entrega de Progreso · Configuración del Entorno</div>
+    <div class="meta">Mateo Khalil Duran &nbsp;·&nbsp; 2026-05-03</div>
+
+    <div class="links">
+      <div>
+        <strong>Repositorio:</strong>
+        <a href="https://github.com/mateo-khalil/sumate-ya"
+          >https://github.com/mateo-khalil/sumate-ya</a
+        >
+      </div>
+      <div>
+        <strong>Tablero del proyecto:</strong>
+        <a href="https://github.com/users/mateo-khalil/projects/2"
+          >https://github.com/users/mateo-khalil/projects/2</a
+        >
+      </div>
+    </div>
+
+    <h2>1. Resumen del Proyecto</h2>
+    <p>
+      <strong>Sumate Ya</strong> es una plataforma para conectar jugadores de fútbol amateur,
+      permitiendo organizar partidos, sumarse a equipos, gestionar torneos y registrar resultados.
+      El proyecto está estructurado como un <strong>monorepo</strong> gestionado con
+      <code>pnpm</code> + <code>Turborepo</code>, y se compone de un frontend público, un backend
+      con API GraphQL/REST y una suite de tests E2E.
+    </p>
+
+    <h2>2. Stack Tecnológico</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Capa</th>
+          <th>Tecnología</th>
+          <th>Notas</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Frontend</td>
+          <td>Astro 6 + React 19</td>
+          <td>Render híbrido (estático por defecto, SSR opt-in)</td>
+        </tr>
+        <tr>
+          <td>UI</td>
+          <td>shadcn/ui + Tailwind CSS 4 + Radix UI</td>
+          <td>Componentes accesibles y consistentes</td>
+        </tr>
+        <tr>
+          <td>Estado cliente</td>
+          <td>nanostores</td>
+          <td>Liviano, framework-agnóstico</td>
+        </tr>
+        <tr>
+          <td>Cliente GraphQL</td>
+          <td>urql</td>
+          <td>Tree-shakeable, SSR-friendly</td>
+        </tr>
+        <tr>
+          <td>Backend</td>
+          <td>Express 5 + Apollo Server 5</td>
+          <td>Node.js ≥ 22.12, TypeScript, ESM</td>
+        </tr>
+        <tr>
+          <td>Base de datos</td>
+          <td>Supabase (PostgreSQL)</td>
+          <td>RLS habilitado, naming camelCase</td>
+        </tr>
+        <tr>
+          <td>Auth</td>
+          <td>Supabase Auth + JWT</td>
+          <td>Tabla <code>profiles</code> extiende <code>auth.users</code></td>
+        </tr>
+        <tr>
+          <td>Cache</td>
+          <td>Redis (ioredis)</td>
+          <td>Cacheo en capa de servicios</td>
+        </tr>
+        <tr>
+          <td>Email</td>
+          <td>Resend</td>
+          <td>Mails transaccionales</td>
+        </tr>
+        <tr>
+          <td>Tests</td>
+          <td>Vitest + Playwright</td>
+          <td>Unit, integración y E2E</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Estructura del Monorepo</h2>
+    <pre>sumate-ya/
+├── apps/
+│   ├── frontend/   <span class="c"># Astro 6 + React + shadcn/ui (web pública)</span>
+│   ├── backend/    <span class="c"># Express + Apollo + Supabase (API)</span>
+│   └── testing/    <span class="c"># Suite Playwright E2E</span>
+├── packages/       <span class="c"># Código compartido (types, utils, GraphQL)</span>
+├── docs/           <span class="c"># Documentación del proyecto</span>
+├── scripts/        <span class="c"># Scripts auxiliares (kill-ports, etc.)</span>
+├── package.json
+├── pnpm-workspace.yaml
+└── turbo.json</pre>
+
+    <h2>4. Progreso Actual</h2>
+    <h3>Funcionalidades implementadas</h3>
+    <ul>
+      <li><span class="badge">OK</span>Registro y autenticación de usuarios (Supabase Auth)</li>
+      <li><span class="badge">OK</span>Creación, edición y abandono de partidos</li>
+      <li><span class="badge">OK</span>Listado público de partidos con filtros</li>
+      <li><span class="badge">OK</span>Sistema de torneos y armado de equipos</li>
+      <li><span class="badge">OK</span>Votación y registro de resultados de partidos</li>
+      <li><span class="badge">OK</span>Historial de partidos por jugador</li>
+      <li><span class="badge">OK</span>Notificaciones por email vía Resend</li>
+      <li><span class="badge">OK</span>RLS y políticas de seguridad en Supabase</li>
+      <li>
+        <span class="badge">OK</span>Tests E2E con Playwright cubriendo los flujos principales
+      </li>
+    </ul>
+
+    <h3>En curso / próximos pasos</h3>
+    <ul>
+      <li>Dashboard de administrador (app <em>manager</em>)</li>
+      <li>Mejoras de performance: cache Redis en endpoints más usados</li>
+      <li>Optimización del bundle del frontend</li>
+      <li>Cobertura E2E adicional para flujos de torneos</li>
+    </ul>
+
+    <div class="pagebreak"></div>
+
+    <h2>5. Requisitos Previos</h2>
+    <ul>
+      <li><strong>Node.js</strong> ≥ 22.12 (recomendado: usar <code>nvm</code>)</li>
+      <li><strong>pnpm</strong> ≥ 10.32 — <code>npm i -g pnpm</code></li>
+      <li><strong>Git</strong></li>
+      <li>(Opcional) <strong>Docker</strong> — para levantar Redis localmente</li>
+    </ul>
+
+    <h2>6. Puesta en Marcha</h2>
+
+    <h3>6.1 Clonar el repositorio</h3>
+    <pre><span class="k">git</span> clone https://github.com/mateo-khalil/sumate-ya.git
+<span class="k">cd</span> sumate-ya</pre>
+
+    <h3>6.2 Instalar dependencias</h3>
+    <pre><span class="k">pnpm</span> install</pre>
+
+    <h3>6.3 Configurar variables de entorno</h3>
+    <p>
+      El proyecto requiere <strong>dos archivos <code>.env</code></strong
+      >: uno dentro de <code>apps/backend/</code> y otro dentro de <code>apps/frontend/</code>.
+      Ambos archivos deben contener <strong>exactamente las mismas variables</strong>
+      que se listan abajo.
+    </p>
+
+    <div class="warn">
+      <strong>Importante:</strong> sin estos archivos las apps no van a levantar correctamente.
+      Crear los archivos antes de ejecutar <code>pnpm run dev</code>.
+    </div>
+
+    <h3>Variables a usar</h3>
+
+    <div class="env-wrap">
+      <div class="env-path">apps/backend/.env</div>
+      <div class="env-block"></div>
+    </div>
+
+    <div class="env-wrap">
+      <div class="env-path">apps/frontend/.env</div>
+      <div class="env-block"></div>
+    </div>
+
+    <div class="ok">
+      <strong>Tip:</strong> en sistemas Unix podés crear un único <code>.env</code> en la raíz del
+      repo y luego correr <code>pnpm run sumate-ya</code> para que el backend tome el archivo via
+      symlink. En Windows hay que copiar el archivo manualmente a cada carpeta.
+    </div>
+
+    <h3>6.4 Levantar entorno de desarrollo</h3>
+    <pre><span class="c"># Levanta frontend + backend en paralelo</span>
+<span class="k">pnpm</span> run dev
+
+<span class="c"># O por separado</span>
+<span class="k">pnpm</span> run dev:frontend   <span class="c"># http://localhost:4321</span>
+<span class="k">pnpm</span> run dev:backend    <span class="c"># http://localhost:4000</span></pre>
+
+    <h3>6.5 URLs locales</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>App</th>
+          <th>URL</th>
+          <th>Puerto</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Frontend (Astro)</td>
+          <td><code>http://localhost:4321</code></td>
+          <td>4321</td>
+        </tr>
+        <tr>
+          <td>Backend (GraphQL/REST)</td>
+          <td><code>http://localhost:4000</code></td>
+          <td>4000</td>
+        </tr>
+        <tr>
+          <td>GraphQL Playground</td>
+          <td><code>http://localhost:4000/graphql</code></td>
+          <td>4000</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pagebreak"></div>
+
+    <h2>7. Scripts Útiles</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Comando</th>
+          <th>Descripción</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>pnpm run dev</code></td>
+          <td>Levanta frontend + backend en modo desarrollo</td>
+        </tr>
+        <tr>
+          <td><code>pnpm run build</code></td>
+          <td>Build de producción de todas las apps</td>
+        </tr>
+        <tr>
+          <td><code>pnpm run typecheck</code></td>
+          <td>Validación TypeScript en todo el monorepo</td>
+        </tr>
+        <tr>
+          <td><code>pnpm run lint</code></td>
+          <td>Lint con ESLint</td>
+        </tr>
+        <tr>
+          <td><code>pnpm run test</code></td>
+          <td>Tests unitarios (Vitest)</td>
+        </tr>
+        <tr>
+          <td><code>pnpm run test:e2e</code></td>
+          <td>Tests E2E con Playwright</td>
+        </tr>
+        <tr>
+          <td><code>pnpm run codegen</code></td>
+          <td>Regenera tipos desde el schema GraphQL</td>
+        </tr>
+        <tr>
+          <td><code>pnpm run kill:ports</code></td>
+          <td>Libera los puertos 4321 y 4000 si quedaron ocupados</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>8. Testing</h2>
+    <p>
+      El monorepo cuenta con tests unitarios por app (Vitest) y una suite completa de tests
+      end-to-end con Playwright en <code>apps/testing/</code>.
+    </p>
+
+    <pre><span class="c"># Instalar dependencias de Playwright (primera vez)</span>
+<span class="k">npm</span> install --save-dev @playwright/test
+
+<span class="c"># Correr toda la suite</span>
+npx playwright test
+
+<span class="c"># Modo UI interactivo</span>
+npx playwright test --ui
+
+<span class="c"># Solo Chromium</span>
+npx playwright test --project=chromium
+
+<span class="c"># Modo debug</span>
+npx playwright test --debug</pre>
+
+    <h2>9. Recursos del Proyecto</h2>
+    <div class="links">
+      <div>
+        <strong>Código fuente:</strong>
+        <a href="https://github.com/mateo-khalil/sumate-ya">github.com/mateo-khalil/sumate-ya</a>
+      </div>
+      <div>
+        <strong>Tablero de tareas:</strong>
+        <a href="https://github.com/users/mateo-khalil/projects/2"
+          >github.com/users/mateo-khalil/projects/2</a
+        >
+      </div>
+      <div><strong>Supabase project:</strong> <code>getfqjkfsueucoalvtcc</code></div>
+    </div>
+
+    <div class="footer">Sumate Ya · Documento de entrega de progreso · Generado el 2026-05-03</div>
+  </body>
+</html>
