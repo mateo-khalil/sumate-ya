@@ -200,17 +200,28 @@ async function gotoMatchDetail(page: Page, matchId: string): Promise<void> {
 // listener y la mutation no se ejecuta nunca, fallando el `expect.poll(payloads.length)`
 // con timeout. El web component <astro-island> trackea su estado: mientras hidrata
 // expone el atributo `ssr` y/o `await-children`; al completar la hidratacion los
-// remueve. Esperamos a que TODAS las islands del detalle hayan terminado para que
-// los clicks aterricen sobre handlers de React reales.
-// Previously fixed bugs: tests "Sumarme por equipo" y "error inline al salir" fallaban
-// con `expected 1, received 0` porque el click se hacia antes de la hidratacion.
+// remueve.
+// IMPORTANTE: filtramos SOLO las islands con `client="load"`. Las que usan
+// `client:visible` (ej: MatchResultsSection en el bottom de la pagina) nunca pierden
+// el atributo `ssr` hasta que el usuario las scrollea a la vista — esperar por ellas
+// hace timeoutear el helper. Para nuestros tests solo importan los CTAs above the
+// fold (JoinTeamButton, LeaveMatchButton).
+// Previously fixed bugs:
+//   1. Tests "Sumarme por equipo" y "error inline al salir" fallaban con
+//      `expected 1, received 0` porque el click se hacia antes de la hidratacion.
+//   2. Despues de agregarse MatchResultsSection con client:visible, el helper
+//      timeouteaba a los 10s porque esa island nunca hidrata sin scroll —
+//      filtrado por client="load" lo arregla.
 async function waitForIslandsHydrated(page: Page): Promise<void> {
+  // Astro 6 marca cada island hidratada agregando el atributo `client-render-time`
+  // (que registra cuántos ms tardó React en montar). En cambio `await-children`
+  // queda pegado al elemento incluso después de hidratar — por eso NO sirve como
+  // señal negativa. Usamos la presencia de `client-render-time` como indicador
+  // positivo: si está, el handler onClick ya está enganchado.
   await page.waitForFunction(() => {
-    const islands = Array.from(document.querySelectorAll('astro-island'));
+    const islands = Array.from(document.querySelectorAll('astro-island[client="load"]'));
     if (islands.length === 0) return true;
-    return islands.every(
-      (island) => !island.hasAttribute('ssr') && !island.hasAttribute('await-children'),
-    );
+    return islands.every((island) => island.hasAttribute('client-render-time'));
   }, { timeout: 10_000 });
 }
 
