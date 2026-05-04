@@ -94,7 +94,7 @@ export default defineConfig({
    * quedaba colgado ~5 min). El comentario del bloque arriba ya documentaba `workers:4`
    * como el valor correcto, pero el codigo decia 8 — fix incoherencia.
    * Previously fixed bugs: see #1 in the Decision Context block above (test 91/91 hang). */
-  workers: process.env.CI ? 1 : 4,
+  workers: process.env.CI ? 1 : 6,
   /* Give UI assertions enough time for Astro islands + GraphQL mocks to settle. */
   expect: {
     timeout: 30_000,
@@ -121,11 +121,31 @@ export default defineConfig({
     navigationTimeout: 30_000,
   },
 
-  /* Run tests only in Google Chrome. */
+  /* Run tests only in Google Chrome.
+   *
+   * Decision Context (auth storage state):
+   * - The `setup` project runs `tests/auth.setup.ts` once before any chrome
+   *   test. It performs a real UI login for every test user defined in
+   *   `tests/support/users.ts` and persists each context's storage state to
+   *   `playwright/.auth/<role>.json`. Specs that need a logged-in browser
+   *   reference those files via `test.use({ storageState: ... })`, skipping
+   *   the per-test login round-trip (saves 1-2s per test).
+   * - `chrome.dependencies = ['setup']` means setup must complete before any
+   *   chrome spec runs, but the chrome tests themselves don't need to declare
+   *   the dependency individually.
+   * - The login form itself is covered by login.spec.ts, which intentionally
+   *   does NOT consume storage state — it's the regression test for that flow.
+   */
   projects: [
+    {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts$/,
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+    },
     {
       name: 'chrome',
       use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+      dependencies: ['setup'],
     },
   ],
 

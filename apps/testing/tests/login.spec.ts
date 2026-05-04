@@ -1,66 +1,42 @@
-import { test, expect, type Page } from '@playwright/test';
+import { expect, FRONTEND_URL, test, TEST_USERS } from './support';
 
 /**
  * Tests E2E del flujo de login (/login).
  *
  * Decision Context:
- * - Por qué la mayoría NO mockea: login.astro es SSR (`prerender = false`) y el POST se
- *   procesa en el servidor de Astro, que llama al backend Express via `loginWithBackend()`
- *   desde Node. Esa request nunca pasa por el browser, así que `page.route()` no la
- *   intercepta. Los tests se separan en dos grupos:
- *     1. Render + interacción client-side: siempre corren, no requieren nada.
- *     2. Submit real → redirect por rol: requieren backend en :4000 + Supabase
- *        autenticado. `playwright.config.ts` arranca `npm run dev` (turbo) antes de
- *        correr la suite, así que el backend siempre está disponible.
- * - Por qué hardcodeamos los seed users por defecto: los emails y contraseñas de
- *   `lucas@test.com` / `admin@clubsur.com` viven sin cifrar en
- *   `apps/backend/supabase/seed.sql` — no son secretos, son data de bootstrapping para
- *   cualquier dev que levanta el ambiente. Las env vars TEST_PLAYER_EMAIL etc. están
- *   por si alguien corre los tests contra una DB cloud con otros usuarios.
+ * - Por qué este spec NO usa `test.use({ storageState })`: estamos validando el
+ *   flujo de login en sí. Cualquier saved-state nos saltearía la página que
+ *   queremos probar.
+ * - Por qué la mayoría NO mockea: login.astro es SSR y el POST se procesa en el
+ *   servidor de Astro, que llama al backend Express via `loginWithBackend()`.
+ *   `page.route()` no intercepta esas requests; el playwright.config arranca
+ *   `npm run dev` (turbo) antes de la suite, así que el backend siempre está
+ *   disponible.
  * - Lo que validamos del role-based redirect: que después del POST exitoso, la URL
- *   final sea `/partidos` para player y `/panel-club` para club_admin (ver getRoleRedirect
- *   en lib/auth.ts).
- * - Assumptions:
- *   * Frontend en :4321 y backend en :4000 (`pnpm dev` en cada uno).
- *   * Para los tests con backend: el .env tiene SUPABASE_ANON_KEY válido y los usuarios
- *     existen en la DB con sus respectivos roles.
+ *   final sea `/partidos` para player y `/panel-club` para club_admin (ver
+ *   getRoleRedirect en lib/auth.ts).
  * - Previously fixed bugs: none relevant.
  */
 
-const FRONTEND_URL = 'http://localhost:4321';
-const LOGIN_URL = `${FRONTEND_URL}/login`;
-
-// Credenciales por defecto: cuentas de prueba registradas a mano en la cloud DB del
-// proyecto, exclusivas para E2E. Los usuarios seed del seed.sql (lucas@test.com etc.)
-// no existen en cloud — sólo se aplican al Supabase local. Estas cuentas son
-// "throwaway QA accounts": passwords débiles a propósito (corren contra una DB
-// de desarrollo, no producción), y commiteadas para que cualquier dev pueda correr
-// la suite sin setear env vars.
-// Las env vars permiten overridear si alguien corre contra otra DB.
-const PLAYER_EMAIL = process.env.TEST_PLAYER_EMAIL ?? 'ricardo@gmail.com';
-const PLAYER_PASSWORD = process.env.TEST_PLAYER_PASSWORD ?? 'bbbb1234';
-const CLUB_EMAIL = process.env.TEST_CLUB_EMAIL ?? 'frantestsumateya@gmail.com';
-const CLUB_PASSWORD = process.env.TEST_CLUB_PASSWORD ?? 'aaaa1234';
-
-async function gotoLogin(page: Page): Promise<void> {
-  await page.goto(LOGIN_URL);
-  await expect(page.locator('form.login-form')).toBeVisible();
-}
+const { playerMateo: PLAYER, clubAdmin: CLUB } = TEST_USERS;
 
 test.describe('Login (/login) — render y estructura', () => {
-  test('renderiza el header con el branding y el subtítulo', async ({ page }) => {
-    await gotoLogin(page);
+  test('renderiza el header con el branding y el subtítulo', async ({ loginPage, page }) => {
+    await loginPage.goto();
 
     await expect(page).toHaveTitle(/Iniciar sesión — Sumate Ya/);
     await expect(page.getByRole('heading', { name: /SUMATE YA/i })).toBeVisible();
     await expect(page.getByText(/Iniciá sesión para continuar/i)).toBeVisible();
   });
 
-  test('muestra los campos de email y contraseña con sus tipos correctos', async ({ page }) => {
-    await gotoLogin(page);
+  test('muestra los campos de email y contraseña con sus tipos correctos', async ({
+    loginPage,
+    page,
+  }) => {
+    await loginPage.goto();
 
-    await expect(page.getByLabel('Email')).toBeVisible();
-    await expect(page.getByLabel('Contraseña')).toBeVisible();
+    await expect(loginPage.emailInput).toBeVisible();
+    await expect(loginPage.passwordInput).toBeVisible();
 
     // type=email habilita validación nativa del browser; type=password oculta el valor.
     await expect(page.locator('input#email')).toHaveAttribute('type', 'email');
@@ -74,15 +50,15 @@ test.describe('Login (/login) — render y estructura', () => {
     );
   });
 
-  test('el form usa POST y tiene el botón "INGRESAR"', async ({ page }) => {
-    await gotoLogin(page);
+  test('el form usa POST y tiene el botón "INGRESAR"', async ({ loginPage }) => {
+    await loginPage.goto();
 
-    await expect(page.locator('form.login-form')).toHaveAttribute('method', /post/i);
-    await expect(page.getByRole('button', { name: 'INGRESAR' })).toBeVisible();
+    await expect(loginPage.form).toHaveAttribute('method', /post/i);
+    await expect(loginPage.submitButton).toBeVisible();
   });
 
-  test('muestra los links a registro de club y de jugador', async ({ page }) => {
-    await gotoLogin(page);
+  test('muestra los links a registro de club y de jugador', async ({ loginPage, page }) => {
+    await loginPage.goto();
 
     const clubLink = page.getByRole('link', { name: /Registrate acá/i }).first();
     const playerLink = page.getByRole('link', { name: /Registrate acá/i }).nth(1);
@@ -91,124 +67,100 @@ test.describe('Login (/login) — render y estructura', () => {
     await expect(playerLink).toHaveAttribute('href', '/registro-jugador');
   });
 
-  test('al venir desde registro exitoso muestra el banner de éxito', async ({ page }) => {
-    // El query param `?registered=1` lo setea registro-club.astro tras crear la cuenta.
-    await page.goto(`${LOGIN_URL}?registered=1`);
+  test('al venir desde registro exitoso muestra el banner de éxito', async ({ loginPage }) => {
+    await loginPage.goto('registered=1');
 
-    await expect(page.getByText(/Registro exitoso\. Ya podés iniciar sesión/i)).toBeVisible();
+    await expect(loginPage.registeredBanner).toBeVisible();
   });
 
-  test('por defecto (sin query param) NO muestra el banner de éxito', async ({ page }) => {
-    await gotoLogin(page);
+  test('por defecto (sin query param) NO muestra el banner de éxito', async ({ loginPage }) => {
+    await loginPage.goto();
 
-    await expect(page.getByText(/Registro exitoso/i)).not.toBeVisible();
+    await expect(loginPage.registeredBanner).not.toBeVisible();
   });
 });
 
 test.describe('Login — validación y errores (requiere backend)', () => {
-  test('submit con campos vacíos → mensaje "Completá todos los campos"', async ({ page }) => {
-    await gotoLogin(page);
-
-    // novalidate en el form deshabilita la validación HTML5, así que el POST llega al server.
-    await page.getByRole('button', { name: 'INGRESAR' }).click();
+  test('submit con campos vacíos → mensaje "Completá todos los campos"', async ({
+    loginPage,
+    page,
+  }) => {
+    await loginPage.goto();
+    await loginPage.submit();
 
     await expect(page).toHaveURL(/\/login/);
     await expect(page.getByText(/Completá todos los campos/i)).toBeVisible();
   });
 
   test('credenciales inválidas → mensaje genérico "Email o contraseña incorrectos"', async ({
+    loginPage,
     page,
   }) => {
-    await gotoLogin(page);
+    await loginPage.goto();
+    await loginPage.fillCredentials('noexiste@example.test', 'contraseña-incorrecta-123');
+    await loginPage.submit();
 
-    await page.getByLabel('Email').fill('noexiste@example.test');
-    await page.getByLabel('Contraseña').fill('contraseña-incorrecta-123');
-    await page.getByRole('button', { name: 'INGRESAR' }).click();
-
-    // El mensaje debe ser genérico — no debe revelar si el email existe (anti enumeration).
+    // Mensaje genérico — no debe revelar si el email existe (anti enumeration).
     await expect(page).toHaveURL(/\/login/);
     await expect(page.getByText(/Email o contraseña incorrectos/i)).toBeVisible();
   });
 
-  test('después de un error fallido, el campo email retiene el valor (UX)', async ({ page }) => {
-    await gotoLogin(page);
-
+  test('después de un error fallido, el campo email retiene el valor (UX)', async ({
+    loginPage,
+  }) => {
+    await loginPage.goto();
     const email = 'tester@example.test';
-    await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Contraseña').fill('mal');
-    await page.getByRole('button', { name: 'INGRESAR' }).click();
+    await loginPage.fillCredentials(email, 'mal');
+    await loginPage.submit();
 
     // El SSR re-renderiza con `emailValue` para no obligar al usuario a re-tipearlo.
-    await expect(page.getByLabel('Email')).toHaveValue(email);
+    await expect(loginPage.emailInput).toHaveValue(email);
     // La contraseña, en cambio, NO se retiene (no se hace eco de credenciales).
-    await expect(page.getByLabel('Contraseña')).toHaveValue('');
+    await expect(loginPage.passwordInput).toHaveValue('');
   });
 });
 
 test.describe('Login — redirect por rol (requiere backend + credenciales válidas)', () => {
-  test('login exitoso como player → redirige a /partidos', async ({ page }) => {
-    await gotoLogin(page);
+  test('login exitoso como player → redirige a /partidos', async ({ loginPage, page }) => {
+    await loginPage.loginAs(PLAYER);
 
-    await page.getByLabel('Email').fill(PLAYER_EMAIL);
-    await page.getByLabel('Contraseña').fill(PLAYER_PASSWORD);
-    await page.getByRole('button', { name: 'INGRESAR' }).click();
-
-    await page.waitForURL((url) => !url.pathname.endsWith('/login'), { timeout: 10_000 });
     await expect(page).toHaveURL(/\/partidos/);
   });
 
-  test('login exitoso como club_admin → redirige a /panel-club', async ({ page }) => {
-    await gotoLogin(page);
+  test('login exitoso como club_admin → redirige a /panel-club', async ({ loginPage, page }) => {
+    await loginPage.loginAs(CLUB);
 
-    await page.getByLabel('Email').fill(CLUB_EMAIL);
-    await page.getByLabel('Contraseña').fill(CLUB_PASSWORD);
-    await page.getByRole('button', { name: 'INGRESAR' }).click();
-
-    await page.waitForURL((url) => !url.pathname.endsWith('/login'), { timeout: 10_000 });
     await expect(page).toHaveURL(/\/panel-club/);
   });
 
-  test('sesión persiste tras refresh de la página', async ({ page }) => {
-    // Loguearse
-    await gotoLogin(page);
-    await page.getByLabel('Email').fill(PLAYER_EMAIL);
-    await page.getByLabel('Contraseña').fill(PLAYER_PASSWORD);
-    await page.getByRole('button', { name: 'INGRESAR' }).click();
-    await page.waitForURL(/\/partidos/, { timeout: 10_000 });
+  test('sesión persiste tras refresh de la página', async ({ loginPage, page }) => {
+    await loginPage.loginAs(PLAYER);
 
-    // Reload — la cookie HttpOnly debe mantener la sesión y el middleware no debe rebotar.
+    // Reload — la cookie HttpOnly debe mantener la sesión.
     await page.reload();
     await expect(page).toHaveURL(/\/partidos/);
 
     // Re-visitar /login con sesión activa debe redirigir al home del rol.
-    await page.goto(LOGIN_URL);
+    await page.goto(`${FRONTEND_URL}/login`);
     await expect(page).toHaveURL(/\/partidos/);
   });
 
-  test('player intentando entrar a /panel-club → es rebotado a /partidos', async ({ page }) => {
-    // Login como player primero.
-    await gotoLogin(page);
-    await page.getByLabel('Email').fill(PLAYER_EMAIL);
-    await page.getByLabel('Contraseña').fill(PLAYER_PASSWORD);
-    await page.getByRole('button', { name: 'INGRESAR' }).click();
-    await page.waitForURL(/\/partidos/, { timeout: 10_000 });
+  test('player intentando entrar a /panel-club → es rebotado a /partidos', async ({
+    loginPage,
+    page,
+  }) => {
+    await loginPage.loginAs(PLAYER);
 
-    // Intentar entrar a la ruta exclusiva del club_admin.
-    // El middleware (ROLE_RESTRICTED) debe rebotarlo via getRoleRedirect.
     await page.goto(`${FRONTEND_URL}/panel-club`);
     await expect(page).toHaveURL(/\/partidos/);
   });
 
   test('club_admin intentando entrar a /partidos/crear → es rebotado a /panel-club', async ({
+    loginPage,
     page,
   }) => {
-    await gotoLogin(page);
-    await page.getByLabel('Email').fill(CLUB_EMAIL);
-    await page.getByLabel('Contraseña').fill(CLUB_PASSWORD);
-    await page.getByRole('button', { name: 'INGRESAR' }).click();
-    await page.waitForURL(/\/panel-club/, { timeout: 10_000 });
+    await loginPage.loginAs(CLUB);
 
-    // /partidos/crear es player-only en ROLE_RESTRICTED → debe rebotar al home del rol.
     await page.goto(`${FRONTEND_URL}/partidos/crear`);
     await expect(page).toHaveURL(/\/panel-club/);
   });

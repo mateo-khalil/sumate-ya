@@ -100,6 +100,11 @@ input MatchFilters {
   dateFrom: String
   dateTo: String
   search: String
+  # When true, restrict the result to matches the authenticated user joined.
+  # Ignored when no auth context is present so anonymous callers see the public list.
+  # Used by /partidos "Pasados → Solo los míos" toggle to inspect personal history
+  # without leaving the listing UI.
+  onlyMine: Boolean
 }
 
 type Query {

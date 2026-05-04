@@ -60,6 +60,17 @@ When backend work touches GraphQL schema/resolvers/contracts, also read `.claude
 3. Apply `.claude/rules/graphql.md` for backend GraphQL work and run codegen after `.graphql` edits.
 4. If a backend task needs an exception, update the rule file first (or ask for confirmation) before implementing code changes.
 
+## Hard Rule: E2E Testing Rules First (Mandatory)
+
+Before adding, refactoring, or debugging any file under `apps/testing/tests/**`, always read `.claude/rules/e2e-testing.md` first.
+
+### Required behavior
+
+1. Treat `.claude/rules/e2e-testing.md` as the source of truth for the e2e architecture (page objects, fixtures, auth storage state, GraphQL mocking, builders).
+2. Specs MUST import from the `tests/support` barrel; raw selectors and per-test login flows are not allowed when an existing Page Object or fixture covers them.
+3. Authenticated specs MUST consume saved storage state via `test.use({ storageState: TEST_USERS.<role>.storageStatePath })` — `tests/auth.setup.ts` produces those files once per run.
+4. Add or update Decision Context blocks in specs and Page Objects whenever behaviour or mocking strategy changes.
+
 ### Astro SSR Strategy (CRITICAL)
 
 Use **hybrid rendering** (`output: 'hybrid'` in astro.config). Pages are **static by default** and opt into SSR only when needed.

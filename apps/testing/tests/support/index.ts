@@ -1,0 +1,30 @@
+/**
+ * Public surface of the e2e support package. Specs should import from
+ * `./support` (relative to tests/) instead of reaching into individual files.
+ *
+ * Decision Context:
+ * - One barrel keeps the spec import block short ("import { test, expect,
+ *   TEST_USERS, mockGraphQLAll } from './support'") and lets us refactor the
+ *   internal layout without touching every spec.
+ */
+
+export { test, expect } from './fixtures';
+export * from './constants';
+export * from './users';
+export * from './auth';
+export * from './graphql';
+export * from './network';
+export * from './builders';
+export { CreateMatchPage } from './page-objects/CreateMatchPage';
+export { HomePage } from './page-objects/HomePage';
+export { LoginPage } from './page-objects/LoginPage';
+export { MatchDetailPage } from './page-objects/MatchDetailPage';
+export { MatchesListPage } from './page-objects/MatchesListPage';
+export { MatchesMapPage } from './page-objects/MatchesMapPage';
+export { ProfilePage, ONE_PIXEL_PNG } from './page-objects/ProfilePage';
+export {
+  RegisterPlayerPage,
+  VALID_PLAYER_REGISTER,
+  type PlayerRegisterValues,
+} from './page-objects/RegisterPlayerPage';
+export { RegisterClubPage } from './page-objects/RegisterClubPage';

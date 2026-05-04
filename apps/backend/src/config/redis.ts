@@ -57,6 +57,10 @@ export const CACHE_PREFIX = {
   // `user:matches:<userId>:page:<page>:size:<pageSize>` — per-user history pagination.
   // Invalidate when a match this user participated in transitions to 'completed'.
   USER_MATCHES: 'user:matches:',
+  // `geocode:<normalizedAddress>` — Nominatim geocoding result cache.
+  // Long TTL (GEOCODING) because addresses rarely move and Nominatim usage policy
+  // requires aggressive caching. See geocodingService for details.
+  GEOCODE: 'geocode:',
 } as const;
 
 // =====================================================
@@ -68,6 +72,11 @@ export const CACHE_TTL = {
   SINGLE_ENTITY: 1800, // 30 minutes for individual items
   DYNAMIC_DATA: 180, // 3 minutes for frequently changing data (match slots)
   USER_DATA: 300, // 5 minutes for user-specific data
+  // 30 days. Geocoding results from Nominatim are stable (street addresses rarely move)
+  // and OSM's usage policy requires aggressive caching to avoid hammering the public
+  // service. We also persist the result back to clubs.lat/lng, so this cache is mostly
+  // a guard against repeated misses across cold restarts of the same address.
+  GEOCODING: 60 * 60 * 24 * 30,
 } as const;
 
 // =====================================================

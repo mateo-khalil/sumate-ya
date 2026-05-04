@@ -114,6 +114,13 @@ export interface MatchFilterOptions {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  /**
+   * Restrict to matches the given user joined. When set, the query inner-joins
+   * matchParticipants on `playerId = participantUserId`. Resolved at the service
+   * layer from `MatchFilters.onlyMine + ctx.user.id` — never trusted from the
+   * client directly.
+   */
+  participantUserId?: string;
 }
 
 // =====================================================
@@ -141,6 +148,38 @@ export async function getMatchesWithFilters(
   // If search is provided, we need to run parallel queries and merge
   if (filters.search) {
     return getMatchesWithSearch(filters, client);
+  }
+
+  // Decision Context: "onlyMine" filter via two-step lookup
+  // - The repo could inner-join matchParticipants on playerId, but PostgREST then drops the
+  //   `matchParticipants(count)` aggregate (you can't request both a filter and a count on
+  //   the same relation cleanly). Without the aggregate the list cards would show 0/10
+  //   players for past matches the user actually played in.
+  // - Two-step approach: (1) fetch the user's participated matchIds, (2) constrain the main
+  //   query with `.in('id', ids)`. Keeps `matchParticipants(count)` intact so slot counts
+  //   remain accurate. Adds one extra round-trip per request, acceptable at our scale
+  //   (< few hundred matches per user, single roundtrip cost is small).
+  // - Authorization: the resolver enforces that participantUserId equals ctx.user.id, so
+  //   anonymous callers cannot enumerate other users' match history through this path.
+  // - Edge case: if the user has zero participations, the IN clause receives an empty array.
+  //   Supabase `.in('id', [])` returns an empty result set, which is the correct behavior.
+  let participatedMatchIds: string[] | null = null;
+  if (filters.participantUserId) {
+    const { data: participantRows, error: partError } = await client
+      .from('matchParticipants')
+      .select('matchId')
+      .eq('playerId', filters.participantUserId);
+    if (partError) {
+      console.error(
+        `[matchRepository.getMatchesWithFilters] Failed to fetch participated matchIds for userId=${filters.participantUserId}:`,
+        partError.message,
+      );
+      throw new Error(partError.message);
+    }
+    participatedMatchIds = (participantRows ?? []).map((row) => row.matchId as string);
+    if (participatedMatchIds.length === 0) {
+      return [];
+    }
   }
 
   // Standard query without search
@@ -175,6 +214,10 @@ export async function getMatchesWithFilters(
     query = query.lte('scheduledAt', filters.dateTo);
   }
 
+  if (participatedMatchIds) {
+    query = query.in('id', participatedMatchIds);
+  }
+
   // Order by scheduled date
   query = query.order('scheduledAt', { ascending: true });
 
@@ -204,6 +247,28 @@ async function getMatchesWithSearch(
 ): Promise<MatchWithClub[]> {
   const searchTerm = `%${filters.search}%`;
 
+  // When filtering by participation, fetch the user's matchIds first and constrain
+  // the main queries with `.in('id', ids)`. Same rationale as getMatchesWithFilters —
+  // preserves the matchParticipants(count) aggregate for accurate slot counts.
+  let participatedMatchIds: string[] | null = null;
+  if (filters.participantUserId) {
+    const { data: participantRows, error: partError } = await client
+      .from('matchParticipants')
+      .select('matchId')
+      .eq('playerId', filters.participantUserId);
+    if (partError) {
+      console.error(
+        `[matchRepository.getMatchesWithSearch] Failed to fetch participated matchIds for userId=${filters.participantUserId}:`,
+        partError.message,
+      );
+      throw new Error(partError.message);
+    }
+    participatedMatchIds = (participantRows ?? []).map((row) => row.matchId as string);
+    if (participatedMatchIds.length === 0) {
+      return [];
+    }
+  }
+
   // Query 1: Search in match description
   let descriptionQuery = client
     .from('matches')
@@ -218,6 +283,9 @@ async function getMatchesWithSearch(
   }
   if (filters.dateTo) {
     descriptionQuery = descriptionQuery.lte('scheduledAt', filters.dateTo);
+  }
+  if (participatedMatchIds) {
+    descriptionQuery = descriptionQuery.in('id', participatedMatchIds);
   }
 
   const descriptionQueryWithSearch = descriptionQuery
@@ -238,6 +306,9 @@ async function getMatchesWithSearch(
   }
   if (filters.dateTo) {
     clubQuery = clubQuery.lte('scheduledAt', filters.dateTo);
+  }
+  if (participatedMatchIds) {
+    clubQuery = clubQuery.in('id', participatedMatchIds);
   }
 
   const clubQueryWithSearch = clubQuery
@@ -263,6 +334,9 @@ async function getMatchesWithSearch(
     }
     if (filters.dateTo) {
       descriptionZoneQuery = descriptionZoneQuery.lte('scheduledAt', filters.dateTo);
+    }
+    if (participatedMatchIds) {
+      descriptionZoneQuery = descriptionZoneQuery.in('id', participatedMatchIds);
     }
 
     q1 = descriptionZoneQuery

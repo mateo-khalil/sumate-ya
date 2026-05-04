@@ -26,6 +26,12 @@
  *   then past/cancelled below sorted DESC (most-recent first). Active matches must dominate
  *   the first screen.
  * - Uses generated GraphQL `Match` type so schema changes break this file at build time.
+ * - Geocoding backfill: clubs now store only the street address (lat/lng default to null).
+ *   `enrichWithCoords()` runs inside the cache fetcher of every read path that exposes the
+ *   club, geocoding missing addresses through Nominatim and persisting results back to the
+ *   `clubs` table so subsequent requests skip both the network call and the DB update. This
+ *   keeps the existing nullable lat/lng contract — failures (rate limits, unknown address)
+ *   leave coords null and the map filters them out, same as before.
  * - Previously fixed bugs: removed ad-hoc console.log debugging that ran on every request —
  *   those were left from initial scaffolding and polluted prod logs.
  */
@@ -55,8 +61,10 @@ import {
   type CompletedMatchRow,
 } from '../repositories/matchRepository.js';
 import { clubSlotRepository } from '../repositories/clubSlotRepository.js';
+import { clubRepository } from '../repositories/clubRepository.js';
 import { profileRepository } from '../repositories/profileRepository.js';
 import { dateToDayOfWeek } from './clubService.js';
+import { geocodeAddresses } from './geocodingService.js';
 import type { ServiceContext } from '../types/context.js';
 
 // =====================================================
@@ -152,9 +160,79 @@ function toMatch(row: MatchWithClub): Match {
 }
 
 /**
- * Convert GraphQL filters to repository filter options
+ * Backfill missing club coordinates by geocoding the stored address and persisting
+ * the result back to the `clubs` table.
+ *
+ * Decision Context:
+ * - Why here: the matches list is the canonical surface where pins are rendered. Doing
+ *   the lookup inside the cache fetcher means the enriched row is what gets cached, so
+ *   subsequent requests skip both the network call AND the DB update.
+ * - Why mutate in place: the rows are about to be cached and then mapped to GraphQL —
+ *   mutating `row.clubs.lat/lng` keeps the existing toMatch() pipeline unchanged.
+ * - Dedup: clubs that share an address (or appear in multiple matches in the same list)
+ *   resolve to one Nominatim call via geocodeAddresses().
+ * - Best-effort: any failure (network down, Nominatim 503, persist error) leaves
+ *   lat/lng null. The map already filters those clubs out, so the worst case is a
+ *   missing pin — never a 500 on the matches list.
+ * - Egress: we update at most once per club because we only call this when lat/lng are
+ *   null. After persistence, future cache misses fetch coords directly from Postgres.
+ * - Previously fixed bugs: none relevant.
  */
-function toFilterOptions(filters?: MatchFilters | null): MatchFilterOptions {
+async function enrichWithCoords<T extends { clubs: { id: string; address: string | null; lat: number | null; lng: number | null } | null }>(
+  rows: T[],
+): Promise<T[]> {
+  const targets = rows
+    .map((r) => r.clubs)
+    .filter(
+      (c): c is NonNullable<T['clubs']> =>
+        c !== null && c.lat == null && c.lng == null && !!c.address,
+    );
+
+  if (targets.length === 0) return rows;
+
+  const addresses = targets.map((c) => c.address as string);
+  const coordsByAddress = await geocodeAddresses(addresses);
+
+  // Track unique clubIds we've persisted in this call to avoid duplicate UPDATEs when
+  // the same club appears in many list rows.
+  const persisted = new Set<string>();
+
+  for (const row of rows) {
+    const club = row.clubs;
+    if (!club || club.lat != null || club.lng != null || !club.address) continue;
+
+    const coords = coordsByAddress.get(club.address);
+    if (!coords) continue;
+
+    club.lat = coords.lat;
+    club.lng = coords.lng;
+
+    if (!persisted.has(club.id)) {
+      persisted.add(club.id);
+      // Fire-and-await: we already have the coords; the persist is best-effort and
+      // logs internally on failure so it's safe to await without try/catch here.
+      await clubRepository.updateClubCoords(club.id, coords.lat, coords.lng);
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Convert GraphQL filters to repository filter options.
+ *
+ * Decision Context:
+ * - `onlyMine` (boolean) is resolved against the authenticated `userId` here so the
+ *   repository receives a concrete `participantUserId` string. This indirection ensures
+ *   anonymous callers cannot enumerate other players' history — the flag is silently
+ *   ignored when no userId is available.
+ * - We deliberately do NOT trust a client-supplied user id; the only source of truth is
+ *   the resolver's `requireAuth` / `ctx.user.id`.
+ */
+function toFilterOptions(
+  filters?: MatchFilters | null,
+  userId?: string,
+): MatchFilterOptions {
   if (!filters) return { status: 'open' };
 
   return {
@@ -164,11 +242,18 @@ function toFilterOptions(filters?: MatchFilters | null): MatchFilterOptions {
     dateFrom: filters.dateFrom ?? undefined,
     dateTo: filters.dateTo ?? undefined,
     search: filters.search ?? undefined,
+    participantUserId: filters.onlyMine && userId ? userId : undefined,
   };
 }
 
 /**
- * Generate cache key from filters
+ * Generate cache key from filters.
+ *
+ * Decision Context:
+ * - `participantUserId` enters the key when present so two users with different
+ *   "Solo los míos" results never collide on a shared cache slot. The non-mine path
+ *   keeps its previous global key, so the public listing still benefits from a single
+ *   shared cache entry across all anonymous and authenticated callers.
  */
 function getFiltersCacheKey(filters: MatchFilterOptions): string {
   const parts = [
@@ -178,6 +263,7 @@ function getFiltersCacheKey(filters: MatchFilterOptions): string {
     filters.dateFrom ? `from:${filters.dateFrom}` : '',
     filters.dateTo ? `to:${filters.dateTo}` : '',
     filters.search ? `search:${filters.search}` : '',
+    filters.participantUserId ? `mine:${filters.participantUserId}` : '',
   ].filter(Boolean);
 
   return `${CACHE_PREFIX.MATCHES_LIST}:${parts.join('|')}`;
@@ -196,15 +282,20 @@ function getFiltersCacheKey(filters: MatchFilterOptions): string {
  * - Previously fixed bugs: none relevant.
  */
 export async function listMatches(
-  _ctx: ServiceContext,
+  ctx: ServiceContext,
   filters?: MatchFilters | null,
 ): Promise<Match[]> {
-  const filterOptions = toFilterOptions(filters);
+  const filterOptions = toFilterOptions(filters, ctx.userId);
   const cacheKey = getFiltersCacheKey(filterOptions);
 
   const matches = await cacheGetOrSet<MatchWithClub[]>(
     cacheKey,
-    () => matchRepository.getMatchesWithFilters(filterOptions),
+    async () => {
+      const rows = await matchRepository.getMatchesWithFilters(filterOptions);
+      // Geocode + persist coords for clubs missing lat/lng so map pins render.
+      // Runs inside the cache fetcher so the enriched rows are what get cached.
+      return enrichWithCoords(rows);
+    },
     CACHE_TTL.DYNAMIC_DATA,
   );
 
@@ -251,7 +342,12 @@ export async function getMatchById(_ctx: ServiceContext, id: string): Promise<Ma
   const cacheKey = `${CACHE_PREFIX.MATCH_DETAIL}${id}`;
   const match = await cacheGetOrSet<MatchWithClub | null>(
     cacheKey,
-    () => matchRepository.getMatchById(id),
+    async () => {
+      const row = await matchRepository.getMatchById(id);
+      if (!row) return null;
+      const [enriched] = await enrichWithCoords([row]);
+      return enriched ?? row;
+    },
     CACHE_TTL.SINGLE_ENTITY,
   );
   return match ? toMatch(match) : null;
@@ -364,7 +460,12 @@ export async function getMatchDetail(ctx: ServiceContext, id: string): Promise<M
 
   const row = await cacheGetOrSet<MatchDetailRow | null>(
     cacheKey,
-    () => matchRepository.getMatchWithParticipants(id),
+    async () => {
+      const fetched = await matchRepository.getMatchWithParticipants(id);
+      if (!fetched) return null;
+      const [enriched] = await enrichWithCoords([fetched]);
+      return enriched ?? fetched;
+    },
     CACHE_TTL.DYNAMIC_DATA,
   );
 

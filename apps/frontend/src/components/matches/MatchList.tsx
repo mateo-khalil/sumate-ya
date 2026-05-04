@@ -2,12 +2,23 @@
  * MatchList Component - Displays a grid of match cards with instant filtering.
  *
  * Decision Context:
- * - Loads the open match dataset once, then filters locally for immediate UX.
- * - Backend GraphQL filters remain available for larger datasets and map/list parity.
- * - Can render its own filters, or receive controlled filters from MatchesView.
- * - Empty state distinguishes "no open matches at all" (matches.length === 0) from
- *   "matches exist but all are hidden by filters" (visibleMatches.length === 0) so
- *   players know whether to wait or to adjust their search.
+ * - Loads the relevant match dataset once per server-side dimension (status / onlyMine),
+ *   then filters locally for immediate UX. The server-side dimensions live in
+ *   `toServerMatchFilters`; everything else is applied client-side via `filterMatches`.
+ * - The fetch effect re-runs whenever the server-side dimensions change (timeframe or
+ *   onlyMine), so switching tabs in MatchesView triggers a fresh request. Local filters
+ *   like search/format/zone do NOT cause a refetch — they apply to the cached dataset.
+ * - Empty state distinguishes three cases:
+ *   • no matches at all in the timeframe (matches.length === 0)
+ *   • matches exist but all hidden by local filters (visibleMatches.length === 0)
+ *   • Pasados + Solo los míos with zero results (handled by the empty timeframe path,
+ *     copy is generic enough to cover both cases without a third branch)
+ *   so players know whether to wait or to adjust their search.
+ * - Previously fixed bugs:
+ *   - The fetch effect originally hardcoded DEFAULT_MATCH_FILTERS, which made the list
+ *     ignore timeframe/onlyMine changes. Switching to "Pasados" appeared to do nothing
+ *     because the backing dataset never refreshed. Fixed by depending on the serialized
+ *     server filters in the effect.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -50,26 +61,37 @@ export function MatchList({
     useState<ClientMatchFilters>(DEFAULT_MATCH_FILTERS);
 
   const filters = controlledFilters ?? internalFilters;
-
-  const fetchMatches = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await executeQuery<{ matches: Match[] }>(GET_MATCHES, {
-        filters: toServerMatchFilters(DEFAULT_MATCH_FILTERS),
-      });
-      setMatches(data.matches);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar partidos');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const serverFilters = useMemo(() => toServerMatchFilters(filters), [filters]);
+  // Stable fingerprint of the server-side dimensions; the fetch effect refreshes whenever
+  // this value changes (e.g. timeframe upcoming↔past or onlyMine on/off).
+  const serverFiltersKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
 
   useEffect(() => {
     if (initialMatches) return;
-    fetchMatches();
-  }, [initialMatches, fetchMatches]);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    executeQuery<{ matches: Match[] }>(GET_MATCHES, { filters: serverFilters })
+      .then((data) => {
+        if (!cancelled) setMatches(data.matches);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Error al cargar partidos');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // serverFiltersKey carries the only inputs that should re-trigger a fetch; serverFilters
+    // itself is stable across renders thanks to useMemo, but using the JSON key keeps the
+    // dependency array primitive and avoids a new fetch per render even if the memo cache
+    // is invalidated for unrelated reasons.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMatches, serverFiltersKey]);
 
   const handleFiltersChange = useCallback(
     (newFilters: ClientMatchFilters) => {
@@ -112,11 +134,17 @@ export function MatchList({
 
       {!loading && !error && visibleMatches.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-xl font-medium">No hay partidos disponibles</p>
+          <p className="text-xl font-medium">
+            {filters.timeframe === 'past' ? 'No hay partidos pasados' : 'No hay partidos disponibles'}
+          </p>
           <p className="text-muted-foreground mt-2">
             {matches.length > 0
               ? 'Ningún partido coincide con los filtros. Probá ajustando la búsqueda.'
-              : 'No hay partidos abiertos por el momento. Volvé más tarde.'}
+              : filters.timeframe === 'past'
+                ? filters.onlyMine
+                  ? 'Todavía no jugaste partidos. Cuando juegues alguno aparecerá acá.'
+                  : 'No hay historial de partidos finalizados.'
+                : 'No hay partidos abiertos por el momento. Volvé más tarde.'}
           </p>
         </div>
       )}

@@ -9,11 +9,19 @@
  *   are cached in Redis, re-fetching on toggle is fast (< 2-3 ms service layer).
  * - Conditional unmount is preferred over CSS hide/show to avoid mounting Leaflet's
  *   DOM on pages where the map is never viewed — consistent with `client:visible` goals.
+ * - Timeframe (Próximos / Pasados): rendered as a segmented toggle above the filter
+ *   bar so users see and can switch the dataset before drilling in. Selecting Pasados
+ *   maps to `status=COMPLETED` server-side (see match-filtering.toServerMatchFilters)
+ *   and changes the dataset MatchList re-fetches. Filters and Lista/Mapa toggle keep
+ *   working identically across both timeframes — the only timeframe-specific UI is
+ *   the "Solo mis partidos" checkbox, which is rendered ONLY on Pasados AND only when
+ *   the user is authenticated, because the backend silently ignores `onlyMine` for
+ *   anonymous callers and exposing the toggle would deliver confusing empty results.
  * - Previously fixed bugs: none relevant.
  */
 
 import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
-import { List, Map as MapIcon } from 'lucide-react';
+import { List, Map as MapIcon, Calendar, History } from 'lucide-react';
 import { MatchList } from './MatchList';
 import { MatchFilters } from './MatchFilters';
 import {
@@ -22,6 +30,7 @@ import {
   parseMatchFiltersFromSearch,
   writeMatchFiltersToUrl,
   type ClientMatchFilters,
+  type MatchTimeframe,
 } from '@/lib/match-filtering';
 
 // Lazy import — Leaflet uses browser-only APIs (window/document) and crashes in Node SSR
@@ -59,8 +68,75 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
     [urlReady],
   );
 
+  const timeframe: MatchTimeframe = filters.timeframe ?? 'upcoming';
+  const onlyMine = !!filters.onlyMine;
+
+  const handleTimeframeChange = useCallback(
+    (next: MatchTimeframe) => {
+      if (next === timeframe) return;
+      // Switching back to "upcoming" must drop onlyMine — that flag only applies on
+      // the past timeframe, and leaving it set would silently filter the upcoming list
+      // by participation as soon as the user re-enables past mode.
+      handleFiltersChange({
+        ...filters,
+        timeframe: next,
+        onlyMine: next === 'past' ? filters.onlyMine : undefined,
+      });
+    },
+    [filters, handleFiltersChange, timeframe],
+  );
+
+  const handleOnlyMineToggle = useCallback(
+    (next: boolean) => {
+      handleFiltersChange({ ...filters, onlyMine: next ? true : undefined });
+    },
+    [filters, handleFiltersChange],
+  );
+
   return (
     <div>
+      {/* Timeframe toggle: Próximos vs Pasados */}
+      <div className="timeframe-toggle-row">
+        <div className="view-toggle" role="tablist" aria-label="Seleccionar período de partidos">
+          <button
+            className={`view-toggle-btn${timeframe === 'upcoming' ? ' active' : ''}`}
+            onClick={() => handleTimeframeChange('upcoming')}
+            aria-pressed={timeframe === 'upcoming'}
+            role="tab"
+            aria-selected={timeframe === 'upcoming'}
+          >
+            <span className="view-toggle-icon"><Calendar size={16} strokeWidth={2.25} aria-hidden="true" /></span>
+            Próximos
+          </button>
+          <button
+            className={`view-toggle-btn${timeframe === 'past' ? ' active' : ''}`}
+            onClick={() => handleTimeframeChange('past')}
+            aria-pressed={timeframe === 'past'}
+            role="tab"
+            aria-selected={timeframe === 'past'}
+          >
+            <span className="view-toggle-icon"><History size={16} strokeWidth={2.25} aria-hidden="true" /></span>
+            Pasados
+          </button>
+        </div>
+
+        {/* "Solo mis partidos" — only renders on Pasados AND only for authenticated users.
+            The flag is server-enforced (see matchService.toFilterOptions) but exposing
+            the toggle to anonymous users would return empty/unfiltered results and
+            confuse the UI. */}
+        {timeframe === 'past' && isAuthenticated && (
+          <label className="only-mine-toggle">
+            <input
+              type="checkbox"
+              checked={onlyMine}
+              onChange={(event) => handleOnlyMineToggle(event.target.checked)}
+              aria-label="Mostrar solo los partidos en los que jugué"
+            />
+            <span>Solo los míos</span>
+          </label>
+        )}
+      </div>
+
       <MatchFilters filters={filters} onFiltersChange={handleFiltersChange} />
 
       {/* View toggle */}
@@ -104,6 +180,36 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
       )}
 
       <style>{`
+        .timeframe-toggle-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        .timeframe-toggle-row .view-toggle {
+          margin-bottom: 0;
+        }
+
+        .only-mine-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: hsl(210 20% 85%);
+          font-family: 'Barlow', sans-serif;
+          font-size: 0.875rem;
+          cursor: pointer;
+          user-select: none;
+        }
+
+        .only-mine-toggle input[type='checkbox'] {
+          width: 1rem;
+          height: 1rem;
+          accent-color: hsl(35 100% 48%);
+          cursor: pointer;
+        }
+
         .view-toggle {
           display: inline-flex;
           gap: 0;
