@@ -4,10 +4,12 @@
  * Decision Context:
  * - Why: Aggregates per-domain resolvers from `resolvers/domains/` per backend.md rule.
  * - Pattern: Each domain module exports `{ Query, Mutation }` partials; this file merges them.
+ * - clubSlotResolvers: added for club admin slot management feature (Phase 1).
  * - Previously fixed bugs: none relevant.
  */
 
 import { clubResolvers } from './domains/club.js';
+import { clubSlotResolvers } from './domains/club-slot.js';
 import { matchResolvers } from './domains/match.js';
 import { matchResultResolvers } from './domains/match-result.js';
 import { profileResolvers } from './domains/profile.js';
@@ -18,9 +20,11 @@ export const resolvers = {
     ...matchResultResolvers.Query,
     ...profileResolvers.Query,
     ...clubResolvers.Query,
+    ...clubSlotResolvers.Query,
   },
   Mutation: {
     ...matchResolvers.Mutation,
     ...matchResultResolvers.Mutation,
+    ...clubSlotResolvers.Mutation,
   },
 };

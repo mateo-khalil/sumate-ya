@@ -8,5 +8,7 @@ declare namespace App {
       displayName: string;
       role: 'player' | 'club_admin';
     };
+    /** Raw access token forwarded by middleware for use in API route proxies. */
+    accessToken?: string;
   }
 }

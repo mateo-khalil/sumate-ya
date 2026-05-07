@@ -1,0 +1,165 @@
+# Club Slot Management — GraphQL operations for the admin panel
+#
+# Decision Context:
+# - These operations mirror the backend club-slot-management.graphql schema.
+# - All queries/mutations are authenticated (club_admin only); the frontend
+#   component layer passes the Authorization header via the urql client.
+# - ManagedSlotFields fragment reduces repetition across queries.
+# - toggleSlotBlock includes impactPreview so the component can show the
+#   confirmation dialog without a separate slotImpactPreview query.
+
+fragment ManagedSlotFields on ManagedClubSlot {
+  id
+  clubId
+  courtId
+  court {
+    id
+    name
+    maxFormat
+    surface
+    isIndoor
+  }
+  dayOfWeek
+  startTime
+  endTime
+  duration
+  priceArs
+  isBlocked
+  blockReason
+  blockType
+  isActive
+  allowOnlineBooking
+  hasScheduledMatch
+  updatedAt
+}
+
+fragment ImpactPreviewFields on SlotImpactPreview {
+  totalSlotsAffected
+  matchesAffected
+  playersToNotify
+  matchDetails {
+    matchId
+    title
+    scheduledAt
+    participantCount
+  }
+}
+
+query MY_CLUB_SLOTS {
+  myClubSlots {
+    ...ManagedSlotFields
+  }
+}
+
+query CLUB_SLOTS_BY_COURT($courtId: ID!) {
+  clubSlotsByCourt(courtId: $courtId) {
+    ...ManagedSlotFields
+  }
+}
+
+query SLOT_AUDIT_LOG($slotId: ID!, $limit: Int, $offset: Int) {
+  slotAuditLog(slotId: $slotId, limit: $limit, offset: $offset) {
+    id
+    slotId
+    action
+    previousValue
+    newValue
+    changedBy {
+      id
+      displayName
+      avatarUrl
+    }
+    reason
+    createdAt
+  }
+}
+
+query SLOT_IMPACT_PREVIEW($slotIds: [ID!]!) {
+  slotImpactPreview(slotIds: $slotIds) {
+    ...ImpactPreviewFields
+  }
+}
+
+query COURT_PRICING($courtId: ID!) {
+  courtPricing(courtId: $courtId) {
+    id
+    courtId
+    basePrice
+    peakStart
+    peakEnd
+    peakDays
+    peakMultiplier
+    offPeakDiscount
+    createdAt
+  }
+}
+
+mutation CREATE_CLUB_SLOT($input: CreateClubSlotInput!) {
+  createClubSlot(input: $input) {
+    success
+    message
+    slot {
+      ...ManagedSlotFields
+    }
+  }
+}
+
+mutation UPDATE_CLUB_SLOT($input: UpdateClubSlotInput!) {
+  updateClubSlot(input: $input) {
+    success
+    message
+    slot {
+      ...ManagedSlotFields
+    }
+  }
+}
+
+mutation DELETE_CLUB_SLOT($slotId: ID!) {
+  deleteClubSlot(slotId: $slotId) {
+    success
+    message
+    slot {
+      id
+      isActive
+    }
+  }
+}
+
+mutation TOGGLE_SLOT_BLOCK($input: BlockSlotInput!) {
+  toggleSlotBlock(input: $input) {
+    success
+    message
+    slot {
+      ...ManagedSlotFields
+    }
+    impactPreview {
+      ...ImpactPreviewFields
+    }
+  }
+}
+
+mutation BULK_BLOCK_SLOTS($input: BulkBlockSlotsInput!) {
+  bulkBlockSlots(input: $input) {
+    success
+    affectedCount
+    skippedCount
+    message
+    impactPreview {
+      ...ImpactPreviewFields
+    }
+  }
+}
+
+mutation UPDATE_COURT_PRICING($input: UpdateCourtPricingInput!) {
+  updateCourtPricing(input: $input) {
+    id
+    courtId
+    basePrice
+    peakStart
+    peakEnd
+    peakDays
+    peakMultiplier
+    offPeakDiscount
+    createdAt
+  }
+}

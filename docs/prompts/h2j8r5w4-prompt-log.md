@@ -1,16 +1,14 @@
 # Prompt Log
 
-- Timestamp: 2026-05-04 18:49:31
+- Timestamp: 2026-05-05 21:35:00
 - Task ID: h2j8r5w4
 
 ## User Prompt
 
-> ahora mismo en listar partidos, no hay opcion para ver los partidos historicos de un jugador o ver aprtidos antiguos, asegurate de agregar esa funcionalidad.
->
-> Aclaración del usuario: si todos los partidos pasados poder mostrarlos, y tambien filtrar por los que yo me inscribí. Sería en esa pantalla (/partidos), decide el resto de la lógica vos.
+> quiero que agregues un espacio para que el administrador coloque un precio base para todas las canchas, opcion de determinar ciertos dias de la semana con mayor costo precio o valor, periodos del mes con mayor precio costo valor algo que setee masivamente una "base" de gestion
 
 ## Agent Main Actions
 
-- Backend: agregué `onlyMine: Boolean` al input `MatchFilters`, extendí el repo para hacer un lookup previo de los `matchIds` participados por el usuario y constreñir la query principal con `.in('id', ids)` (preservando `matchParticipants(count)` para slot counts correctos), y resolví `onlyMine` contra `ctx.user?.id` en el resolver e incorporé el user al cache key. Corrí codegen.
-- Frontend: agregué la dimensión `timeframe` ('upcoming' | 'past') a `ClientMatchFilters`, mapeada a `status` server-side (OPEN/COMPLETED). Agregué un toggle "Próximos / Pasados" en `MatchesView` y un checkbox "Solo los míos" visible solo en Pasados + autenticado. Persistí ambos en URL. Arreglé `MatchList` y `MatchMap` para refetch cuando cambia el server-filter (timeframe/onlyMine), y actualicé el empty state para distinguir Pasados / Pasados+míos / Próximos.
-- Validación: `pnpm exec turbo typecheck --force` pasó sin errores. E2e narrow (`matches-list.spec.ts` + `match-filters.spec.ts`) corrió en background con 18/18 tests verdes.
+- Creó CourtPricingPanel.tsx: panel colapsible en horarios con 3 secciones — (1) Precio base ARS por slot, (2) Días pico con checkboxes Lun-Dom y campo multiplicador (ej: 1.5 = +50%), (3) Horario pico (from/to HH:mm) + factor fuera-de-pico (ej: 0.9 = -10%). Preview table en tiempo real mostrando los 4 escenarios de precio (pico+hora-pico, pico+off-hora, normal+hora-pico, normal+off-hora). Botón "Aplicar a N canchas" llama updateCourtPricing via /api/graphql-auth para TODAS las canchas del club en paralelo. Carga configuración existente al montar desde el backend.
+- Integró en SlotManager: botón "Precios" con ícono DollarSign en la toolbar que toggle el panel. El panel aparece entre la toolbar y el calendario. Agregó CSS completo para pricing-panel, pricing-grid, day-btn, price-preview, pricing-actions, spin animation.
+- Typecheck 3/3 exitosas, 0 errores.

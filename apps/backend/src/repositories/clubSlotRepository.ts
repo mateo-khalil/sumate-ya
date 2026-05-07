@@ -9,8 +9,10 @@
  *   The service layer converts a calendar date to the matching enum value before calling
  *   this function. Keeping the conversion in the service means the repo stays DB-focused.
  * - Only non-blocked slots are returned because blocked slots must never be bookable.
- *   The calling service still validates `isBlocked = false` again at create time to guard
- *   against race conditions between the list query and the mutation.
+ *   The calling service still validates `isBlocked = false`, `isActive = true`, and
+ *   `allowOnlineBooking = true` at create time to guard against race conditions.
+ * - isActive and allowOnlineBooking added to SLOT_COLUMNS so matchService can validate
+ *   both flags at write time (P3+P4 audit fixes).
  * - Previously fixed bugs: none relevant.
  */
 
@@ -30,7 +32,9 @@ const SLOT_COLUMNS = `
   "startTime",
   "endTime",
   "priceArs",
-  "isBlocked"
+  "isBlocked",
+  "isActive",
+  "allowOnlineBooking"
 `;
 
 // =====================================================
@@ -54,6 +58,8 @@ export interface ClubSlotRow {
   endTime: string;
   priceArs: number | null;
   isBlocked: boolean;
+  isActive: boolean;
+  allowOnlineBooking: boolean;
   courts: CourtRow;
 }
 
