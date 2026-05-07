@@ -10,6 +10,7 @@
 
 import { clubResolvers } from './domains/club.js';
 import { clubSlotResolvers } from './domains/club-slot.js';
+import { clubDashboardResolvers } from './domains/club-dashboard.js';
 import { matchResolvers } from './domains/match.js';
 import { matchResultResolvers } from './domains/match-result.js';
 import { profileResolvers } from './domains/profile.js';
@@ -21,6 +22,7 @@ export const resolvers = {
     ...profileResolvers.Query,
     ...clubResolvers.Query,
     ...clubSlotResolvers.Query,
+    ...clubDashboardResolvers.Query,
   },
   Mutation: {
     ...matchResolvers.Mutation,

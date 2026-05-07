@@ -1,0 +1,115 @@
+# Club Dashboard — Admin view of matches, slots, KPIs, and exports
+#
+# Decision Context:
+# - Why: club_admin needs a consolidated view of their club's occupancy, match schedule,
+#   revenue, and player activity in one query instead of multiple separate fetches.
+# - TimeStatus is computed server-side so the frontend receives human-readable labels
+#   in Spanish without needing to handle timezone-aware date arithmetic in the client.
+# - exportClubSchedule returns a raw CSV string (not a signed URL) — simpler for clubs
+#   that don't have Supabase Storage set up, and the payload is bounded by the 90-day
+#   date range limit enforced in the service.
+# - ScheduleSlotStatus duplicates some MatchStatus values intentionally: from the club's
+#   perspective what matters is the slot occupancy state, not the underlying match lifecycle.
+# - Phase 2 (not in this PR): quick block action from dashboard, audit log viewer.
+# - Previously fixed bugs: none relevant (new feature).
+
+enum ScheduleSlotStatus {
+  AVAILABLE
+  MATCH_OPEN
+  MATCH_FULL
+  MATCH_IN_PROGRESS
+  MATCH_COMPLETED
+  BLOCKED
+  INACTIVE
+  PAST
+}
+
+enum TimeStatus {
+  PAST
+  FINISHED_RECENTLY
+  NOW
+  UPCOMING_SOON
+  UPCOMING
+  FAR_FUTURE
+}
+
+type ClubMetrics {
+  matchesThisWeek: Int!
+  occupancyRate: Float!
+  estimatedRevenue: Float!
+  uniquePlayersThisMonth: Int!
+  totalActiveCourts: Int!
+  blockedSlotsCount: Int!
+}
+
+type ProfileSummary {
+  id: ID!
+  displayName: String!
+  avatarUrl: String
+}
+
+type DashboardMatch {
+  id: ID!
+  format: MatchFormat!
+  capacity: Int!
+  status: MatchStatus!
+  scheduledAt: String!
+  description: String
+  organizer: ProfileSummary!
+  participants: [ProfileSummary!]!
+  participantCount: Int!
+  spotsLeft: Int!
+  timeStatus: TimeStatus!
+  timeStatusLabel: String!
+  courtId: ID
+  courtName: String
+  clubSlotId: ID
+}
+
+type ScheduleSlot {
+  slotId: ID!
+  courtId: ID!
+  courtName: String!
+  dayOfWeek: String!
+  startTime: String!
+  endTime: String!
+  duration: Int!
+  status: ScheduleSlotStatus!
+  match: DashboardMatch
+  blockReason: String
+  blockType: String
+  isActive: Boolean!
+  allowOnlineBooking: Boolean!
+  priceArs: Float
+}
+
+type ConflictAlert {
+  matchId: ID!
+  type: String!
+  description: String!
+  scheduledAt: String!
+  courtName: String!
+}
+
+type ClubDashboardData {
+  club: Club!
+  metrics: ClubMetrics!
+  schedule: [ScheduleSlot!]!
+  matches: [DashboardMatch!]!
+  conflicts: [ConflictAlert!]!
+}
+
+input ClubDashboardFilters {
+  startDate: String
+  endDate: String
+  courtIds: [ID!]
+  matchStatuses: [MatchStatus!]
+  includeBlocked: Boolean
+  includeInactive: Boolean
+}
+
+extend type Query {
+  clubDashboard(filters: ClubDashboardFilters): ClubDashboardData!
+  clubMetrics: ClubMetrics!
+  exportClubSchedule(filters: ClubDashboardFilters, format: String): String!
+}
