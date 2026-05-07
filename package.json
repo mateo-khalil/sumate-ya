@@ -7,7 +7,7 @@
   "scripts": {
     "sumate-ya": "ln -sfn ../../.env apps/backend/.env && echo 'Symlinked root .env into apps/backend/.env. Frontend keeps its own optional apps/frontend/.env'",
     "kill:ports": "bash scripts/kill-dev-ports.sh",
-    "predev": "bash scripts/kill-dev-ports.sh",
+    "predev": "echo 'Skipping predev'",
     "dev": "turbo dev",
     "predev:frontend": "bash scripts/kill-dev-ports.sh 4321",
     "dev:frontend": "turbo dev --filter=@sumate-ya/frontend",

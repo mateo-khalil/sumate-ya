@@ -745,9 +745,21 @@ export async function createMatch(
   }
 
   // 2. Slot check (re-validated at write time for race-condition safety)
+  // Decision Context:
+  // - isActive=false means the slot was soft-deleted by the club admin; players must not
+  //   be able to book it even if they know the UUID (prevents stale deep-links).
+  // - allowOnlineBooking=false is the club admin's flag to restrict online booking (e.g.
+  //   phone-only reservations). The player-facing API filters these out, but a direct API
+  //   call with the slotId must also be blocked here as defense-in-depth (P3+P4 audit fix).
+  // - Previously fixed bugs: isActive and allowOnlineBooking were not checked, allowing
+  //   soft-deleted or phone-only slots to accept matches via direct API calls.
   const slot = await clubSlotRepository.getSlotById(input.slotId);
   if (!slot) throw new Error('El horario seleccionado no existe');
+  if (!slot.isActive) throw new Error('El horario fue eliminado y no está disponible.');
   if (slot.isBlocked) throw new Error('El horario ya está bloqueado. Elegí otro horario.');
+  if (!slot.allowOnlineBooking) {
+    throw new Error('Este horario no permite reservas online. Contactá al club para reservar.');
+  }
   if (slot.clubId !== input.clubId) {
     throw new Error('El horario no pertenece al club seleccionado');
   }

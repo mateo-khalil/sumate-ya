@@ -17,6 +17,57 @@ export type Scalars = {
   Float: { input: number; output: number; }
 };
 
+export type AffectedMatch = {
+  __typename?: 'AffectedMatch';
+  matchId: Scalars['ID']['output'];
+  participantCount: Scalars['Int']['output'];
+  scheduledAt: Scalars['String']['output'];
+  title: Scalars['String']['output'];
+};
+
+export type AuditProfile = {
+  __typename?: 'AuditProfile';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+};
+
+export type BlockSlotInput = {
+  blockReason?: InputMaybe<Scalars['String']['input']>;
+  blockType?: InputMaybe<BlockType>;
+  confirmForce?: InputMaybe<Scalars['Boolean']['input']>;
+  isBlocked: Scalars['Boolean']['input'];
+  slotId: Scalars['ID']['input'];
+};
+
+export enum BlockType {
+  Admin = 'ADMIN',
+  Event = 'EVENT',
+  Holiday = 'HOLIDAY',
+  Maintenance = 'MAINTENANCE',
+  Other = 'OTHER',
+  Weather = 'WEATHER'
+}
+
+export type BulkBlockSlotsInput = {
+  blockReason?: InputMaybe<Scalars['String']['input']>;
+  blockType?: InputMaybe<BlockType>;
+  confirmForce?: InputMaybe<Scalars['Boolean']['input']>;
+  isBlocked: Scalars['Boolean']['input'];
+  slotIds: Array<Scalars['ID']['input']>;
+};
+
+export type BulkSlotMutationResult = {
+  __typename?: 'BulkSlotMutationResult';
+  affectedCount: Scalars['Int']['output'];
+  cancelledMatchesCount: Scalars['Int']['output'];
+  impactPreview?: Maybe<SlotImpactPreview>;
+  message?: Maybe<Scalars['String']['output']>;
+  notifiedPlayersCount: Scalars['Int']['output'];
+  skippedCount: Scalars['Int']['output'];
+  success: Scalars['Boolean']['output'];
+};
+
 export type Club = {
   __typename?: 'Club';
   address?: Maybe<Scalars['String']['output']>;
@@ -51,6 +102,16 @@ export type ClubSlot = {
   startTime: Scalars['String']['output'];
 };
 
+export type ClubSlotMutationResult = {
+  __typename?: 'ClubSlotMutationResult';
+  cancelledMatchesCount: Scalars['Int']['output'];
+  impactPreview?: Maybe<SlotImpactPreview>;
+  message?: Maybe<Scalars['String']['output']>;
+  notifiedPlayersCount: Scalars['Int']['output'];
+  slot?: Maybe<ManagedClubSlot>;
+  success: Scalars['Boolean']['output'];
+};
+
 export type Court = {
   __typename?: 'Court';
   id: Scalars['ID']['output'];
@@ -60,12 +121,42 @@ export type Court = {
   surface: CourtSurface;
 };
 
+export type CourtPricing = {
+  __typename?: 'CourtPricing';
+  basePrice: Scalars['Float']['output'];
+  courtId: Scalars['ID']['output'];
+  createdAt: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  offPeakDiscount: Scalars['Float']['output'];
+  peakDays: Array<Scalars['Int']['output']>;
+  peakEnd?: Maybe<Scalars['String']['output']>;
+  peakMultiplier: Scalars['Float']['output'];
+  peakStart?: Maybe<Scalars['String']['output']>;
+};
+
+export type CourtPricingMutationResult = {
+  __typename?: 'CourtPricingMutationResult';
+  courtPricing?: Maybe<CourtPricing>;
+  message?: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
 export enum CourtSurface {
   Concrete = 'CONCRETE',
   Grass = 'GRASS',
   Indoor = 'INDOOR',
   Synthetic = 'SYNTHETIC'
 }
+
+export type CreateClubSlotInput = {
+  allowOnlineBooking?: InputMaybe<Scalars['Boolean']['input']>;
+  courtId: Scalars['ID']['input'];
+  dayOfWeek: Scalars['String']['input'];
+  duration?: InputMaybe<Scalars['Int']['input']>;
+  endTime: Scalars['String']['input'];
+  priceArs?: InputMaybe<Scalars['Float']['input']>;
+  startTime: Scalars['String']['input'];
+};
 
 export type CreateMatchInput = {
   capacity: Scalars['Int']['input'];
@@ -104,6 +195,26 @@ export type LeaveMatchResult = {
   __typename?: 'LeaveMatchResult';
   match?: Maybe<Match>;
   matchDeleted: Scalars['Boolean']['output'];
+};
+
+export type ManagedClubSlot = {
+  __typename?: 'ManagedClubSlot';
+  allowOnlineBooking: Scalars['Boolean']['output'];
+  blockReason?: Maybe<Scalars['String']['output']>;
+  blockType?: Maybe<BlockType>;
+  clubId: Scalars['ID']['output'];
+  court: Court;
+  courtId: Scalars['ID']['output'];
+  dayOfWeek: Scalars['String']['output'];
+  duration: Scalars['Int']['output'];
+  endTime: Scalars['String']['output'];
+  hasScheduledMatch: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  isActive: Scalars['Boolean']['output'];
+  isBlocked: Scalars['Boolean']['output'];
+  priceArs?: Maybe<Scalars['Float']['output']>;
+  startTime: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['String']['output']>;
 };
 
 export type Match = {
@@ -223,16 +334,37 @@ export enum MatchUserResult {
 
 export type Mutation = {
   __typename?: 'Mutation';
+  bulkBlockSlots: BulkSlotMutationResult;
+  createClubSlot: ClubSlotMutationResult;
   createMatch: CreateMatchResult;
+  deleteClubSlot: ClubSlotMutationResult;
   joinMatch: JoinMatchResult;
   leaveMatch: LeaveMatchResult;
   proposeMatchResult: MatchResultSubmission;
+  toggleSlotBlock: ClubSlotMutationResult;
+  updateClubSlot: ClubSlotMutationResult;
+  updateCourtPricing: CourtPricingMutationResult;
   voteMatchResult: VoteSubmissionResult;
+};
+
+
+export type MutationBulkBlockSlotsArgs = {
+  input: BulkBlockSlotsInput;
+};
+
+
+export type MutationCreateClubSlotArgs = {
+  input: CreateClubSlotInput;
 };
 
 
 export type MutationCreateMatchArgs = {
   input: CreateMatchInput;
+};
+
+
+export type MutationDeleteClubSlotArgs = {
+  slotId: Scalars['ID']['input'];
 };
 
 
@@ -248,6 +380,21 @@ export type MutationLeaveMatchArgs = {
 
 export type MutationProposeMatchResultArgs = {
   input: ProposeMatchResultInput;
+};
+
+
+export type MutationToggleSlotBlockArgs = {
+  input: BlockSlotInput;
+};
+
+
+export type MutationUpdateClubSlotArgs = {
+  input: UpdateClubSlotInput;
+};
+
+
+export type MutationUpdateCourtPricingArgs = {
+  input: UpdateCourtPricingInput;
 };
 
 
@@ -285,18 +432,33 @@ export type ProposeMatchResultInput = {
 export type Query = {
   __typename?: 'Query';
   clubSlots: Array<ClubSlot>;
+  clubSlotsByCourt: Array<ManagedClubSlot>;
   clubs: Array<ClubDetail>;
+  courtPricing?: Maybe<CourtPricing>;
   match?: Maybe<Match>;
   matchResultSubmissions: Array<MatchResultSubmission>;
   matches: Array<Match>;
+  myClubSlots: Array<ManagedClubSlot>;
   myMatches: MatchHistoryConnection;
   myProfile: Profile;
+  slotAuditLog: Array<SlotAuditLog>;
+  slotImpactPreview: SlotImpactPreview;
 };
 
 
 export type QueryClubSlotsArgs = {
   clubId: Scalars['ID']['input'];
   date: Scalars['String']['input'];
+};
+
+
+export type QueryClubSlotsByCourtArgs = {
+  courtId: Scalars['ID']['input'];
+};
+
+
+export type QueryCourtPricingArgs = {
+  courtId: Scalars['ID']['input'];
 };
 
 
@@ -320,6 +482,47 @@ export type QueryMyMatchesArgs = {
   pageSize?: InputMaybe<Scalars['Int']['input']>;
 };
 
+
+export type QuerySlotAuditLogArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  slotId: Scalars['ID']['input'];
+};
+
+
+export type QuerySlotImpactPreviewArgs = {
+  slotIds: Array<Scalars['ID']['input']>;
+};
+
+export enum SlotAction {
+  Blocked = 'BLOCKED',
+  Created = 'CREATED',
+  Deleted = 'DELETED',
+  PriceChanged = 'PRICE_CHANGED',
+  Unblocked = 'UNBLOCKED',
+  Updated = 'UPDATED'
+}
+
+export type SlotAuditLog = {
+  __typename?: 'SlotAuditLog';
+  action: SlotAction;
+  changedBy?: Maybe<AuditProfile>;
+  createdAt: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  newValue?: Maybe<Scalars['String']['output']>;
+  previousValue?: Maybe<Scalars['String']['output']>;
+  reason?: Maybe<Scalars['String']['output']>;
+  slotId?: Maybe<Scalars['ID']['output']>;
+};
+
+export type SlotImpactPreview = {
+  __typename?: 'SlotImpactPreview';
+  matchDetails: Array<AffectedMatch>;
+  matchesAffected: Scalars['Int']['output'];
+  playersToNotify: Scalars['Int']['output'];
+  totalSlotsAffected: Scalars['Int']['output'];
+};
+
 export enum SubmissionStatus {
   Confirmed = 'CONFIRMED',
   Pending = 'PENDING',
@@ -332,6 +535,25 @@ export type TeamMember = {
   displayName: Scalars['String']['output'];
   id: Scalars['ID']['output'];
   preferredPosition?: Maybe<Scalars['String']['output']>;
+};
+
+export type UpdateClubSlotInput = {
+  allowOnlineBooking?: InputMaybe<Scalars['Boolean']['input']>;
+  duration?: InputMaybe<Scalars['Int']['input']>;
+  endTime?: InputMaybe<Scalars['String']['input']>;
+  priceArs?: InputMaybe<Scalars['Float']['input']>;
+  slotId: Scalars['ID']['input'];
+  startTime?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateCourtPricingInput = {
+  basePrice: Scalars['Float']['input'];
+  courtId: Scalars['ID']['input'];
+  offPeakDiscount?: InputMaybe<Scalars['Float']['input']>;
+  peakDays?: InputMaybe<Array<Scalars['Int']['input']>>;
+  peakEnd?: InputMaybe<Scalars['String']['input']>;
+  peakMultiplier?: InputMaybe<Scalars['Float']['input']>;
+  peakStart?: InputMaybe<Scalars['String']['input']>;
 };
 
 export enum UserRole {
@@ -435,12 +657,22 @@ export type DirectiveResolverFn<TResult = Record<PropertyKey, never>, TParent = 
 
 /** Mapping between all available schema types and the resolvers types */
 export type ResolversTypes = ResolversObject<{
+  AffectedMatch: ResolverTypeWrapper<AffectedMatch>;
+  AuditProfile: ResolverTypeWrapper<AuditProfile>;
+  BlockSlotInput: BlockSlotInput;
+  BlockType: BlockType;
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
+  BulkBlockSlotsInput: BulkBlockSlotsInput;
+  BulkSlotMutationResult: ResolverTypeWrapper<BulkSlotMutationResult>;
   Club: ResolverTypeWrapper<Club>;
   ClubDetail: ResolverTypeWrapper<ClubDetail>;
   ClubSlot: ResolverTypeWrapper<ClubSlot>;
+  ClubSlotMutationResult: ResolverTypeWrapper<ClubSlotMutationResult>;
   Court: ResolverTypeWrapper<Court>;
+  CourtPricing: ResolverTypeWrapper<CourtPricing>;
+  CourtPricingMutationResult: ResolverTypeWrapper<CourtPricingMutationResult>;
   CourtSurface: CourtSurface;
+  CreateClubSlotInput: CreateClubSlotInput;
   CreateMatchInput: CreateMatchInput;
   CreateMatchResult: ResolverTypeWrapper<CreateMatchResult>;
   Float: ResolverTypeWrapper<Scalars['Float']['output']>;
@@ -450,6 +682,7 @@ export type ResolversTypes = ResolversObject<{
   JoinMatchResult: ResolverTypeWrapper<JoinMatchResult>;
   LeaveMatchInput: LeaveMatchInput;
   LeaveMatchResult: ResolverTypeWrapper<LeaveMatchResult>;
+  ManagedClubSlot: ResolverTypeWrapper<ManagedClubSlot>;
   Match: ResolverTypeWrapper<Match>;
   MatchFilters: MatchFilters;
   MatchFormat: MatchFormat;
@@ -466,9 +699,14 @@ export type ResolversTypes = ResolversObject<{
   Profile: ResolverTypeWrapper<Profile>;
   ProposeMatchResultInput: ProposeMatchResultInput;
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
+  SlotAction: SlotAction;
+  SlotAuditLog: ResolverTypeWrapper<SlotAuditLog>;
+  SlotImpactPreview: ResolverTypeWrapper<SlotImpactPreview>;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
   SubmissionStatus: SubmissionStatus;
   TeamMember: ResolverTypeWrapper<TeamMember>;
+  UpdateClubSlotInput: UpdateClubSlotInput;
+  UpdateCourtPricingInput: UpdateCourtPricingInput;
   UserRole: UserRole;
   VoteMatchResultInput: VoteMatchResultInput;
   VoteSubmissionResult: ResolverTypeWrapper<VoteSubmissionResult>;
@@ -478,11 +716,20 @@ export type ResolversTypes = ResolversObject<{
 
 /** Mapping between all available schema types and the resolvers parents */
 export type ResolversParentTypes = ResolversObject<{
+  AffectedMatch: AffectedMatch;
+  AuditProfile: AuditProfile;
+  BlockSlotInput: BlockSlotInput;
   Boolean: Scalars['Boolean']['output'];
+  BulkBlockSlotsInput: BulkBlockSlotsInput;
+  BulkSlotMutationResult: BulkSlotMutationResult;
   Club: Club;
   ClubDetail: ClubDetail;
   ClubSlot: ClubSlot;
+  ClubSlotMutationResult: ClubSlotMutationResult;
   Court: Court;
+  CourtPricing: CourtPricing;
+  CourtPricingMutationResult: CourtPricingMutationResult;
+  CreateClubSlotInput: CreateClubSlotInput;
   CreateMatchInput: CreateMatchInput;
   CreateMatchResult: CreateMatchResult;
   Float: Scalars['Float']['output'];
@@ -492,6 +739,7 @@ export type ResolversParentTypes = ResolversObject<{
   JoinMatchResult: JoinMatchResult;
   LeaveMatchInput: LeaveMatchInput;
   LeaveMatchResult: LeaveMatchResult;
+  ManagedClubSlot: ManagedClubSlot;
   Match: Match;
   MatchFilters: MatchFilters;
   MatchHistoryConnection: MatchHistoryConnection;
@@ -503,10 +751,37 @@ export type ResolversParentTypes = ResolversObject<{
   Profile: Profile;
   ProposeMatchResultInput: ProposeMatchResultInput;
   Query: Record<PropertyKey, never>;
+  SlotAuditLog: SlotAuditLog;
+  SlotImpactPreview: SlotImpactPreview;
   String: Scalars['String']['output'];
   TeamMember: TeamMember;
+  UpdateClubSlotInput: UpdateClubSlotInput;
+  UpdateCourtPricingInput: UpdateCourtPricingInput;
   VoteMatchResultInput: VoteMatchResultInput;
   VoteSubmissionResult: VoteSubmissionResult;
+}>;
+
+export type AffectedMatchResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['AffectedMatch'] = ResolversParentTypes['AffectedMatch']> = ResolversObject<{
+  matchId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  participantCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  scheduledAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  title?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
+export type AuditProfileResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['AuditProfile'] = ResolversParentTypes['AuditProfile']> = ResolversObject<{
+  avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+}>;
+
+export type BulkSlotMutationResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['BulkSlotMutationResult'] = ResolversParentTypes['BulkSlotMutationResult']> = ResolversObject<{
+  affectedCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  cancelledMatchesCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  impactPreview?: Resolver<Maybe<ResolversTypes['SlotImpactPreview']>, ParentType, ContextType>;
+  message?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  notifiedPlayersCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  skippedCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
 }>;
 
 export type ClubResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Club'] = ResolversParentTypes['Club']> = ResolversObject<{
@@ -540,12 +815,39 @@ export type ClubSlotResolvers<ContextType = GraphQLContext, ParentType extends R
   startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
 }>;
 
+export type ClubSlotMutationResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ClubSlotMutationResult'] = ResolversParentTypes['ClubSlotMutationResult']> = ResolversObject<{
+  cancelledMatchesCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  impactPreview?: Resolver<Maybe<ResolversTypes['SlotImpactPreview']>, ParentType, ContextType>;
+  message?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  notifiedPlayersCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  slot?: Resolver<Maybe<ResolversTypes['ManagedClubSlot']>, ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+}>;
+
 export type CourtResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Court'] = ResolversParentTypes['Court']> = ResolversObject<{
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   isIndoor?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   maxFormat?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   surface?: Resolver<ResolversTypes['CourtSurface'], ParentType, ContextType>;
+}>;
+
+export type CourtPricingResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['CourtPricing'] = ResolversParentTypes['CourtPricing']> = ResolversObject<{
+  basePrice?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  courtId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  offPeakDiscount?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  peakDays?: Resolver<Array<ResolversTypes['Int']>, ParentType, ContextType>;
+  peakEnd?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  peakMultiplier?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  peakStart?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+}>;
+
+export type CourtPricingMutationResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['CourtPricingMutationResult'] = ResolversParentTypes['CourtPricingMutationResult']> = ResolversObject<{
+  courtPricing?: Resolver<Maybe<ResolversTypes['CourtPricing']>, ParentType, ContextType>;
+  message?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
 }>;
 
 export type CreateMatchResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['CreateMatchResult'] = ResolversParentTypes['CreateMatchResult']> = ResolversObject<{
@@ -563,6 +865,25 @@ export type JoinMatchResultResolvers<ContextType = GraphQLContext, ParentType ex
 export type LeaveMatchResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['LeaveMatchResult'] = ResolversParentTypes['LeaveMatchResult']> = ResolversObject<{
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType>;
   matchDeleted?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+}>;
+
+export type ManagedClubSlotResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ManagedClubSlot'] = ResolversParentTypes['ManagedClubSlot']> = ResolversObject<{
+  allowOnlineBooking?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  blockReason?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  blockType?: Resolver<Maybe<ResolversTypes['BlockType']>, ParentType, ContextType>;
+  clubId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  court?: Resolver<ResolversTypes['Court'], ParentType, ContextType>;
+  courtId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  dayOfWeek?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  duration?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  endTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  hasScheduledMatch?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isActive?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  isBlocked?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  priceArs?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  updatedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;
 
 export type MatchResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Match'] = ResolversParentTypes['Match']> = ResolversObject<{
@@ -638,10 +959,16 @@ export type MatchResultVoteResolvers<ContextType = GraphQLContext, ParentType ex
 }>;
 
 export type MutationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
+  bulkBlockSlots?: Resolver<ResolversTypes['BulkSlotMutationResult'], ParentType, ContextType, RequireFields<MutationBulkBlockSlotsArgs, 'input'>>;
+  createClubSlot?: Resolver<ResolversTypes['ClubSlotMutationResult'], ParentType, ContextType, RequireFields<MutationCreateClubSlotArgs, 'input'>>;
   createMatch?: Resolver<ResolversTypes['CreateMatchResult'], ParentType, ContextType, RequireFields<MutationCreateMatchArgs, 'input'>>;
+  deleteClubSlot?: Resolver<ResolversTypes['ClubSlotMutationResult'], ParentType, ContextType, RequireFields<MutationDeleteClubSlotArgs, 'slotId'>>;
   joinMatch?: Resolver<ResolversTypes['JoinMatchResult'], ParentType, ContextType, RequireFields<MutationJoinMatchArgs, 'input'>>;
   leaveMatch?: Resolver<ResolversTypes['LeaveMatchResult'], ParentType, ContextType, RequireFields<MutationLeaveMatchArgs, 'input'>>;
   proposeMatchResult?: Resolver<ResolversTypes['MatchResultSubmission'], ParentType, ContextType, RequireFields<MutationProposeMatchResultArgs, 'input'>>;
+  toggleSlotBlock?: Resolver<ResolversTypes['ClubSlotMutationResult'], ParentType, ContextType, RequireFields<MutationToggleSlotBlockArgs, 'input'>>;
+  updateClubSlot?: Resolver<ResolversTypes['ClubSlotMutationResult'], ParentType, ContextType, RequireFields<MutationUpdateClubSlotArgs, 'input'>>;
+  updateCourtPricing?: Resolver<ResolversTypes['CourtPricingMutationResult'], ParentType, ContextType, RequireFields<MutationUpdateCourtPricingArgs, 'input'>>;
   voteMatchResult?: Resolver<ResolversTypes['VoteSubmissionResult'], ParentType, ContextType, RequireFields<MutationVoteMatchResultArgs, 'input'>>;
 }>;
 
@@ -659,12 +986,35 @@ export type ProfileResolvers<ContextType = GraphQLContext, ParentType extends Re
 
 export type QueryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = ResolversObject<{
   clubSlots?: Resolver<Array<ResolversTypes['ClubSlot']>, ParentType, ContextType, RequireFields<QueryClubSlotsArgs, 'clubId' | 'date'>>;
+  clubSlotsByCourt?: Resolver<Array<ResolversTypes['ManagedClubSlot']>, ParentType, ContextType, RequireFields<QueryClubSlotsByCourtArgs, 'courtId'>>;
   clubs?: Resolver<Array<ResolversTypes['ClubDetail']>, ParentType, ContextType>;
+  courtPricing?: Resolver<Maybe<ResolversTypes['CourtPricing']>, ParentType, ContextType, RequireFields<QueryCourtPricingArgs, 'courtId'>>;
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType, RequireFields<QueryMatchArgs, 'id'>>;
   matchResultSubmissions?: Resolver<Array<ResolversTypes['MatchResultSubmission']>, ParentType, ContextType, RequireFields<QueryMatchResultSubmissionsArgs, 'matchId'>>;
   matches?: Resolver<Array<ResolversTypes['Match']>, ParentType, ContextType, Partial<QueryMatchesArgs>>;
+  myClubSlots?: Resolver<Array<ResolversTypes['ManagedClubSlot']>, ParentType, ContextType>;
   myMatches?: Resolver<ResolversTypes['MatchHistoryConnection'], ParentType, ContextType, Partial<QueryMyMatchesArgs>>;
   myProfile?: Resolver<ResolversTypes['Profile'], ParentType, ContextType>;
+  slotAuditLog?: Resolver<Array<ResolversTypes['SlotAuditLog']>, ParentType, ContextType, RequireFields<QuerySlotAuditLogArgs, 'slotId'>>;
+  slotImpactPreview?: Resolver<ResolversTypes['SlotImpactPreview'], ParentType, ContextType, RequireFields<QuerySlotImpactPreviewArgs, 'slotIds'>>;
+}>;
+
+export type SlotAuditLogResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['SlotAuditLog'] = ResolversParentTypes['SlotAuditLog']> = ResolversObject<{
+  action?: Resolver<ResolversTypes['SlotAction'], ParentType, ContextType>;
+  changedBy?: Resolver<Maybe<ResolversTypes['AuditProfile']>, ParentType, ContextType>;
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  newValue?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  previousValue?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  reason?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  slotId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+}>;
+
+export type SlotImpactPreviewResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['SlotImpactPreview'] = ResolversParentTypes['SlotImpactPreview']> = ResolversObject<{
+  matchDetails?: Resolver<Array<ResolversTypes['AffectedMatch']>, ParentType, ContextType>;
+  matchesAffected?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  playersToNotify?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  totalSlotsAffected?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
 }>;
 
 export type TeamMemberResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TeamMember'] = ResolversParentTypes['TeamMember']> = ResolversObject<{
@@ -680,13 +1030,20 @@ export type VoteSubmissionResultResolvers<ContextType = GraphQLContext, ParentTy
 }>;
 
 export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
+  AffectedMatch?: AffectedMatchResolvers<ContextType>;
+  AuditProfile?: AuditProfileResolvers<ContextType>;
+  BulkSlotMutationResult?: BulkSlotMutationResultResolvers<ContextType>;
   Club?: ClubResolvers<ContextType>;
   ClubDetail?: ClubDetailResolvers<ContextType>;
   ClubSlot?: ClubSlotResolvers<ContextType>;
+  ClubSlotMutationResult?: ClubSlotMutationResultResolvers<ContextType>;
   Court?: CourtResolvers<ContextType>;
+  CourtPricing?: CourtPricingResolvers<ContextType>;
+  CourtPricingMutationResult?: CourtPricingMutationResultResolvers<ContextType>;
   CreateMatchResult?: CreateMatchResultResolvers<ContextType>;
   JoinMatchResult?: JoinMatchResultResolvers<ContextType>;
   LeaveMatchResult?: LeaveMatchResultResolvers<ContextType>;
+  ManagedClubSlot?: ManagedClubSlotResolvers<ContextType>;
   Match?: MatchResolvers<ContextType>;
   MatchHistoryConnection?: MatchHistoryConnectionResolvers<ContextType>;
   MatchHistoryItem?: MatchHistoryItemResolvers<ContextType>;
@@ -696,6 +1053,8 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Mutation?: MutationResolvers<ContextType>;
   Profile?: ProfileResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
+  SlotAuditLog?: SlotAuditLogResolvers<ContextType>;
+  SlotImpactPreview?: SlotImpactPreviewResolvers<ContextType>;
   TeamMember?: TeamMemberResolvers<ContextType>;
   VoteSubmissionResult?: VoteSubmissionResultResolvers<ContextType>;
 }>;

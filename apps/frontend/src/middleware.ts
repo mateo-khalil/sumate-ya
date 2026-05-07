@@ -67,9 +67,24 @@ export const onRequest = defineMiddleware(async ({ cookies, url, redirect, local
 
   if (user) {
     locals.user = user;
+    // Store raw token in locals so API route proxies can forward it as Authorization Bearer.
+    // The /api/graphql proxy cannot reliably parse the HttpOnly cookie from the route handler
+    // in all Astro dev/prod configurations; middleware is the proven read point.
+    locals.accessToken = accessToken;
   }
 
   if (!isProtected) {
+    // For the GraphQL proxy: inject Authorization header into the request so the
+    // route handler can forward it to the backend without reading cookies itself.
+    // This sidesteps Astro dev hot-reload issues where the route handler module
+    // may serve a cached version that doesn't pick up cookie-reading changes.
+    // Previously fixed bugs: /api/graphql returned "Authentication required" because
+    // the route handler never received the token; middleware is the reliable read point.
+    if (pathname === '/api/graphql' && accessToken) {
+      const authHeaders = new Headers(request.headers);
+      authHeaders.set('authorization', `Bearer ${accessToken}`);
+      return next(new Request(request, { headers: authHeaders }));
+    }
     return next();
   }
 
@@ -95,6 +110,7 @@ export const onRequest = defineMiddleware(async ({ cookies, url, redirect, local
       );
       user = result.user;
       locals.user = user;
+      locals.accessToken = result.accessToken;
     } catch {
       clearAuthCookies(cookies);
       return redirect('/login');

@@ -1,0 +1,241 @@
+# Club Slot Management — GraphQL schema for club admin operations
+#
+# Decision Context:
+# - Why ManagedClubSlot (not extend ClubSlot): the existing ClubSlot type is player-facing
+#   (public, minimal fields). Admin operations need extra fields (isActive, blockReason,
+#   blockType, auditLog references) that must never pollute the public player API.
+#   Keeping them as separate types clarifies the API contract and simplifies RLS reasoning.
+# - Court type reused from create-match.graphql (already defined, no redefinition).
+# - CourtSurface and MatchFormat enums are defined in create-match.graphql and match.graphql.
+# - Mutation/Query extensions use `extend` because type Mutation and type Query are defined
+#   in create-match.graphql and match.graphql respectively.
+# - SlotAuditLog.previousValue / newValue are JSON serialized as String (GraphQL has no
+#   native JSON scalar; parsing happens in the frontend display component).
+# - CourtPricing.peakDays stores day-of-week ints (0=Sun … 6=Sat) as an array.
+# - SlotImpactPreview is computed on-demand (no persistence), returned before destructive
+#   operations so the admin can confirm the blast radius.
+# - Improvements covered: 4 (blockReason + BlockType enum), 14 (court capacity via courts
+#   table), 16 (SlotAuditLog), 17 (isActive soft-delete), 18 (overlap validation in service).
+# - Previously fixed bugs: none relevant.
+
+# =====================================================
+# Enums
+# =====================================================
+
+enum BlockType {
+  ADMIN
+  MAINTENANCE
+  EVENT
+  WEATHER
+  HOLIDAY
+  OTHER
+}
+
+enum SlotAction {
+  CREATED
+  UPDATED
+  BLOCKED
+  UNBLOCKED
+  DELETED
+  PRICE_CHANGED
+}
+
+# =====================================================
+# Types
+# =====================================================
+
+# Admin view of a club slot — includes all management-only fields.
+type ManagedClubSlot {
+  id: ID!
+  clubId: ID!
+  courtId: ID!
+  court: Court!
+  dayOfWeek: String!
+  startTime: String!
+  endTime: String!
+  duration: Int!
+  priceArs: Float
+  isBlocked: Boolean!
+  blockReason: String
+  blockType: BlockType
+  isActive: Boolean!
+  allowOnlineBooking: Boolean!
+  hasScheduledMatch: Boolean!
+  updatedAt: String
+}
+
+# Minimal profile info for audit log attribution
+type AuditProfile {
+  id: ID!
+  displayName: String!
+  avatarUrl: String
+}
+
+# Entry in the slot audit log
+type SlotAuditLog {
+  id: ID!
+  slotId: ID
+  action: SlotAction!
+  previousValue: String
+  newValue: String
+  changedBy: AuditProfile
+  reason: String
+  createdAt: String!
+}
+
+# Dynamic pricing config per court
+type CourtPricing {
+  id: ID!
+  courtId: ID!
+  basePrice: Float!
+  peakStart: String
+  peakEnd: String
+  peakDays: [Int!]!
+  peakMultiplier: Float!
+  offPeakDiscount: Float!
+  createdAt: String!
+}
+
+# Preview of impact before a destructive block operation
+type SlotImpactPreview {
+  totalSlotsAffected: Int!
+  matchesAffected: Int!
+  playersToNotify: Int!
+  matchDetails: [AffectedMatch!]!
+}
+
+# Summary info for a match that would be cancelled
+type AffectedMatch {
+  matchId: ID!
+  title: String!
+  scheduledAt: String!
+  participantCount: Int!
+}
+
+# =====================================================
+# Result types
+# =====================================================
+
+type ClubSlotMutationResult {
+  success: Boolean!
+  slot: ManagedClubSlot
+  message: String
+  impactPreview: SlotImpactPreview
+  # Populated when confirmForce=true cancels matches (improvement 19)
+  cancelledMatchesCount: Int!
+  notifiedPlayersCount: Int!
+}
+
+type BulkSlotMutationResult {
+  success: Boolean!
+  affectedCount: Int!
+  skippedCount: Int!
+  message: String
+  impactPreview: SlotImpactPreview
+  # Populated when confirmForce=true cancels matches (improvement 19)
+  cancelledMatchesCount: Int!
+  notifiedPlayersCount: Int!
+}
+
+# Consistent result wrapper for court pricing mutations (P6 audit fix)
+type CourtPricingMutationResult {
+  success: Boolean!
+  courtPricing: CourtPricing
+  message: String
+}
+
+# =====================================================
+# Inputs
+# =====================================================
+
+input CreateClubSlotInput {
+  courtId: ID!
+  dayOfWeek: String!
+  startTime: String!
+  endTime: String!
+  duration: Int
+  priceArs: Float
+  allowOnlineBooking: Boolean
+}
+
+input UpdateClubSlotInput {
+  slotId: ID!
+  startTime: String
+  endTime: String
+  duration: Int
+  priceArs: Float
+  allowOnlineBooking: Boolean
+}
+
+input BlockSlotInput {
+  slotId: ID!
+  isBlocked: Boolean!
+  blockReason: String
+  blockType: BlockType
+  # If true and matches exist, cancels them and applies the block
+  confirmForce: Boolean
+}
+
+input BulkBlockSlotsInput {
+  slotIds: [ID!]!
+  isBlocked: Boolean!
+  blockReason: String
+  blockType: BlockType
+  confirmForce: Boolean
+}
+
+input UpdateCourtPricingInput {
+  courtId: ID!
+  basePrice: Float!
+  peakStart: String
+  peakEnd: String
+  peakDays: [Int!]
+  peakMultiplier: Float
+  offPeakDiscount: Float
+}
+
+# =====================================================
+# Query extensions
+# =====================================================
+
+extend type Query {
+  # Admin: list all active managed slots for the authenticated admin's club
+  myClubSlots: [ManagedClubSlot!]!
+
+  # Admin: list managed slots for a specific court (scoped to admin's club)
+  clubSlotsByCourt(courtId: ID!): [ManagedClubSlot!]!
+
+  # Admin: audit trail for a single slot
+  slotAuditLog(slotId: ID!, limit: Int, offset: Int): [SlotAuditLog!]!
+
+  # Admin: preview blast radius before bulk/single block
+  slotImpactPreview(slotIds: [ID!]!): SlotImpactPreview!
+
+  # Admin: get pricing config for a court
+  courtPricing(courtId: ID!): CourtPricing
+}
+
+# =====================================================
+# Mutation extensions
+# =====================================================
+
+extend type Mutation {
+  # Create a new recurring time slot on a court
+  createClubSlot(input: CreateClubSlotInput!): ClubSlotMutationResult!
+
+  # Update mutable fields of a slot (no dayOfWeek change — would need delete+create)
+  updateClubSlot(input: UpdateClubSlotInput!): ClubSlotMutationResult!
+
+  # Soft-delete: sets isActive=false, preserving audit history
+  deleteClubSlot(slotId: ID!): ClubSlotMutationResult!
+
+  # Toggle blocked state with optional impact preview (returns preview if matches
+  # exist and confirmForce is not set)
+  toggleSlotBlock(input: BlockSlotInput!): ClubSlotMutationResult!
+
+  # Bulk block/unblock with consolidated impact preview
+  bulkBlockSlots(input: BulkBlockSlotsInput!): BulkSlotMutationResult!
+
+  # Update or create pricing config for a court
+  updateCourtPricing(input: UpdateCourtPricingInput!): CourtPricingMutationResult!
+}
