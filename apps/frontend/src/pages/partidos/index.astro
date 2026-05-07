@@ -35,6 +35,9 @@ const nombre = user?.displayName || user?.email;
               {user?.role === 'player' && (
                 <a href="/partidos/crear" class="btn-crear">+ Crear partido</a>
               )}
+              {user?.role === 'club_admin' && (
+                <a href="/panel-club" class="btn-panel-club">Panel de Club</a>
+              )}
               <a href="/perfil" class="nav-link">Mi Perfil</a>
               <span class="user-badge">
                 <span class="user-dot"></span>
@@ -144,6 +147,24 @@ const nombre = user?.displayName || user?.email;
   .nav-link:hover {
     background: rgba(255, 255, 255, 0.06);
     color: hsl(210 20% 94%);
+  }
+
+  .btn-panel-club {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-decoration: none;
+    padding: 0.35rem 0.875rem;
+    border-radius: 6px;
+    background: rgba(246, 164, 0, 0.12);
+    border: 1px solid rgba(246, 164, 0, 0.3);
+    color: hsl(42 100% 65%);
+    transition: background 0.15s;
+  }
+
+  .btn-panel-club:hover {
+    background: rgba(246, 164, 0, 0.2);
   }
 
   .btn-crear {

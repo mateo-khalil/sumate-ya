@@ -420,7 +420,7 @@ export async function getOpenMatches(client: SupabaseClient = supabase): Promise
 // Match Detail with Participants
 // =====================================================
 
-// Columns for match detail (includes organizerId for ownership context)
+// Columns for match detail (includes organizerId for ownership context and organizedByClub for badge)
 const MATCH_DETAIL_COLUMNS = `
   id,
   "organizerId",
@@ -429,7 +429,8 @@ const MATCH_DETAIL_COLUMNS = `
   format,
   capacity,
   status,
-  "createdAt"
+  "createdAt",
+  "organizedByClub"
 `;
 
 // Participant row joined with the player's profile
@@ -463,6 +464,7 @@ export interface MatchDetailRow {
   capacity: number;
   status: string;
   createdAt: string;
+  organizedByClub: boolean;
   clubs: ClubDetailRow | null;
   matchParticipants: ParticipantRow[];
 }
@@ -539,6 +541,9 @@ export interface CreateMatchInput {
   capacity: number;
   scheduledAt: string; // ISO 8601 timestamp
   description?: string | null;
+  // When true the match was created by the club admin, not by a player.
+  // The organizer is NOT auto-enrolled in matchParticipants unless the service explicitly does so.
+  organizedByClub?: boolean;
 }
 
 export interface NewMatchRow {
@@ -553,6 +558,7 @@ export interface NewMatchRow {
   status: string;
   description: string | null;
   createdAt: string;
+  organizedByClub: boolean;
 }
 
 const NEW_MATCH_COLUMNS = `
@@ -566,7 +572,8 @@ const NEW_MATCH_COLUMNS = `
   "scheduledAt",
   status,
   description,
-  "createdAt"
+  "createdAt",
+  "organizedByClub"
 `;
 
 /**
@@ -597,6 +604,7 @@ export async function createMatch(
       capacity: input.capacity,
       scheduledAt: input.scheduledAt,
       description: input.description ?? null,
+      organizedByClub: input.organizedByClub ?? false,
     })
     .select(NEW_MATCH_COLUMNS)
     .single();
@@ -838,6 +846,119 @@ export async function getCompletedMatchesByUser(
   };
 }
 
+// =====================================================
+// Available Slots for Club Match Creation
+// =====================================================
+
+const AVAILABLE_SLOT_COLUMNS = `
+  id,
+  "courtId",
+  "dayOfWeek",
+  "startTime",
+  "endTime",
+  duration,
+  "priceArs",
+  "isBlocked",
+  "isActive",
+  "allowOnlineBooking"
+`;
+
+export interface AvailableSlotRow {
+  id: string;
+  courtId: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  priceArs: number | null;
+  isBlocked: boolean;
+  isActive: boolean;
+  allowOnlineBooking: boolean;
+}
+
+export interface SlotAvailabilityFilter {
+  clubId: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  courtIds?: string[];
+}
+
+export interface SlotWithDate {
+  slotId: string;
+  courtId: string;
+  courtName: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  priceArs: number | null;
+  date: string; // concrete YYYY-MM-DD for this occurrence
+  scheduledAt: string; // ISO timestamp combining date + startTime
+  hasMatch: boolean;
+  allowOnlineBooking: boolean;
+}
+
+/**
+ * Returns available slots for a club within a date range, annotated with
+ * whether each date occurrence already has an active match.
+ *
+ * Decision Context:
+ * - Why repository-level: joining slots × date range × existing matches is a multi-step
+ *   operation. The service calls this then filters to find truly available slots.
+ * - Two queries: (1) all active slots for the club; (2) existing non-cancelled matches
+ *   in the date range. The service/caller is responsible for expanding weekly slots
+ *   into concrete dates and filtering out already-matched occurrences.
+ * - courtIds filter: optional; if omitted returns all courts.
+ * - Previously fixed bugs: none relevant (new feature).
+ */
+export async function getClubSlotsAndMatches(
+  filter: SlotAvailabilityFilter,
+  client: SupabaseClient = supabase,
+): Promise<{ slots: AvailableSlotRow[]; matchedSlotIds: Set<string> }> {
+  // Query 1: active, non-blocked slots for the club
+  let slotQuery = client
+    .from('clubSlots')
+    .select(AVAILABLE_SLOT_COLUMNS)
+    .eq('clubId', filter.clubId)
+    .eq('isActive', true)
+    .eq('isBlocked', false);
+
+  if (filter.courtIds?.length) {
+    slotQuery = slotQuery.in('courtId', filter.courtIds);
+  }
+
+  const { data: slotsData, error: slotsError } = await slotQuery;
+  if (slotsError) {
+    console.error('[matchRepository.getClubSlotsAndMatches] slots error:', slotsError.message);
+    throw new Error(slotsError.message);
+  }
+
+  // Query 2: existing non-cancelled matches in date range for this club
+  const { data: matchesData, error: matchesError } = await client
+    .from('matches')
+    .select('clubSlotId, scheduledAt')
+    .eq('clubId', filter.clubId)
+    .neq('status', 'cancelled')
+    .gte('scheduledAt', `${filter.startDate}T00:00:00Z`)
+    .lte('scheduledAt', `${filter.endDate}T23:59:59Z`)
+    .not('clubSlotId', 'is', null);
+
+  if (matchesError) {
+    console.error('[matchRepository.getClubSlotsAndMatches] matches error:', matchesError.message);
+    throw new Error(matchesError.message);
+  }
+
+  // Build a set of slotIds that already have a match in the range
+  const matchedSlotIds = new Set<string>(
+    (matchesData ?? []).map((m) => (m as { clubSlotId: string }).clubSlotId),
+  );
+
+  return {
+    slots: (slotsData ?? []) as AvailableSlotRow[],
+    matchedSlotIds,
+  };
+}
+
 // Export repository as object for consistency
 export const matchRepository = {
   getMatchesWithFilters,
@@ -852,4 +973,5 @@ export const matchRepository = {
   createMatch,
   createMatchParticipant,
   getCompletedMatchesByUser,
+  getClubSlotsAndMatches,
 };

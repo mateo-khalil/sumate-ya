@@ -21,7 +21,7 @@
  */
 export const prerender = false;
 
-import { Volleyball, Landmark, Calendar, Users, BarChart3 } from 'lucide-react';
+import { Volleyball, Landmark, Calendar, Users, BarChart3, LayoutDashboard, Plus } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import SlotManager from '../../components/club/SlotManager';
 import { readAccessToken } from '../../lib/auth';
@@ -111,6 +111,14 @@ const nombre = user.displayName || user.email;
             <a href="/panel-club" class="sidebar-link">
               <span class="sidebar-icon"><Landmark size={16} strokeWidth={2} aria-hidden="true" /></span>
               Panel principal
+            </a>
+            <a href="/panel-club/dashboard" class="sidebar-link">
+              <span class="sidebar-icon"><LayoutDashboard size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Dashboard
+            </a>
+            <a href="/panel-club/crear-partido" class="sidebar-link sidebar-link--highlight">
+              <span class="sidebar-icon"><Plus size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Crear partido
             </a>
             <a href="/panel-club/horarios" class="sidebar-link sidebar-link--active">
               <span class="sidebar-icon"><Calendar size={16} strokeWidth={2} aria-hidden="true" /></span>
@@ -337,6 +345,17 @@ const nombre = user.displayName || user.email;
   .sidebar-link--active:hover {
     background: rgba(246, 164, 0, 0.14);
     color: hsl(42 100% 70%);
+  }
+
+  .sidebar-link--highlight {
+    background: rgba(35, 100% 48%, 0.08);
+    color: hsl(35 100% 58%);
+    border: 1px solid rgba(246, 120, 0, 0.22);
+  }
+
+  .sidebar-link--highlight:hover {
+    background: rgba(246, 120, 0, 0.15);
+    color: hsl(35 100% 68%);
   }
 
   .sidebar-icon {

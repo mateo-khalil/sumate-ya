@@ -447,6 +447,7 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
     },
     isCurrentUserJoined,
     canJoin: !!userId && isPlayable && !isCurrentUserJoined && totalCount < row.capacity,
+    organizedByClub: row.organizedByClub ?? false,
   };
 }
 

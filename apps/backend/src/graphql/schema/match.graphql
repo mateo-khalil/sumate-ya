@@ -76,6 +76,9 @@ type Match {
   organizerId: ID
   # Team the current user is enrolled in — null when not joined or unauthenticated
   currentUserTeam: MatchTeam
+  # True when this match was created by the club admin directly (not by a player).
+  # In this case the organizer may not appear in matchParticipants.
+  organizedByClub: Boolean
 }
 
 enum MatchFormat {

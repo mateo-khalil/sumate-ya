@@ -10,7 +10,7 @@
  */
 export const prerender = false;
 
-import { Volleyball, Landmark, Calendar, Users, BarChart3, Construction } from 'lucide-react';
+import { Volleyball, Landmark, Calendar, Users, BarChart3, Construction, LayoutDashboard, Plus } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 
 // User is verified and attached by middleware — no redundant getUser() call needed
@@ -48,9 +48,17 @@ const nombre = user.displayName || user.email;
         <div class="sidebar-section">
           <div class="sidebar-label">GESTIÓN</div>
           <nav class="sidebar-nav">
-            <a href="#" class="sidebar-link sidebar-link--active">
+            <a href="/panel-club" class="sidebar-link sidebar-link--active">
               <span class="sidebar-icon"><Landmark size={16} strokeWidth={2} aria-hidden="true" /></span>
               Panel principal
+            </a>
+            <a href="/panel-club/dashboard" class="sidebar-link">
+              <span class="sidebar-icon"><LayoutDashboard size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Dashboard
+            </a>
+            <a href="/panel-club/crear-partido" class="sidebar-link sidebar-link--highlight">
+              <span class="sidebar-icon"><Plus size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Crear partido
             </a>
             <a href="/panel-club/horarios" class="sidebar-link">
               <span class="sidebar-icon"><Calendar size={16} strokeWidth={2} aria-hidden="true" /></span>
@@ -84,6 +92,22 @@ const nombre = user.displayName || user.email;
           <h1 class="section-title">Panel de Club</h1>
           <p class="section-sub">Gestioná tus canchas, turnos y jugadores</p>
         </header>
+
+        <!-- Quick actions -->
+        <div class="quick-actions">
+          <a href="/panel-club/crear-partido" class="qa-btn qa-btn--primary">
+            <span class="qa-icon"><Plus size={18} strokeWidth={2} aria-hidden="true" /></span>
+            Crear partido
+          </a>
+          <a href="/panel-club/dashboard" class="qa-btn">
+            <span class="qa-icon"><LayoutDashboard size={18} strokeWidth={2} aria-hidden="true" /></span>
+            Dashboard
+          </a>
+          <a href="/panel-club/horarios" class="qa-btn">
+            <span class="qa-icon"><Calendar size={18} strokeWidth={2} aria-hidden="true" /></span>
+            Horarios
+          </a>
+        </div>
 
         <!-- Stats row placeholder -->
         <div class="stats-row">
@@ -308,6 +332,16 @@ const nombre = user.displayName || user.email;
     color: hsl(42 100% 70%);
   }
 
+  .sidebar-link--highlight {
+    color: hsl(35 100% 58%);
+    border: 1px solid rgba(246, 120, 0, 0.22);
+  }
+
+  .sidebar-link--highlight:hover {
+    background: rgba(246, 120, 0, 0.12);
+    color: hsl(35 100% 68%);
+  }
+
   .sidebar-icon {
     line-height: 1;
     display: inline-flex;
@@ -354,6 +388,24 @@ const nombre = user.displayName || user.email;
     font-size: 0.9rem;
     font-family: 'Barlow', sans-serif;
   }
+
+  /* ---- Quick actions ---- */
+  .quick-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .qa-btn {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; padding: 0.625rem 1.125rem; text-decoration: none;
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.88rem; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; color: hsl(215 20% 65%);
+    transition: all 0.12s;
+  }
+  .qa-btn:hover { background: rgba(255,255,255,0.09); color: hsl(210 20% 85%); }
+  .qa-btn--primary {
+    background: rgba(35,100%,48%,0.1); border-color: rgba(246,120,0,0.3);
+    color: hsl(35 100% 65%);
+  }
+  .qa-btn--primary:hover { background: rgba(246,120,0,0.18); }
+  .qa-icon { display: inline-flex; }
 
   /* ---- Stats row ---- */
   .stats-row {

@@ -43,6 +43,7 @@ import {
   CheckCircle,
   Key,
   Activity,
+  Landmark,
 } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import JoinTeamButton from '../../components/matches/JoinTeamButton.tsx';
@@ -157,6 +158,9 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
           {user ? (
             <>
               {isPlayer && <a href="/partidos/crear" class="btn-crear">+ Crear partido</a>}
+              {user?.role === 'club_admin' && (
+                <a href="/panel-club" class="btn-panel-club">Panel de Club</a>
+              )}
               <a href="/perfil" class="nav-link">Mi Perfil</a>
               <form method="POST" action="/api/auth/logout">
                 <button type="submit" class="btn-logout">Salir</button>
@@ -185,6 +189,14 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
       {match && (
         <div class="match-detail">
           <a href="/partidos" class="link-back">← Volver a partidos</a>
+
+          <!-- Badge: Organizado por el club (visible when organizedByClub=true) -->
+          {match.organizedByClub && (
+            <div class="club-organized-badge">
+              <span class="cob-icon"><Landmark size={13} strokeWidth={2} aria-hidden="true" /></span>
+              Organizado por el club
+            </div>
+          )}
 
           <!-- Section 1: Match info card -->
           <MatchInfoCard
@@ -408,6 +420,13 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
     text-decoration: none; padding: 0.3rem 0.6rem; border-radius: 6px; transition: color 0.15s, background 0.15s;
   }
   .nav-link:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 94%); }
+  .btn-panel-club {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 700;
+    letter-spacing: 0.1em; text-decoration: none; padding: 0.35rem 0.875rem;
+    border-radius: 6px; background: rgba(246,164,0,0.12);
+    border: 1px solid rgba(246,164,0,0.3); color: hsl(42 100% 65%); transition: background 0.15s;
+  }
+  .btn-panel-club:hover { background: rgba(246,164,0,0.2); }
   .btn-crear {
     font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 700;
     letter-spacing: 0.1em; text-transform: uppercase; text-decoration: none;
@@ -442,6 +461,16 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
     letter-spacing: 0.08em; text-decoration: none; color: hsl(215 20% 55%); transition: color 0.15s;
   }
   .link-back:hover { color: hsl(210 20% 90%); }
+
+  /* Club-organized badge */
+  .club-organized-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(246, 164, 0, 0.1); border: 1px solid rgba(246, 164, 0, 0.25);
+    border-radius: 6px; padding: 0.35rem 0.875rem; width: fit-content;
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.78rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; color: hsl(42 100% 65%);
+  }
+  .cob-icon { display: inline-flex; }
 
   /* Status banners */
   .banner {
