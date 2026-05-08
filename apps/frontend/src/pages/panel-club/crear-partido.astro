@@ -1,0 +1,190 @@
+---
+/**
+ * Panel de Club — Crear Partido (SSR, club_admin only)
+ *
+ * Decision Context:
+ * - Why SSR: auth-gated page. Follows the same pattern as horarios.astro and dashboard.astro.
+ * - query params ?slotId={id}&date={YYYY-MM-DD}: pre-fill the wizard Step 2 directly
+ *   when the admin navigates here from a specific slot (dashboard calendar cell click,
+ *   horarios slot detail button).
+ * - No SSR pre-fetch of slots: the available-slots query can be expensive (cross-join slots × dates)
+ *   and depends on wizard filters set by the admin. We let the React island fetch on mount.
+ * - accessToken forwarded as prop so the wizard can call GraphQL mutations.
+ * - Previously fixed bugs: none relevant (new feature).
+ */
+export const prerender = false;
+
+import { Volleyball, Landmark, Calendar, Users, BarChart3, LayoutDashboard, Plus } from 'lucide-react';
+import Layout from '../../layouts/Layout.astro';
+import ClubMatchWizard from '../../components/club/ClubMatchWizard';
+import { readAccessToken } from '../../lib/auth';
+
+const user = Astro.locals.user;
+
+if (!user || user.role !== 'club_admin') {
+  return Astro.redirect('/login?reason=role-required');
+}
+
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+
+// Pre-fill params from query string (set by dashboard/horarios quick-create links)
+const { slotId, date } = Astro.url.searchParams
+  ? Object.fromEntries(Astro.url.searchParams.entries())
+  : {};
+
+const nombre = user.displayName || user.email;
+---
+
+<Layout title="Crear Partido — Panel de Club — Sumate Ya">
+  <div class="app-shell">
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
+          <span class="topbar-name">SUMATE YA</span>
+          <span class="topbar-role-pill">CLUB</span>
+        </div>
+        <div class="topbar-actions">
+          <span class="user-badge">
+            <span class="user-dot"></span>
+            {nombre}
+          </span>
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="btn-logout">Salir</button>
+          </form>
+        </div>
+      </div>
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <div class="page-layout">
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">GESTIÓN</div>
+          <nav class="sidebar-nav">
+            <a href="/panel-club" class="sidebar-link">
+              <span class="sidebar-icon"><Landmark size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Panel principal
+            </a>
+            <a href="/panel-club/dashboard" class="sidebar-link">
+              <span class="sidebar-icon"><LayoutDashboard size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Dashboard
+            </a>
+            <a href="/panel-club/horarios" class="sidebar-link">
+              <span class="sidebar-icon"><Calendar size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Horarios
+            </a>
+            <a href="/panel-club/crear-partido" class="sidebar-link sidebar-link--active">
+              <span class="sidebar-icon"><Plus size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Crear partido
+            </a>
+            <a href="#" class="sidebar-link">
+              <span class="sidebar-icon"><Volleyball size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Canchas
+            </a>
+            <a href="#" class="sidebar-link">
+              <span class="sidebar-icon"><Users size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Jugadores
+            </a>
+          </nav>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">REPORTES</div>
+          <nav class="sidebar-nav">
+            <a href="#" class="sidebar-link">
+              <span class="sidebar-icon"><BarChart3 size={16} strokeWidth={2} aria-hidden="true" /></span>
+              Estadísticas
+            </a>
+          </nav>
+        </div>
+      </aside>
+
+      <main class="page-content">
+        <header class="section-header">
+          <div class="section-label">GESTIÓN DE PARTIDOS</div>
+          <h1 class="section-title">Crear Partido</h1>
+          <p class="section-sub">Seleccioná un horario disponible y configurá el partido para tu club</p>
+        </header>
+
+        <ClubMatchWizard
+          client:load
+          accessToken={accessToken}
+          prefillSlotId={slotId}
+          prefillDate={date}
+        />
+      </main>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(7,15,31,0.85); backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .topbar-inner {
+    max-width: 1280px; margin: 0 auto; padding: 0 1.25rem;
+    height: 56px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 0.5rem; }
+  .topbar-ball { line-height:1; display:inline-flex; color:hsl(42 100% 60%); }
+  .topbar-name { font-family:'Bebas Neue',sans-serif; font-size:1.35rem; letter-spacing:.1em; color:#fff; }
+  .topbar-role-pill {
+    font-family:'Barlow Condensed',sans-serif; font-size:.65rem; font-weight:700;
+    letter-spacing:.12em; text-transform:uppercase;
+    background:rgba(246,164,0,.15); border:1px solid rgba(246,164,0,.35);
+    color:hsl(42 100% 60%); border-radius:4px; padding:.125rem .5rem;
+  }
+  .topbar-actions { display:flex; align-items:center; gap:.75rem; }
+  .topbar-accent { height:2px; background:linear-gradient(90deg,hsl(42 100% 55%),hsl(216 85% 45%),transparent); }
+  .user-badge {
+    display:flex; align-items:center; gap:.4rem;
+    background:rgba(246,164,0,.1); border:1px solid rgba(246,164,0,.22);
+    color:hsl(42 100% 65%); border-radius:20px; padding:.25rem .875rem;
+    font-size:.8125rem; font-weight:600; font-family:'Barlow Condensed',sans-serif; letter-spacing:.03em;
+  }
+  .user-dot { width:6px; height:6px; border-radius:50%; background:hsl(42 100% 58%); box-shadow:0 0 4px hsl(42 100% 58%); }
+  .btn-logout {
+    background:transparent; border:1px solid rgba(255,255,255,.12); border-radius:6px;
+    padding:.3rem .75rem; font-size:.8125rem; font-family:'Barlow',sans-serif; font-weight:500;
+    cursor:pointer; color:hsl(215 20% 60%); transition:background .15s,color .15s,border-color .15s;
+  }
+  .btn-logout:hover { background:rgba(255,255,255,.07); color:hsl(210 20% 90%); border-color:rgba(255,255,255,.2); }
+  .page-layout {
+    flex:1; display:flex; max-width:1280px; width:100%;
+    margin:0 auto; padding:2rem 1.25rem; gap:2rem;
+  }
+  .sidebar { width:220px; flex-shrink:0; display:flex; flex-direction:column; gap:1.5rem; }
+  @media(max-width:768px){.sidebar{display:none;}}
+  .sidebar-section { display:flex; flex-direction:column; gap:.375rem; }
+  .sidebar-label {
+    font-family:'Barlow Condensed',sans-serif; font-size:.7rem; font-weight:700;
+    letter-spacing:.18em; color:hsl(215 20% 40%); text-transform:uppercase;
+    padding:0 .75rem; margin-bottom:.25rem;
+  }
+  .sidebar-nav { display:flex; flex-direction:column; gap:2px; }
+  .sidebar-link {
+    display:flex; align-items:center; gap:.625rem; padding:.5rem .75rem; border-radius:8px;
+    font-size:.875rem; font-family:'Barlow',sans-serif; font-weight:500;
+    color:hsl(215 20% 55%); text-decoration:none; transition:background .12s,color .12s;
+  }
+  .sidebar-link:hover { background:rgba(255,255,255,.05); color:hsl(210 20% 85%); }
+  .sidebar-link--active {
+    background:rgba(246,164,0,.1); color:hsl(42 100% 65%);
+    border:1px solid rgba(246,164,0,.18);
+  }
+  .sidebar-icon { line-height:1; display:inline-flex; align-items:center; color:inherit; }
+  .page-content { flex:1; min-width:0; }
+  .section-header { margin-bottom:1.5rem; padding-bottom:1.25rem; border-bottom:1px solid rgba(255,255,255,.06); }
+  .section-label {
+    font-family:'Barlow Condensed',sans-serif; font-size:.75rem; font-weight:700;
+    letter-spacing:.2em; color:hsl(42 100% 55%); text-transform:uppercase; margin-bottom:.5rem;
+  }
+  .section-title {
+    font-family:'Bebas Neue',sans-serif; font-size:2.5rem; font-weight:400;
+    letter-spacing:.04em; color:#fff; margin:0 0 .375rem; line-height:1;
+  }
+  .section-sub { margin:0; color:hsl(215 20% 50%); font-size:.9rem; font-family:'Barlow',sans-serif; }
+</style>

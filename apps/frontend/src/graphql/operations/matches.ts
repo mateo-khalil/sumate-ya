@@ -130,6 +130,8 @@ export interface MatchDetailData {
   participants: MatchParticipantsData | null;
   isCurrentUserJoined: boolean | null;
   canJoin: boolean | null;
+  /** True when created by the club admin — organizer may not be in the participant list */
+  organizedByClub: boolean | null;
 }
 
 export interface JoinMatchInput {
@@ -308,6 +310,7 @@ export const GET_MATCH_DETAIL = /* GraphQL */ `
       }
       isCurrentUserJoined
       canJoin
+      organizedByClub
     }
   }
 `;

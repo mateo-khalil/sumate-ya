@@ -1,0 +1,90 @@
+# Club Match Creation — GraphQL schema for admin-initiated matches
+#
+# Decision Context:
+# - Why separate schema file: keeps creation-for-admin isolated from the player-facing
+#   createMatch flow. Both mutations write to the same matches table but with different
+#   validation paths (admin skips allowOnlineBooking + role=player check) and different
+#   defaults (organizedByClub=true, no auto-enroll).
+# - organizedByClub flag on Match type (in match.graphql): the badge "Organizado por el club"
+#   is rendered in /partidos/[id] when this is true. The organizer may not appear in
+#   matchParticipants in this case (unless autoEnrollOrganizer was set).
+# - availableSlotsForClubMatch: returns slot occurrences for a concrete date range (not just
+#   the abstract weekly template). This is the key difference from clubSlots(clubId, date)
+#   which is player-facing and single-date.
+# - Bulk create: returns per-match results so the admin can see which succeeded/failed.
+# - Phase 2 (not in this schema): saveClubMatchTemplate, applyClubMatchTemplate,
+#   popularSlots (heuristic popularity scoring).
+# - Previously fixed bugs: none relevant (new feature).
+
+type ClubMatchSlotOccurrence {
+  slotId: ID!
+  courtId: ID!
+  courtName: String!
+  dayOfWeek: String!
+  startTime: String!
+  endTime: String!
+  duration: Int!
+  priceArs: Float
+  date: String!
+  scheduledAt: String!
+  hasMatch: Boolean!
+  allowOnlineBooking: Boolean!
+}
+
+type CreateClubMatchResult {
+  success: Boolean!
+  matchId: ID
+  message: String
+  match: Match
+}
+
+type BulkClubMatchResult {
+  totalRequested: Int!
+  successCount: Int!
+  failureCount: Int!
+  results: [BulkClubMatchItem!]!
+}
+
+type BulkClubMatchItem {
+  slotId: ID!
+  date: String!
+  success: Boolean!
+  matchId: ID
+  message: String
+}
+
+input CreateClubMatchInput {
+  slotId: ID!
+  scheduledDate: String!
+  format: MatchFormat!
+  capacity: Int!
+  description: String
+  # When true, the club_admin is also enrolled as team A participant.
+  # Default false: the match is club-managed, no organizer in the roster.
+  autoEnrollOrganizer: Boolean
+}
+
+input BulkCreateClubMatchesInput {
+  matches: [CreateClubMatchInput!]!
+}
+
+input AvailableSlotsFilters {
+  startDate: String!
+  endDate: String!
+  courtIds: [ID!]
+  # If true, include slots with allowOnlineBooking=false (admin override)
+  includeNonBookable: Boolean
+}
+
+extend type Query {
+  # Returns slot occurrences (slot × date) where the admin can create a match.
+  # Excludes slots that already have an active match on that date.
+  availableSlotsForClubMatch(filters: AvailableSlotsFilters!): [ClubMatchSlotOccurrence!]!
+}
+
+extend type Mutation {
+  # Create a single match as club admin — bypasses player-only restriction.
+  createClubMatch(input: CreateClubMatchInput!): CreateClubMatchResult!
+  # Create multiple matches in one call — partial failures are surfaced in results.
+  bulkCreateClubMatches(input: BulkCreateClubMatchesInput!): BulkClubMatchResult!
+}
