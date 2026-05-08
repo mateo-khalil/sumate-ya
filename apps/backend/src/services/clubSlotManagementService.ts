@@ -24,6 +24,10 @@
  *   - Match cancellation was a TODO stub. Now implemented via cancelMatchesBySlotIds +
  *     insertCancellationNotifications (Phase 1 complete).
  *   - updatedBy column was never written. Now passed in every updateSlot call.
+ *   - Error messages exposed raw UUIDs to the user (e.g. "Slot <uuid> no pertenece a tu
+ *     club", "Slot no encontrado: <uuid>"). Replaced with user-friendly Spanish messages
+ *     that contain no internal identifiers. validateUuid() maps fieldName to a readable
+ *     label ('cancha', 'horario') so the user sees "Identificador de cancha inválido".
  */
 
 import { cacheDeletePattern, CACHE_TTL, cacheGetOrSet } from '../config/redis.js';
@@ -192,8 +196,8 @@ async function requireSlotOwnership(
   const db = ctx.supabase ?? supabase;
   const slot = await clubSlotManagementRepository.getManagedSlotById(slotId, db);
 
-  if (!slot) throw new Error(`Slot no encontrado: ${slotId}`);
-  if (slot.clubId !== clubId) throw new Error('No tenés permiso para modificar este slot');
+  if (!slot) throw new Error('Horario no encontrado');
+  if (slot.clubId !== clubId) throw new Error('No tenés permiso para modificar este horario');
 
   return slot;
 }
@@ -225,7 +229,9 @@ function validateTimeRange(startTime: string, endTime: string): void {
 function validateUuid(value: string, fieldName: string): void {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRe.test(value)) {
-    throw new Error(`${fieldName} inválido: "${value}"`);
+    // Do not include the raw value in the message — it may be shown to the user.
+    const label = fieldName === 'courtId' ? 'cancha' : fieldName === 'slotId' ? 'horario' : fieldName;
+    throw new Error(`Identificador de ${label} inválido`);
   }
 }
 
@@ -244,7 +250,7 @@ async function buildImpactPreview(
 
   const matchDetails: AffectedMatch[] = matches.map((m) => ({
     matchId: m.id,
-    title: m.description ?? `Partido ${m.id.slice(0, 8)}`,
+    title: m.description ?? 'Partido programado',
     scheduledAt: m.scheduledAt,
     participantCount: 0, // enriched by player count across all matches
   }));
@@ -332,7 +338,7 @@ export async function getSlotImpactPreview(
     validateUuid(id, 'slotId');
     const slot = await clubSlotManagementRepository.getManagedSlotById(id, db);
     if (!slot || slot.clubId !== clubId) {
-      throw new Error(`Slot ${id} no pertenece a tu club`);
+      throw new Error('Uno de los horarios seleccionados no pertenece a tu club');
     }
   }
 
@@ -708,7 +714,7 @@ export async function bulkBlockSlots(
   for (const id of input.slotIds) {
     const slot = await clubSlotManagementRepository.getManagedSlotById(id, db);
     if (!slot || slot.clubId !== clubId) {
-      throw new Error(`Slot ${id} no pertenece a tu club`);
+      throw new Error('Uno de los horarios seleccionados no pertenece a tu club');
     }
   }
 

@@ -13,7 +13,13 @@
  * - dayOfWeek is not editable after creation (would require delete+create to avoid
  *   breaking existing bookings on that day).
  * - allowOnlineBooking toggle (improvement 15): controls player visibility.
- * - Previously fixed bugs: none relevant.
+ * - Court selector (bug fix): the original "ID de cancha" text input required the admin to
+ *   manually type a UUID, which is both a security exposure and an unusable UX. Replaced
+ *   with a <select> populated from courts derived from existing slots. The UUID stays as
+ *   the internal value but is never shown to the user.
+ * - Previously fixed bugs:
+ *   - "ID de cancha" field exposed UUID to user and required manual UUID entry. Fixed by
+ *     passing courts: CourtOption[] from SlotManager and rendering a named <select>.
  */
 
 import { useState } from 'react';
@@ -22,10 +28,16 @@ import type { ManagedClubSlot, BlockSlotInput, CreateClubSlotInput, UpdateClubSl
 import { BLOCK_TYPE_LABELS, DAY_OF_WEEK_LABELS, DAY_ORDER } from '../../graphql/operations/club-slots';
 import { SlotHistoryTab } from './SlotHistoryTab';
 
+export interface CourtOption {
+  id: string;
+  name: string;
+}
+
 type Tab = 'info' | 'edit' | 'block' | 'history';
 
 interface SlotEditModalProps {
   slot: ManagedClubSlot | null;
+  courts: CourtOption[];
   onClose: () => void;
   onSaveCreate: (input: CreateClubSlotInput) => Promise<{ success: boolean; message: string }>;
   onSaveUpdate: (input: UpdateClubSlotInput) => Promise<{ success: boolean; message: string }>;
@@ -33,14 +45,15 @@ interface SlotEditModalProps {
   onDelete: (slotId: string) => void;
 }
 
-export function SlotEditModal({ slot, onClose, onSaveCreate, onSaveUpdate, onBlock }: SlotEditModalProps) {
+export function SlotEditModal({ slot, courts, onClose, onSaveCreate, onSaveUpdate, onBlock }: SlotEditModalProps) {
   const isCreate = slot === null;
   const [tab, setTab] = useState<Tab>(isCreate ? 'edit' : 'info');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Edit form state
-  const [courtId, setCourtId] = useState(slot?.courtId ?? '');
+  // Edit form state — courtId defaults to the slot's existing court or the first available court.
+  // UUID stays internal; the user only sees court names via the <select>.
+  const [courtId, setCourtId] = useState(slot?.courtId ?? courts[0]?.id ?? '');
   const [dayOfWeek, setDayOfWeek] = useState(slot?.dayOfWeek ?? 'monday');
   const [startTime, setStartTime] = useState(slot?.startTime?.slice(0, 5) ?? '');
   const [endTime, setEndTime] = useState(slot?.endTime?.slice(0, 5) ?? '');
@@ -119,6 +132,7 @@ export function SlotEditModal({ slot, onClose, onSaveCreate, onSaveUpdate, onBlo
           {tab === 'edit' && (
             <SlotEditTab
               isCreate={isCreate}
+              courts={courts}
               courtId={courtId} setCourtId={setCourtId}
               dayOfWeek={dayOfWeek} setDayOfWeek={setDayOfWeek}
               startTime={startTime} setStartTime={setStartTime}
@@ -185,6 +199,7 @@ function SlotInfoTab({ slot }: { slot: ManagedClubSlot }) {
 
 function SlotEditTab(props: {
   isCreate: boolean;
+  courts: CourtOption[];
   courtId: string; setCourtId: (v: string) => void;
   dayOfWeek: string; setDayOfWeek: (v: string) => void;
   startTime: string; setStartTime: (v: string) => void;
@@ -197,8 +212,20 @@ function SlotEditTab(props: {
     <div className="form-grid">
       {props.isCreate && (
         <label className="form-field">
-          <span className="form-label">ID de cancha</span>
-          <input className="form-input" value={props.courtId} onChange={(e) => props.setCourtId(e.target.value)} placeholder="UUID de la cancha" />
+          <span className="form-label">Cancha</span>
+          {props.courts.length > 0 ? (
+            <select
+              className="form-select"
+              value={props.courtId}
+              onChange={(e) => props.setCourtId(e.target.value)}
+            >
+              {props.courts.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="form-hint">No hay canchas configuradas. Creá canchas desde la sección Canchas antes de agregar horarios.</p>
+          )}
         </label>
       )}
       {props.isCreate && (
