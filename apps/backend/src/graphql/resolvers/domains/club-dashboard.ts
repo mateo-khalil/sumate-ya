@@ -15,7 +15,10 @@
  *   types (MatchFormat, MatchStatus, etc.) are TypeScript enums — not directly
  *   assignable from plain string literals without explicit use of enum values.
  *   We import and use the generated enum values in mapFormat/mapStatus instead.
- * - Previously fixed bugs: none relevant (new feature).
+ * - Previously fixed bugs:
+ *   - Enum "MatchFormat" cannot represent value: "11v11" — schedule[].match objects
+ *     were returned with raw DB strings; mapMatchEnums now applied to both top-level
+ *     matches and nested slot.match before the response is serialized.
  */
 
 import { z } from 'zod';
@@ -146,6 +149,18 @@ const Query: Record<string, (...args: any[]) => Promise<unknown>> = {
         filters,
       );
 
+      // mapMatchEnums: converts raw DB strings to GQL enum values for a DashboardMatch.
+      // Applied to both top-level matches AND nested schedule[].match — the serializer
+      // rejects the raw '11v11' / 'open' / 'PAST' strings if they reach it unmapped.
+      // Previously fixed bugs: 'Enum "MatchFormat" cannot represent value: "11v11"' when
+      // schedule slots had matches; schedule was not being mapped through enum converters.
+      const mapMatchEnums = (m: (typeof data.matches)[number]) => ({
+        ...m,
+        format: mapFormat(m.format),
+        status: mapStatus(m.status),
+        timeStatus: mapTimeStatus(m.timeStatus),
+      });
+
       return {
         club: {
           id: data.club.id,
@@ -158,13 +173,11 @@ const Query: Record<string, (...args: any[]) => Promise<unknown>> = {
           lng: null,
         },
         metrics: data.metrics,
-        schedule: data.schedule,
-        matches: data.matches.map((m) => ({
-          ...m,
-          format: mapFormat(m.format),
-          status: mapStatus(m.status),
-          timeStatus: mapTimeStatus(m.timeStatus),
+        schedule: data.schedule.map((slot) => ({
+          ...slot,
+          match: slot.match ? mapMatchEnums(slot.match) : null,
         })),
+        matches: data.matches.map(mapMatchEnums),
         conflicts: data.conflicts,
       };
     } catch (error) {
