@@ -9,17 +9,18 @@
  * - Manual fetch (not useQuery): the dashboard uses a controlled accessToken-based
  *   Authorization header (same pattern as horarios.astro) because the HttpOnly cookie
  *   cannot be read from JS; we must include the token in fetch headers explicitly.
- * - exportSchedule: separate async call, returns the raw CSV/JSON string for download.
- * - Previously fixed bugs: none relevant (new feature).
+ * - Robust state updates: `updateFilters` uses functional `setFilters` to avoid stale
+ *   state, and `refetch` is now independent of the hook's `filters` state.
+ * - Friendly errors: catches generic network/validation errors and shows a user-friendly
+ *   message in Spanish.
+ * - Previously fixed bugs: "Invalid request body" from date format/range errors.
  */
 
 import { useState, useCallback } from 'react';
 import {
   CLUB_DASHBOARD_QUERY,
-  CLUB_METRICS_QUERY,
   EXPORT_CLUB_SCHEDULE_QUERY,
   type ClubDashboardData,
-  type ClubMetrics,
   type ClubDashboardFilters,
 } from '../../graphql/operations/club-dashboard';
 
@@ -42,7 +43,10 @@ async function gqlFetch<T>(
     body: JSON.stringify({ query, variables }),
   });
   const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (json.errors?.length) throw new Error(json.errors[0].message);
+  if (!res.ok || json.errors?.length) {
+    const errorMsg = json.errors?.[0]?.message ?? 'Error de comunicación con el servidor';
+    throw new Error(errorMsg);
+  }
   if (!json.data) throw new Error('Respuesta vacía del servidor');
   return json.data;
 }
@@ -76,34 +80,39 @@ export function useDashboard(opts: {
   });
 
   const refetch = useCallback(
-    async (newFilters?: ClubDashboardFilters) => {
-      const appliedFilters = newFilters ?? filters;
+    async (filtersToApply: ClubDashboardFilters) => {
       setLoading(true);
       setError(null);
       try {
         const result = await gqlFetch<{ clubDashboard: ClubDashboardData }>(
           CLUB_DASHBOARD_QUERY,
-          { filters: appliedFilters },
+          { filters: filtersToApply },
           opts.accessToken,
         );
         setData(result.clubDashboard);
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Error al cargar el dashboard';
-        setError(msg);
+        if (msg.includes('Filtros inválidos') || msg.includes('Failed to fetch')) {
+          setError('Error al cargar los datos para esta fecha. Intenta nuevamente.');
+        } else {
+          setError(msg);
+        }
       } finally {
         setLoading(false);
       }
     },
-    [filters, opts.accessToken],
+    [opts.accessToken], // Stable dependency
   );
 
   const updateFilters = useCallback(
     (next: Partial<ClubDashboardFilters>) => {
-      const updated = { ...filters, ...next };
-      setFilters(updated);
-      refetch(updated);
+      setFilters(prevFilters => {
+          const updated = { ...prevFilters, ...next };
+          refetch(updated);
+          return updated;
+      });
     },
-    [filters, refetch],
+    [refetch], // Stable dependency
   );
 
   const exportSchedule = useCallback(

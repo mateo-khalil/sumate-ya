@@ -4,31 +4,33 @@
  * Decision Context:
  * - Why island: needs interactivity (view switching, filters, modal, export).
  *   Receives SSR-hydrated initialData from dashboard.astro so first render is instant.
- * - View state (calendar/agenda/table) held in local React state — no nanostore needed
+ * - View state (calendar/agenda) held in local React state — no nanostore needed
  *   since this state is local to the dashboard and not shared with other islands.
  * - Courts derived from schedule data to avoid an extra query: the schedule already
  *   includes courtId/courtName per slot, so we deduplicate them here for the filter UI.
+ * - Slot click routing added in this version:
+ *     Free slot  → selectedFreeSlot state → SlotActionPanel with create/block links
+ *     Blocked    → selectedBlockedSlot state → BlockInfoPanel with block details
+ *   Both panels are lightweight inline modals. Full slot management lives in horarios.
+ * - SlotActionPanel navigates to /panel-club/horarios with slotId and action query
+ *   params so the admin can create a match or block from the horarios page. This avoids
+ *   duplicating block/create logic in the dashboard and keeps horarios as the single
+ *   CRUD surface for slot management.
  * - DashboardFilters.onReset resets to the current week (same default as SSR prefetch).
- * - Export button opens ExportDialog which calls useDashboard.exportSchedule.
- * - Conflict alerts shown only when there are conflicts.
- * - Phase 2 notes (documented here, not implemented):
- *   - Quick action "Bloquear slot" from calendar cell (requires toggleSlotBlock mutation).
- *   - Audit log panel (requires slotAuditLog query integration).
  * - Previously fixed bugs: none relevant (new feature).
  */
 
 import { useState } from 'react';
-import { CalendarRange, List, Table2, Download, ExternalLink, Loader2 } from 'lucide-react';
+import { CalendarRange, List, Download, ExternalLink, Loader2, X, Lock, Plus, ExternalLink as LinkIcon } from 'lucide-react';
 import { useDashboard } from './useDashboard';
 import DashboardHeader from './DashboardHeader';
 import DashboardFilters from './DashboardFilters';
 import ClubScheduleView from './ClubScheduleView';
 import ClubAgendaView from './ClubAgendaView';
-import ClubTableView from './ClubTableView';
 import MatchDetailModal from './MatchDetailModal';
 import ConflictAlerts from './ConflictAlerts';
 import ExportDialog from './ExportDialog';
-import type { ClubDashboardData, DashboardMatch } from '../../graphql/operations/club-dashboard';
+import type { ClubDashboardData, DashboardMatch, ScheduleSlot } from '../../graphql/operations/club-dashboard';
 
 interface Props {
   initialData: ClubDashboardData | null;
@@ -38,7 +40,7 @@ interface Props {
   defaultEndDate: string;
 }
 
-type ViewMode = 'calendar' | 'agenda' | 'table';
+type ViewMode = 'calendar' | 'agenda';
 
 function weekRange() {
   const now = new Date();
@@ -49,6 +51,70 @@ function weekRange() {
   sunday.setUTCDate(monday.getUTCDate() + 6);
   return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
 }
+
+// ── Slot action panels ────────────────────────────────────────────────────────
+
+function FreeSlotPanel({ slot, onClose }: { slot: ScheduleSlot; onClose: () => void }) {
+  const base = `/panel-club/horarios?slotId=${slot.slotId}`;
+  return (
+    <div className="slot-panel-backdrop" onClick={onClose}>
+      <div className="slot-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="slot-panel-header">
+          <div>
+            <div className="slot-panel-label">HORARIO LIBRE</div>
+            <div className="slot-panel-title">{slot.courtName} · {slot.startTime.slice(0, 5)}</div>
+          </div>
+          <button className="slot-panel-close" onClick={onClose} aria-label="Cerrar">
+            <X size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="slot-panel-actions">
+          <a href={`${base}&action=create`} className="slot-action-btn slot-action-btn--primary">
+            <Plus size={14} strokeWidth={2} aria-hidden="true" />
+            Crear partido aquí
+          </a>
+          <a href={`${base}&action=block`} className="slot-action-btn">
+            <Lock size={14} strokeWidth={2} aria-hidden="true" />
+            Bloquear horario
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockedSlotPanel({ slot, onClose }: { slot: ScheduleSlot; onClose: () => void }) {
+  return (
+    <div className="slot-panel-backdrop" onClick={onClose}>
+      <div className="slot-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="slot-panel-header">
+          <div>
+            <div className="slot-panel-label slot-panel-label--blocked">BLOQUEADO</div>
+            <div className="slot-panel-title">{slot.courtName} · {slot.startTime.slice(0, 5)}</div>
+          </div>
+          <button className="slot-panel-close" onClick={onClose} aria-label="Cerrar">
+            <X size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+        {slot.blockReason && (
+          <p className="slot-panel-reason">{slot.blockReason}</p>
+        )}
+        {slot.blockType && (
+          <p className="slot-panel-meta">Tipo: {slot.blockType}</p>
+        )}
+        <a
+          href={`/panel-club/horarios?slotId=${slot.slotId}&action=unblock`}
+          className="slot-action-btn slot-action-btn--danger"
+        >
+          <LinkIcon size={14} strokeWidth={2} aria-hidden="true" />
+          Desbloquear en horarios
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function ClubDashboardView(props: Props) {
   const { data, loading, error, filters, updateFilters, refetch, exportSchedule } = useDashboard({
@@ -61,17 +127,13 @@ export default function ClubDashboardView(props: Props) {
 
   const [view, setView] = useState<ViewMode>('calendar');
   const [selectedMatch, setSelectedMatch] = useState<DashboardMatch | null>(null);
+  const [selectedFreeSlot, setSelectedFreeSlot] = useState<ScheduleSlot | null>(null);
+  const [selectedBlockedSlot, setSelectedBlockedSlot] = useState<ScheduleSlot | null>(null);
   const [showExport, setShowExport] = useState(false);
 
-  // Derive unique courts from schedule for the filter dropdown
-  const courts =
-    data?.schedule
-      ? [
-          ...new Map(
-            data.schedule.map((s) => [s.courtId, { id: s.courtId, name: s.courtName }]),
-          ).values(),
-        ]
-      : [];
+  const courts = data?.schedule
+    ? [...new Map(data.schedule.map((s) => [s.courtId, { id: s.courtId, name: s.courtName }])).values()]
+    : [];
 
   function handleReset() {
     const w = weekRange();
@@ -80,20 +142,11 @@ export default function ClubDashboardView(props: Props) {
 
   return (
     <div className="dash-view">
-      {/* KPI Header */}
       {data && <DashboardHeader club={data.club} metrics={data.metrics} />}
-
-      {/* Conflict alerts */}
       {data?.conflicts?.length ? <ConflictAlerts conflicts={data.conflicts} /> : null}
 
-      {/* Filters + actions bar */}
       <div className="toolbar">
-        <DashboardFilters
-          filters={filters}
-          courts={courts}
-          onChange={updateFilters}
-          onReset={handleReset}
-        />
+        <DashboardFilters filters={filters} courts={courts} onChange={updateFilters} onReset={handleReset} />
         <div className="toolbar-actions">
           <a href="/panel-club/horarios" className="link-btn">
             <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
@@ -106,10 +159,9 @@ export default function ClubDashboardView(props: Props) {
         </div>
       </div>
 
-      {/* View mode switcher */}
       <div className="view-switcher">
         <button
-          className={`view-btn ${view === 'calendar' ? 'active' : ''}`}
+          className={`view-btn${view === 'calendar' ? ' active' : ''}`}
           onClick={() => setView('calendar')}
           aria-label="Vista calendario"
         >
@@ -117,24 +169,15 @@ export default function ClubDashboardView(props: Props) {
           Calendario
         </button>
         <button
-          className={`view-btn ${view === 'agenda' ? 'active' : ''}`}
+          className={`view-btn${view === 'agenda' ? ' active' : ''}`}
           onClick={() => setView('agenda')}
           aria-label="Vista agenda"
         >
           <List size={15} strokeWidth={2} aria-hidden="true" />
           Agenda
         </button>
-        <button
-          className={`view-btn ${view === 'table' ? 'active' : ''}`}
-          onClick={() => setView('table')}
-          aria-label="Vista tabla"
-        >
-          <Table2 size={15} strokeWidth={2} aria-hidden="true" />
-          Tabla
-        </button>
       </div>
 
-      {/* Loading overlay */}
       {loading && (
         <div className="loading-bar" aria-live="polite" aria-label="Cargando dashboard">
           <Loader2 size={16} strokeWidth={2} className="spin" aria-hidden="true" />
@@ -142,38 +185,44 @@ export default function ClubDashboardView(props: Props) {
         </div>
       )}
 
-      {/* Error state */}
       {error && !loading && (
         <div className="error-banner" role="alert">
           {error}
-          <button className="retry-btn" onClick={() => refetch()}>Reintentar</button>
+          <button className="retry-btn" onClick={() => refetch(filters)}>Reintentar</button>
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && !error && !data && (
         <div className="empty-state">No hay datos disponibles para el rango seleccionado</div>
       )}
 
-      {/* Views */}
       {data && !error && (
         <div className="view-content">
           {view === 'calendar' && (
-            <ClubScheduleView slots={data.schedule} onMatchClick={setSelectedMatch} />
+            <ClubScheduleView
+              slots={data.schedule}
+              onMatchClick={setSelectedMatch}
+              onFreeSlotClick={setSelectedFreeSlot}
+              onBlockedSlotClick={setSelectedBlockedSlot}
+              startDate={filters.startDate}
+              endDate={filters.endDate}
+            />
           )}
           {view === 'agenda' && (
             <ClubAgendaView matches={data.matches} onMatchClick={setSelectedMatch} />
           )}
-          {view === 'table' && (
-            <ClubTableView matches={data.matches} onMatchClick={setSelectedMatch} />
-          )}
         </div>
       )}
 
-      {/* Match detail modal */}
       <MatchDetailModal match={selectedMatch} onClose={() => setSelectedMatch(null)} />
 
-      {/* Export dialog */}
+      {selectedFreeSlot && (
+        <FreeSlotPanel slot={selectedFreeSlot} onClose={() => setSelectedFreeSlot(null)} />
+      )}
+      {selectedBlockedSlot && (
+        <BlockedSlotPanel slot={selectedBlockedSlot} onClose={() => setSelectedBlockedSlot(null)} />
+      )}
+
       {showExport && (
         <ExportDialog
           filters={filters}
@@ -189,9 +238,9 @@ export default function ClubDashboardView(props: Props) {
         .link-btn, .action-btn {
           display: flex; align-items: center; gap: 5px;
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 8px; padding: 0.3rem 0.875rem; font-family: 'Barlow Condensed', sans-serif;
-          font-size: 0.8rem; font-weight: 700; letter-spacing: 0.05em;
-          color: hsl(215 20% 60%); cursor: pointer; text-decoration: none;
+          border-radius: 8px; padding: 0.3rem 0.875rem;
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.8rem; font-weight: 700;
+          letter-spacing: 0.05em; color: hsl(215 20% 60%); cursor: pointer; text-decoration: none;
           transition: background 0.12s, color 0.12s;
         }
         .link-btn:hover, .action-btn:hover { background: rgba(246,164,0,0.08); color: hsl(42 100% 65%); }
@@ -202,19 +251,15 @@ export default function ClubDashboardView(props: Props) {
         .view-btn {
           display: flex; align-items: center; gap: 0.35rem;
           background: transparent; border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 8px; padding: 0.4rem 0.875rem; font-family: 'Barlow Condensed', sans-serif;
-          font-size: 0.82rem; font-weight: 700; letter-spacing: 0.05em;
-          color: hsl(215 20% 55%); cursor: pointer; transition: all 0.12s;
+          border-radius: 8px; padding: 0.4rem 0.875rem;
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.82rem; font-weight: 700;
+          letter-spacing: 0.05em; color: hsl(215 20% 55%); cursor: pointer; transition: all 0.12s;
         }
-        .view-btn.active {
-          background: rgba(246,164,0,0.1); border-color: rgba(246,164,0,0.3);
-          color: hsl(42 100% 65%);
-        }
+        .view-btn.active { background: rgba(246,164,0,0.1); border-color: rgba(246,164,0,0.3); color: hsl(42 100% 65%); }
         .view-btn:hover:not(.active) { background: rgba(255,255,255,0.05); color: hsl(215 20% 75%); }
         .loading-bar {
           display: flex; align-items: center; gap: 0.5rem;
-          font-family: 'Barlow', sans-serif; font-size: 0.84rem; color: hsl(215 20% 50%);
-          margin-bottom: 0.75rem;
+          font-family: 'Barlow', sans-serif; font-size: 0.84rem; color: hsl(215 20% 50%); margin-bottom: 0.75rem;
         }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .spin { animation: spin 1s linear infinite; }
@@ -233,7 +278,49 @@ export default function ClubDashboardView(props: Props) {
           text-align: center; padding: 3rem 0; color: hsl(215 20% 40%);
           font-family: 'Barlow', sans-serif; font-size: 0.9rem;
         }
-        .view-content { }
+        /* Slot action panels */
+        .slot-panel-backdrop {
+          position: fixed; inset: 0; z-index: 90;
+          background: rgba(0,0,0,0.5); backdrop-filter: blur(3px);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .slot-panel {
+          background: hsl(220 60% 10%); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 12px; padding: 1.25rem; width: min(360px, 92vw);
+          display: flex; flex-direction: column; gap: 0.875rem;
+          box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+        }
+        .slot-panel-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .slot-panel-label {
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.65rem; font-weight: 700;
+          letter-spacing: 0.18em; text-transform: uppercase; color: hsl(142 71% 50%); margin-bottom: 3px;
+        }
+        .slot-panel-label--blocked { color: hsl(var(--destructive)); }
+        .slot-panel-title {
+          font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem;
+          color: hsl(var(--foreground)); letter-spacing: 0.04em; line-height: 1;
+        }
+        .slot-panel-close {
+          background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 6px; padding: 0.3rem; cursor: pointer; color: hsl(215 20% 60%);
+          display: inline-flex; transition: background 0.12s;
+        }
+        .slot-panel-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+        .slot-panel-reason { font-family: 'Barlow', sans-serif; font-size: 0.875rem; color: hsl(215 20% 60%); margin: 0; }
+        .slot-panel-meta { font-family: 'Barlow', sans-serif; font-size: 0.8rem; color: hsl(215 20% 45%); margin: 0; }
+        .slot-panel-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+        .slot-action-btn {
+          display: flex; align-items: center; gap: 6px;
+          background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px; padding: 0.5rem 0.875rem; text-decoration: none;
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.82rem; font-weight: 700;
+          letter-spacing: 0.05em; color: hsl(215 20% 70%); transition: background 0.12s, color 0.12s;
+        }
+        .slot-action-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .slot-action-btn--primary { background: rgba(246,164,0,0.12); border-color: rgba(246,164,0,0.25); color: hsl(42 100% 65%); }
+        .slot-action-btn--primary:hover { background: rgba(246,164,0,0.2); }
+        .slot-action-btn--danger { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.25); color: hsl(0 72% 65%); }
+        .slot-action-btn--danger:hover { background: rgba(239,68,68,0.18); }
       `}</style>
     </div>
   );

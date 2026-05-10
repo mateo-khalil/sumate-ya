@@ -355,7 +355,7 @@ export async function checkSlotOverlap(
 
   let query = client
     .from('clubSlots')
-    .select('id')
+    .select('id', { count: 'exact' })
     .eq('courtId', courtId)
     .eq('dayOfWeek', dayOfWeek)
     .eq('isActive', true)
@@ -367,7 +367,7 @@ export async function checkSlotOverlap(
     query = query.neq('id', excludeSlotId);
   }
 
-  const { data, error } = await query;
+  const { error, count } = await query;
 
   if (error) {
     console.error(
@@ -377,12 +377,132 @@ export async function checkSlotOverlap(
     throw new Error(error.message);
   }
 
-  return (data?.length ?? 0) > 0;
+  return (count ?? 0) > 0;
+}
+
+/**
+ * Finds slots that conflict with a given time range. A conflict is a slot that is
+ * not available (i.e., has a match or is manually blocked).
+ *
+ * This is a more specific check than checkSlotOverlap, used for advanced updates.
+ */
+export async function findConflictingSlots(
+  params: OverlapCheckParams,
+  client: SupabaseClient = supabase,
+): Promise<string[]> {
+  const { courtId, dayOfWeek, startTime, endTime, excludeSlotId } = params;
+
+  // 1. Find overlapping slots that are manually blocked
+  let blockedQuery = client
+    .from('clubSlots')
+    .select('id')
+    .eq('courtId', courtId)
+    .eq('dayOfWeek', dayOfWeek)
+    .eq('isActive', true)
+    .lt('startTime', endTime)
+    .gt('endTime', startTime)
+    .eq('isBlocked', true);
+
+  if (excludeSlotId) {
+    blockedQuery = blockedQuery.neq('id', excludeSlotId);
+  }
+  const { data: blockedSlots, error: blockedError } = await blockedQuery;
+
+  if (blockedError) {
+    console.error(`[findConflictingSlots] Error checking blocked slots:`, blockedError.message);
+    throw new Error(blockedError.message);
+  }
+  const conflictingIds = new Set((blockedSlots as { id: string }[] ?? []).map((s) => s.id));
+
+  // 2. Find overlapping slots that have a scheduled match
+  let matchQuery = client
+    .from('clubSlots')
+    .select('id, matches!inner(id, status)')
+    .eq('courtId', courtId)
+    .eq('dayOfWeek', dayOfWeek)
+    .eq('isActive', true)
+    .lt('startTime', endTime)
+    .gt('endTime', startTime)
+    .in('matches.status', ['open', 'full', 'in_progress', 'completed']);
+
+  if (excludeSlotId) {
+    matchQuery = matchQuery.neq('id', excludeSlotId);
+  }
+  const { data: slotsWithMatches, error: matchError } = await matchQuery;
+
+
+  if (matchError) {
+    console.error(`[findConflictingSlots] Error checking slots with matches:`, matchError.message);
+    throw new Error(matchError.message);
+  }
+  ((slotsWithMatches as { id: string }[] | null) ?? []).forEach((s) => conflictingIds.add(s.id));
+
+  return Array.from(conflictingIds);
+}
+
+/**
+ * Deletes slots that are AVAILABLE (not blocked, no match) and overlap with the
+ * given time range. Used when a slot is expanded to consume others.
+ */
+export async function deleteAvailableOverlappingSlots(
+  params: OverlapCheckParams,
+  client: SupabaseClient = supabase,
+): Promise<number> {
+  const { courtId, dayOfWeek, startTime, endTime, excludeSlotId } = params;
+
+  // 1. Find all active slots that overlap the target range
+  let baseQuery = client
+    .from('clubSlots')
+    .select('id')
+    .eq('courtId', courtId)
+    .eq('dayOfWeek', dayOfWeek)
+    .eq('isActive', true)
+    .lt('startTime', endTime)
+    .gt('endTime', startTime);
+
+  if (excludeSlotId) {
+    baseQuery = baseQuery.neq('id', excludeSlotId);
+  }
+
+  const { data: overlappingSlots, error: overlapError } = await baseQuery;
+  if (overlapError) {
+    console.error(`[deleteAvailableOverlappingSlots] Error finding overlaps:`, overlapError.message);
+    throw new Error(overlapError.message);
+  }
+  if (!overlappingSlots || overlappingSlots.length === 0) {
+    return 0;
+  }
+  const overlappingSlotIds = (overlappingSlots as { id: string }[]).map((s) => s.id);
+
+  // 2. Find which of those are conflicting (and thus should NOT be deleted)
+  const conflictingSlotIds = await findConflictingSlots(params, client);
+  const conflictingSet = new Set(conflictingSlotIds);
+
+  // 3. The difference is the set of available slots to be deleted
+  const toDeleteIds = overlappingSlotIds.filter((id) => !conflictingSet.has(id));
+
+  if (toDeleteIds.length === 0) {
+    return 0;
+  }
+
+  // 4. Perform the delete
+  const { count, error: deleteError } = await client
+    .from('clubSlots')
+    .delete({ count: 'exact' })
+    .in('id', toDeleteIds);
+
+  if (deleteError) {
+    console.error(`[deleteAvailableOverlappingSlots] Supabase error:`, deleteError.message);
+    throw new Error(deleteError.message);
+  }
+
+  return count ?? 0;
 }
 
 // =====================================================
 // Slot write operations
 // =====================================================
+
 
 /**
  * Insert a new club slot. Uses user-scoped client for RLS enforcement.
@@ -762,6 +882,8 @@ export const clubSlotManagementRepository = {
   getManagedSlotsByCourtId,
   getManagedSlotById,
   checkSlotOverlap,
+  findConflictingSlots,
+  deleteAvailableOverlappingSlots,
   createSlot,
   updateSlot,
   softDeleteSlot,

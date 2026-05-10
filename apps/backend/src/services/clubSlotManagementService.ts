@@ -486,25 +486,28 @@ export async function updateClubSlot(
   const db = ctx.supabase ?? supabase;
   const existing = await requireSlotOwnership(input.slotId, clubId, ctx);
 
-  // Overlap check if time is changing
+  // If time is changing, implement the new overlap logic
   if (input.startTime || input.endTime) {
     const newStart = input.startTime ?? existing.startTime;
     const newEnd = input.endTime ?? existing.endTime;
     validateTimeRange(newStart, newEnd);
 
-    const overlaps = await clubSlotManagementRepository.checkSlotOverlap(
-      {
-        courtId: existing.courtId,
-        dayOfWeek: existing.dayOfWeek,
-        startTime: newStart,
-        endTime: newEnd,
-        excludeSlotId: input.slotId,
-      },
-      db,
-    );
-    if (overlaps) {
-      throw new Error('El rango de tiempo actualizado se superpone con otro slot activo en esta cancha');
+    const overlapParams = {
+      courtId: existing.courtId,
+      dayOfWeek: existing.dayOfWeek,
+      startTime: newStart,
+      endTime: newEnd,
+      excludeSlotId: input.slotId,
+    };
+
+    // 1. Check for conflicts with occupied slots
+    const conflictingSlots = await clubSlotManagementRepository.findConflictingSlots(overlapParams, db);
+    if (conflictingSlots.length > 0) {
+      throw new Error('No se puede modificar el horario porque colisiona con una reserva o partido existente.');
     }
+
+    // 2. Delete available slots that are now overlapped
+    await clubSlotManagementRepository.deleteAvailableOverlappingSlots(overlapParams, db);
   }
 
   const previousSnapshot = { startTime: existing.startTime, endTime: existing.endTime, priceArs: existing.priceArs };

@@ -74,17 +74,22 @@ export const onRequest = defineMiddleware(async ({ cookies, url, redirect, local
   }
 
   if (!isProtected) {
-    // For the GraphQL proxy: inject Authorization header into the request so the
-    // route handler can forward it to the backend without reading cookies itself.
-    // This sidesteps Astro dev hot-reload issues where the route handler module
-    // may serve a cached version that doesn't pick up cookie-reading changes.
-    // Previously fixed bugs: /api/graphql returned "Authentication required" because
-    // the route handler never received the token; middleware is the reliable read point.
-    if (pathname === '/api/graphql' && accessToken) {
-      const authHeaders = new Headers(request.headers);
-      authHeaders.set('authorization', `Bearer ${accessToken}`);
-      return next(new Request(request, { headers: authHeaders }));
-    }
+    // Do NOT recreate the Request object here for /api/graphql POST requests.
+    // Previously this block injected the Authorization header via new Request(request, {...})
+    // but that pattern discards the POST body in Node.js — the body ReadableStream is not
+    // transferred across the constructor, causing request.json() in the route handler to fail
+    // with "Invalid request body" on any client-side refetch (e.g. week navigation).
+    //
+    // Auth forwarding is handled without body corruption via two mechanisms:
+    //   1. locals.accessToken is set above (line ~73) when the session is valid — the proxy
+    //      route handler reads it in the `else if (locals.accessToken)` branch.
+    //   2. useDashboard.ts and other islands always send Authorization: Bearer <token>
+    //      explicitly — the proxy's `explicitAuth` branch picks that up directly.
+    //
+    // Previously fixed bugs:
+    //   - /api/graphql returned "Authentication required" — fixed via locals.accessToken.
+    //   - new Request(request, {headers}) body loss caused "Invalid request body" on
+    //     week navigation in the dashboard — fixed by removing the Request reconstruction.
     return next();
   }
 
