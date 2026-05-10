@@ -163,6 +163,10 @@ export default function ClubScheduleView({
       isClickable = true;
     }
 
+    const courtLabel = primary.courtName.length > 10
+      ? primary.courtName.slice(0, 9) + '…'
+      : primary.courtName;
+
     const content = (
       <>
         {isBlocked && <Lock size={10} strokeWidth={2.5} className="sched-icon" aria-hidden="true" />}
@@ -171,6 +175,7 @@ export default function ClubScheduleView({
         )}
         {hasMatch && <span className="sched-pip" aria-hidden="true" />}
         {extraCount > 0 && <span className="sched-extra">+{extraCount}</span>}
+        <span className="cal-court-label">{courtLabel}</span>
       </>
     );
 

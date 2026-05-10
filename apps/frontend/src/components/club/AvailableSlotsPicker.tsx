@@ -160,7 +160,7 @@ export default function AvailableSlotsPicker({ accessToken, prefillSlotId, prefi
 
     const content = (
       <>
-        <span className="pk-court">{courtLabel}</span>
+        <span className="cal-court-label">{courtLabel}</span>
         {primary.hasMatch && <Lock size={9} strokeWidth={2.5} className="pk-icon" aria-hidden="true" />}
         {primary.priceArs != null && !primary.hasMatch && withinGrace && (
           <span className="pk-price">${Math.round(primary.priceArs)}</span>
@@ -226,7 +226,7 @@ export default function AvailableSlotsPicker({ accessToken, prefillSlotId, prefi
         </span>
       )}
       <style>{`
-        .pk-court { font-family:'Barlow Condensed',sans-serif; font-size:.68rem; font-weight:700; letter-spacing:.04em; color:inherit; position:absolute; bottom:3px; left:5px; right:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        
         .pk-icon { position:absolute; top:50%; left:50%; transform:translate(-50%,-60%); color:hsl(var(--destructive-foreground)); }
         .pk-price { position:absolute; top:3px; right:4px; font-size:.62rem; font-weight:700; color:hsl(142 70% 55%); font-family:'Barlow Condensed',sans-serif; }
         .pk-extra { position:absolute; top:3px; left:4px; font-size:.62rem; font-weight:700; color:hsl(var(--muted-foreground)); font-family:'Barlow Condensed',sans-serif; }
