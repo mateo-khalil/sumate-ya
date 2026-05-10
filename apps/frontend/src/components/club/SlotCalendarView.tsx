@@ -1,124 +1,47 @@
 /**
- * SlotCalendarView — dated weekly calendar for club slot management
+ * SlotCalendarView — horarios weekly calendar, refactored onto the shared CalendarGrid base
  *
  * Decision Context:
- * - Dated columns: each column carries a real calendar date so the admin knows exactly
- *   which Monday/Tuesday they're looking at.
- * - Past days (before today): ALL cells turn gray regardless of slot status.
- *   Shade distinction — gray-free (was available) vs gray-busy (had match/block) —
- *   lets the admin see historical occupancy at a glance.
- * - Today's past hours: the slot still shows its real status (green/amber/red) but at
- *   50% opacity so it reads as "already happened". Future hours today show full colors.
- * - Today column: orange-tinted header + subtle column background. Scroll auto-jumps to
- *   07:00 on mount so midnight dead-time is hidden.
- * - Navigation: prev/next week arrows. "Hoy" button appears when not on current week.
+ * - Refactored to use CalendarGrid, eliminating the ~130 lines of duplicated grid
+ *   structure, CSS class definitions, and scroll-to-hour logic it previously shared
+ *   with ClubScheduleView. Both views now have a single source of truth for cell
+ *   classes and layout CSS (in CalendarGrid.tsx and calendar-utils.ts).
+ * - Navigation (prev/next week) is injected via CalendarGrid's navSlot prop so it
+ *   renders inside .cal-wrap without needing a separate wrapper div.
+ * - slotsMap key: "${dayOfWeek}-${hour}" — multiple courts map to the same key
+ *   (an array), so the checkbox selection and +N extras still work correctly.
+ * - Past days: cells are grayed regardless of slot status (isPastDay check fires before
+ *   any status-based class). Today's past hours are dimmed at 42% opacity.
+ * - Checkbox: rendered inside the cell as an absolute-positioned element so it doesn't
+ *   affect the cell's flex layout. stopPropagation prevents triggering onEdit.
  * - Previously fixed bugs:
  *   - Past days incorrectly showed green because only today's past-HOURS were checked.
  *     Fix: isPastDay check on the whole date, applied before slot-status classes.
- *   - Today's future hours weren't visible because past-hour opacity (0.35) was applied
- *     to ALL of today when the test ran late at night. Fix: only dim past hours, show
- *     full color for future hours.
+ *   - Today's future hours weren't visible at full color because past-hour opacity was
+ *     applied to ALL of today. Fix: only dim hours where isToday && hour < nowHour.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import CalendarGrid, { type CellRenderInfo, type CellRenderResult } from '../calendar/CalendarGrid';
+import {
+  DISPLAY_HOURS,
+  getMonday,
+  addDays,
+  isSameDay,
+  weekDaysFrom,
+  fmtWeekRange,
+} from '../../lib/calendar-utils';
 import type { ManagedClubSlot, BlockSlotInput } from '../../graphql/operations/club-slots';
-import { DAY_OF_WEEK_LABELS, DAY_ORDER } from '../../graphql/operations/club-slots';
-
-// ─────────────────────────────────────────────
-// Date helpers
-// ─────────────────────────────────────────────
-
-const JS_TO_DOW = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-
-function getMonday(d: Date): Date {
-  const c   = new Date(d);
-  const day = c.getDay() || 7;
-  c.setDate(c.getDate() - day + 1);
-  c.setHours(0, 0, 0, 0);
-  return c;
-}
-
-function addDays(d: Date, n: number): Date {
-  const c = new Date(d);
-  c.setDate(c.getDate() + n);
-  return c;
-}
-
-function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear()
-      && a.getMonth()    === b.getMonth()
-      && a.getDate()     === b.getDate();
-}
-
-/** Returns true if `d` is strictly before today (ignoring time) */
-function isBeforeToday(d: Date, today: Date): boolean {
-  const dn = new Date(d); dn.setHours(0, 0, 0, 0);
-  const tn = new Date(today); tn.setHours(0, 0, 0, 0);
-  return dn < tn;
-}
-
-function fmtWeekRange(mon: Date): string {
-  const sun = addDays(mon, 6);
-  const mo  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  if (mon.getMonth() === sun.getMonth())
-    return `${mon.getDate()} – ${sun.getDate()} ${mo[sun.getMonth()]} ${sun.getFullYear()}`;
-  return `${mon.getDate()} ${mo[mon.getMonth()]} – ${sun.getDate()} ${mo[sun.getMonth()]} ${sun.getFullYear()}`;
-}
-
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const SCROLL_TO_HOUR = 7;
-
-// ─────────────────────────────────────────────
-// Cell class logic (centralised)
-// ─────────────────────────────────────────────
 
 type SlotStatus = 'available' | 'match' | 'blocked' | 'inactive';
 
 function getSlotStatus(s: ManagedClubSlot): SlotStatus {
-  if (!s.isActive)          return 'inactive';
-  if (s.isBlocked)          return 'blocked';
-  if (s.hasScheduledMatch)  return 'match';
+  if (!s.isActive) return 'inactive';
+  if (s.isBlocked) return 'blocked';
+  if (s.hasScheduledMatch) return 'match';
   return 'available';
 }
-
-/**
- * Returns the CSS modifier class for a calendar cell.
- * Priority: past-day > today-past-hour > normal status > empty
- */
-function cellClass(
-  slot: ManagedClubSlot | undefined,
-  date: Date,
-  hour: number,
-  today: Date,
-  nowHour: number,
-  isToday: boolean,
-): string {
-  const pastDay  = isBeforeToday(date, today);
-  const pastHour = isToday && hour < nowHour;
-
-  if (pastDay) {
-    if (!slot) return 'cal-cell--past-day-free';
-    const busy = slot.hasScheduledMatch || slot.isBlocked;
-    return busy ? 'cal-cell--past-day-busy' : 'cal-cell--past-day-free';
-  }
-
-  if (!slot) return 'cal-cell--empty';
-
-  const status = getSlotStatus(slot);
-  const map: Record<SlotStatus, string> = {
-    available: 'cal-cell--avail',
-    match:     'cal-cell--match',
-    blocked:   'cal-cell--blocked',
-    inactive:  'cal-cell--inactive',
-  };
-
-  return pastHour ? `${map[status]} cal-cell--dimmed` : map[status];
-}
-
-// ─────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────
 
 interface Props {
   slots: ManagedClubSlot[];
@@ -129,152 +52,182 @@ interface Props {
 }
 
 export function SlotCalendarView({ slots, selectedIds, onToggleSelect, onEdit }: Props) {
-  const today   = new Date();
+  const today = new Date();
   const nowHour = today.getHours();
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(today));
-  const bodyRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = SCROLL_TO_HOUR * 38;
+  const weekDays = useMemo(() => weekDaysFrom(weekStart), [weekStart]);
+  const isThisWeek = isSameDay(weekStart, getMonday(today));
+
+  const slotsMap = useMemo(() => {
+    const map = new Map<string, ManagedClubSlot[]>();
+    for (const s of slots) {
+      const h = parseInt(s.startTime.slice(0, 2), 10);
+      const key = `${s.dayOfWeek}-${h}`;
+      const arr = map.get(key) ?? [];
+      arr.push(s);
+      map.set(key, arr);
     }
-  }, []);
+    return map;
+  }, [slots]);
 
-  const weekDays    = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const isThisWeek  = isSameDay(weekStart, getMonday(today));
+  function renderCell(info: CellRenderInfo): CellRenderResult {
+    const { dow, hour, isPastDay, isPastHour } = info;
+    const cellSlots = slotsMap.get(`${dow}-${hour}`);
+    const primary = cellSlots?.[0];
+    const extra = (cellSlots?.length ?? 0) - 1;
+    const sel = primary ? selectedIds.has(primary.id) : false;
 
-  // Build dayOfWeek+hour → slot[] lookup
-  const map = new Map<string, ManagedClubSlot[]>();
-  for (const s of slots) {
-    const h   = parseInt(s.startTime.slice(0, 2), 10);
-    const key = `${s.dayOfWeek}-${h}`;
-    const arr = map.get(key) ?? [];
-    arr.push(s);
-    map.set(key, arr);
+    if (isPastDay) {
+      if (!primary) return { className: 'cal-cell--past-day-free' };
+      const busy = primary.hasScheduledMatch || primary.isBlocked;
+      return { className: busy ? 'cal-cell--past-day-busy' : 'cal-cell--past-day-free' };
+    }
+
+    if (!primary) return { className: 'cal-cell--empty' };
+
+    const status = getSlotStatus(primary);
+    const statusMap: Record<SlotStatus, string> = {
+      available: 'cal-cell--avail',
+      match: 'cal-cell--match-open',
+      blocked: 'cal-cell--blocked',
+      inactive: 'cal-cell--inactive',
+    };
+
+    const base = isPastHour ? `${statusMap[status]} cal-cell--dimmed` : statusMap[status];
+    const className = `${base}${sel ? ' cal-cell--sel' : ''}`;
+
+    const content = (
+      <>
+        <input
+          type="checkbox"
+          className="slot-chk"
+          checked={sel}
+          aria-label="Seleccionar slot"
+          onClick={(e) => { e.stopPropagation(); onToggleSelect(primary.id); }}
+          onChange={() => {}}
+        />
+        {primary.priceArs != null && (
+          <span className="slot-price">${primary.priceArs}</span>
+        )}
+        {status === 'blocked' && (
+          <Lock size={10} strokeWidth={2.5} className="slot-icon" aria-hidden="true" />
+        )}
+        {status === 'match' && <span className="slot-pip" aria-hidden="true" />}
+        {extra > 0 && <span className="slot-extra">+{extra}</span>}
+      </>
+    );
+
+    return {
+      className,
+      content,
+      onClick: () => onEdit(primary),
+      isClickable: true,
+      ariaLabel: `${dow} ${String(hour).padStart(2, '0')}:00`,
+    };
   }
 
-  return (
-    <div className="cal-wrap">
-
-      {/* ── Nav bar ─────────────────────────── */}
-      <div className="cal-nav">
+  const nav = (
+    <div className="slot-nav">
+      <button
+        className="slot-nav-btn"
+        onClick={() => setWeekStart((d) => addDays(d, -7))}
+        aria-label="Semana anterior"
+      >
+        <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <span className="slot-week-label">{fmtWeekRange(weekStart)}</span>
+      <button
+        className="slot-nav-btn"
+        onClick={() => setWeekStart((d) => addDays(d, 7))}
+        aria-label="Semana siguiente"
+      >
+        <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      {!isThisWeek && (
         <button
-          className="cal-nav-btn"
-          onClick={() => setWeekStart(d => addDays(d, -7))}
-          aria-label="Semana anterior"
+          className="slot-today-btn"
+          onClick={() => setWeekStart(getMonday(today))}
         >
-          <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+          Hoy
         </button>
-        <span className="cal-week-label">{fmtWeekRange(weekStart)}</span>
-        <button
-          className="cal-nav-btn"
-          onClick={() => setWeekStart(d => addDays(d, 7))}
-          aria-label="Semana siguiente"
-        >
-          <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
-        </button>
-        {!isThisWeek && (
-          <button className="cal-today-btn" onClick={() => setWeekStart(getMonday(today))}>
-            Hoy
-          </button>
-        )}
-      </div>
-
-      {/* ── Day headers ─────────────────────── */}
-      <div className="cal-header-row">
-        <div className="cal-corner" />
-        {weekDays.map((d, i) => {
-          const isToday   = isSameDay(d, today);
-          const isPastDay = isBeforeToday(d, today);
-          const dow       = DAY_ORDER[i];
-          return (
-            <div
-              key={i}
-              className={`cal-day-head${isToday ? ' cal-day-head--today' : ''}${isPastDay ? ' cal-day-head--past' : ''}`}
-            >
-              <span className="cal-day-name">
-                {(DAY_OF_WEEK_LABELS[dow] ?? dow).slice(0, 3).toUpperCase()}
-              </span>
-              <span className={`cal-day-num${isToday ? ' cal-day-num--today' : ''}${isPastDay ? ' cal-day-num--past' : ''}`}>
-                {d.getDate()}/{d.getMonth() + 1}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ── Body ────────────────────────────── */}
-      <div className="cal-body" ref={bodyRef}>
-        {HOURS.map((h) => (
-          <div key={h} className="cal-row">
-            <div className="cal-time">{String(h).padStart(2,'0')}:00</div>
-
-            {weekDays.map((d, colIdx) => {
-              const isToday   = isSameDay(d, today);
-              const isPastDay = isBeforeToday(d, today);
-              const dow       = JS_TO_DOW[d.getDay()];
-              const cellSlots = map.get(`${dow}-${h}`);
-              const primary   = cellSlots?.[0];
-              const extra     = (cellSlots?.length ?? 0) - 1;
-              const sel       = primary ? selectedIds.has(primary.id) : false;
-
-              const modClass = cellClass(primary, d, h, today, nowHour, isToday);
-              const colCls   = isToday ? ' cal-col--today' : isPastDay ? ' cal-col--past' : '';
-
-              return (
-                <div
-                  key={colIdx}
-                  role={primary && !isPastDay ? 'button' : undefined}
-                  tabIndex={primary && !isPastDay ? 0 : undefined}
-                  className={`cal-cell ${modClass}${sel ? ' cal-cell--sel' : ''}${colCls}`}
-                  onClick={primary && !isPastDay ? () => onEdit(primary) : undefined}
-                  onKeyDown={primary && !isPastDay ? (e) => e.key === 'Enter' && onEdit(primary) : undefined}
-                  aria-label={primary ? `${dow} ${String(h).padStart(2,'0')}:00` : undefined}
-                >
-                  {primary && !isPastDay && (
-                    <input
-                      type="checkbox"
-                      className="cal-chk"
-                      checked={sel}
-                      aria-label="Seleccionar"
-                      onClick={(e) => { e.stopPropagation(); onToggleSelect(primary.id); }}
-                      onChange={() => {}}
-                    />
-                  )}
-                  {primary && !isPastDay && primary.priceArs != null && (
-                    <span className="cal-price">$U{primary.priceArs}</span>
-                  )}
-                  {primary && !isPastDay && getSlotStatus(primary) === 'blocked' && (
-                    <Lock size={10} strokeWidth={2.5} className="cal-icon" aria-hidden="true" />
-                  )}
-                  {primary && !isPastDay && getSlotStatus(primary) === 'match' && (
-                    <span className="cal-match-pip" aria-hidden="true" />
-                  )}
-                  {extra > 0 && !isPastDay && (
-                    <span className="cal-extra">+{extra}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-
-      {/* ── Legend ──────────────────────────── */}
-      <div className="cal-legend">
-        {([
-          ['cal-led--avail',    'Disponible'],
-          ['cal-led--match',    'Con partido'],
-          ['cal-led--blocked',  'Bloqueado'],
-          ['cal-led--past-free','Pasado libre'],
-          ['cal-led--past-busy','Pasado ocupado'],
-        ] as const).map(([cls, label]) => (
-          <span key={label} className="cal-legend-item">
-            <span className={`cal-led ${cls}`} aria-hidden="true" />
-            {label}
-          </span>
-        ))}
-      </div>
+      )}
+      <style>{`
+        .slot-nav {
+          display: flex; align-items: center; gap: 0.5rem;
+          padding: 0.625rem 0.875rem;
+          border-bottom: 1px solid hsl(var(--border));
+        }
+        .slot-nav-btn {
+          background: none; border: 1px solid hsl(var(--border)); border-radius: 6px;
+          padding: 0.25rem; color: hsl(var(--muted-foreground)); cursor: pointer;
+          display: inline-flex; transition: background 0.12s;
+        }
+        .slot-nav-btn:hover { background: hsl(var(--muted) / 0.3); color: hsl(var(--foreground)); }
+        .slot-week-label {
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.82rem; font-weight: 700;
+          letter-spacing: 0.04em; color: hsl(var(--foreground));
+        }
+        .slot-today-btn {
+          background: hsl(var(--primary) / 0.12); border: 1px solid hsl(var(--primary) / 0.3);
+          border-radius: 6px; padding: 0.2rem 0.625rem;
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.7rem; font-weight: 700;
+          letter-spacing: 0.08em; color: hsl(var(--primary)); cursor: pointer; text-transform: uppercase;
+        }
+      `}</style>
     </div>
+  );
+
+  const legend = (
+    <div className="cal-legend">
+      {([
+        ['cal-led--avail',     'Disponible'],
+        ['cal-led--match-open','Con partido'],
+        ['cal-led--blocked',   'Bloqueado'],
+        ['cal-led--past-free', 'Pasado libre'],
+        ['cal-led--past-busy', 'Pasado ocupado'],
+      ] as const).map(([cls, label]) => (
+        <span key={label} className="cal-legend-item">
+          <span className={`cal-led ${cls}`} aria-hidden="true" />
+          {label}
+        </span>
+      ))}
+      <style>{`
+        .slot-chk {
+          position: absolute; top: 3px; right: 3px;
+          width: 11px; height: 11px; accent-color: hsl(var(--primary)); cursor: pointer;
+        }
+        .slot-price {
+          position: absolute; bottom: 2px; left: 4px;
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.68rem; font-weight: 700;
+          color: hsl(var(--muted-foreground));
+        }
+        .slot-icon {
+          position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+          color: hsl(var(--destructive-foreground));
+        }
+        .slot-pip {
+          position: absolute; top: 4px; left: 4px;
+          width: 6px; height: 6px; border-radius: 50%; background: hsl(42 100% 55%);
+        }
+        .slot-extra {
+          position: absolute; bottom: 2px; right: 4px;
+          font-size: 0.62rem; font-weight: 700; color: hsl(var(--muted-foreground));
+          font-family: 'Barlow Condensed', sans-serif;
+        }
+      `}</style>
+    </div>
+  );
+
+  return (
+    <CalendarGrid
+      weekDays={weekDays}
+      hours={DISPLAY_HOURS}
+      today={today}
+      nowHour={nowHour}
+      renderCell={renderCell}
+      navSlot={nav}
+      legendSlot={legend}
+    />
   );
 }

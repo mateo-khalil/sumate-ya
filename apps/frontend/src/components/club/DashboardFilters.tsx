@@ -6,14 +6,16 @@
  *   under the 250-line limit. Receives onFiltersChange callback from the parent.
  * - Quick selectors (Hoy, Esta semana, Este mes) compute ISO date strings using
  *   the UTC helpers consistent with the service layer.
- * - courtIds and matchStatuses use simple multi-select UI (checkboxes in a dropdown)
- *   rather than a heavy Select library — keeps the bundle lean.
- * - Reset clears all optional filters back to the current week.
- * - Previously fixed bugs: none relevant (new feature).
+ * - Date range validation: ensures startDate is never after endDate. Empty strings from
+ *   date inputs are converted to `undefined` to pass optional Zod validation.
+ * - Week pagination: provides prev/next week buttons for quick navigation.
+ * - courtIds and matchStatuses use simple multi-select UI (checkboxes in a dropdown).
+ * - Previously fixed bugs: "Invalid request body" error caused by sending empty strings
+ *   for dates, which failed the backend's regex validation.
  */
 
 import { useState } from 'react';
-import { X, CalendarRange, Filter } from 'lucide-react';
+import { X, CalendarRange, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ClubDashboardFilters, MatchStatus } from '../../graphql/operations/club-dashboard';
 
 interface Court {
@@ -36,15 +38,21 @@ const STATUSES: { value: MatchStatus; label: string }[] = [
   { value: 'CANCELLED', label: 'Cancelado' },
 ];
 
+function addDays(dateStr: string, days: number): string {
+    const date = new Date(dateStr + 'T00:00:00Z');
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+}
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function weekRange() {
-  const now = new Date();
-  const day = now.getUTCDay();
-  const monday = new Date(now);
-  monday.setUTCDate(now.getUTCDate() - ((day + 6) % 7));
+function weekRange(date: Date = new Date()) {
+  const d = new Date(date);
+  const day = d.getUTCDay(); // Sunday = 0
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - ((day + 6) % 7));
   const sunday = new Date(monday);
   sunday.setUTCDate(monday.getUTCDate() + 6);
   return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
@@ -65,6 +73,29 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
     filters.courtIds?.length,
     filters.matchStatuses?.length,
   ].filter(Boolean).length;
+
+  function handleStartDateChange(dateStr: string | undefined) {
+    if (filters.endDate && dateStr && dateStr > filters.endDate) {
+      onChange({ startDate: dateStr, endDate: dateStr });
+    } else {
+      onChange({ startDate: dateStr });
+    }
+  }
+
+  function handleEndDateChange(dateStr: string | undefined) {
+    if (filters.startDate && dateStr && dateStr < filters.startDate) {
+      onChange({ startDate: dateStr, endDate: dateStr });
+    } else {
+      onChange({ endDate: dateStr });
+    }
+  }
+
+  function handleWeekChange(direction: 'prev' | 'next') {
+    const currentStartDate = filters.startDate ?? todayISO();
+    const newDate = addDays(currentStartDate, direction === 'prev' ? -7 : 7);
+    const newRange = weekRange(new Date(newDate + 'T00:00:00Z'));
+    onChange({ startDate: newRange.start, endDate: newRange.end });
+  }
 
   function toggleCourt(id: string) {
     const current = filters.courtIds ?? [];
@@ -108,14 +139,17 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
         </button>
       </div>
 
-      {/* Date range inputs */}
+      {/* Date range inputs with week pagination */}
       <div className="date-range">
+        <button className="week-nav-btn" onClick={() => handleWeekChange('prev')} aria-label="Semana anterior">
+            <ChevronLeft size={16} />
+        </button>
         <span className="filter-icon"><CalendarRange size={14} strokeWidth={2} aria-hidden="true" /></span>
         <input
           type="date"
           className="date-input"
           value={filters.startDate ?? ''}
-          onChange={(e) => onChange({ startDate: e.target.value })}
+          onChange={(e) => handleStartDateChange(e.target.value || undefined)}
           aria-label="Fecha de inicio"
         />
         <span className="date-sep">—</span>
@@ -123,9 +157,12 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
           type="date"
           className="date-input"
           value={filters.endDate ?? ''}
-          onChange={(e) => onChange({ endDate: e.target.value })}
+          onChange={(e) => handleEndDateChange(e.target.value || undefined)}
           aria-label="Fecha de fin"
         />
+        <button className="week-nav-btn" onClick={() => handleWeekChange('next')} aria-label="Siguiente semana">
+            <ChevronRight size={16} />
+        </button>
       </div>
 
       {/* Court multi-select */}
@@ -200,13 +237,18 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
         .date-range {
           display: flex; align-items: center; gap: 0.375rem;
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 8px; padding: 0.3rem 0.625rem;
+          border-radius: 8px; padding: 0 0.25rem;
         }
-        .filter-icon { display: inline-flex; color: hsl(215 20% 50%); }
+        .week-nav-btn {
+            background: transparent; border: none; color: hsl(215 20% 60%); padding: 0.5rem;
+            cursor: pointer; border-radius: 6px; transition: background .12s, color .12s;
+        }
+        .week-nav-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .filter-icon { display: inline-flex; color: hsl(215 20% 50%); margin-left: 0.25rem; }
         .date-input {
           background: transparent; border: none; color: hsl(210 20% 80%);
           font-size: 0.8rem; font-family: 'Barlow', sans-serif; outline: none;
-          cursor: pointer;
+          cursor: pointer; padding: 0.3rem 0.25rem;
         }
         .date-sep { color: hsl(215 20% 40%); font-size: 0.75rem; }
         .dropdown-wrap { position: relative; }

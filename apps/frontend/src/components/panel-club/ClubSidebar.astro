@@ -1,0 +1,75 @@
+---
+import { Landmark, LayoutDashboard, Calendar, Volleyball, Users, Settings } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const { currentPath } = Astro.props;
+
+const navLinks = [
+  { href: '/panel-club/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/panel-club/horarios', icon: Calendar, label: 'Horarios' },
+  { href: '#', icon: Volleyball, label: 'Canchas' },
+  { href: '#', icon: Users, label: 'Reservas' },
+  { href: '#', icon: Settings, label: 'Configuración' },
+];
+---
+
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">GESTIÓN</div>
+    <nav class="sidebar-nav">
+      {
+        navLinks.map((link) => {
+          const Icon = link.icon;
+          const isActive = currentPath === link.href;
+          return (
+            <a
+              href={link.href}
+              class={cn(
+                'sidebar-link',
+                isActive && 'sidebar-link--active'
+              )}
+            >
+              <span class="sidebar-icon">
+                <Icon size={16} strokeWidth={2} aria-hidden="true" />
+              </span>
+              {link.label}
+            </a>
+          );
+        })
+      }
+    </nav>
+  </div>
+</aside>
+
+<style>
+  .sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: hsl(var(--muted-foreground));
+    transition:
+      color 0.2s ease-in-out,
+      background-color 0.2s ease-in-out;
+    text-decoration: none;
+  }
+  .sidebar-link:hover {
+    background-color: hsl(var(--muted));
+    color: hsl(var(--foreground));
+  }
+  .sidebar-link--active {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    font-weight: 600;
+  }
+  .sidebar-link--active:hover {
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .sidebar-icon {
+    margin-right: 0.75rem;
+    flex-shrink: 0;
+  }
+</style>
