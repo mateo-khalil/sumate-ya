@@ -145,9 +145,28 @@ export default function ClubDashboardView(props: Props) {
       {data && <DashboardHeader club={data.club} metrics={data.metrics} />}
       {data?.conflicts?.length ? <ConflictAlerts conflicts={data.conflicts} /> : null}
 
-      <div className="toolbar">
-        <DashboardFilters filters={filters} courts={courts} onChange={updateFilters} onReset={handleReset} />
-        <div className="toolbar-actions">
+      {/* Single compact toolbar: view switcher + filters + actions — mirrors Horarios SlotManager header */}
+      <div className="dash-topbar">
+        <div className="dash-topbar-left">
+          <button
+            className={`view-btn${view === 'calendar' ? ' active' : ''}`}
+            onClick={() => setView('calendar')}
+            aria-label="Vista calendario"
+          >
+            <CalendarRange size={15} strokeWidth={2} aria-hidden="true" />
+            Calendario
+          </button>
+          <button
+            className={`view-btn${view === 'agenda' ? ' active' : ''}`}
+            onClick={() => setView('agenda')}
+            aria-label="Vista agenda"
+          >
+            <List size={15} strokeWidth={2} aria-hidden="true" />
+            Agenda
+          </button>
+          <DashboardFilters filters={filters} courts={courts} onChange={updateFilters} onReset={handleReset} />
+        </div>
+        <div className="dash-topbar-right">
           <a href="/panel-club/horarios" className="link-btn">
             <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
             Ir a horarios
@@ -157,25 +176,6 @@ export default function ClubDashboardView(props: Props) {
             Exportar
           </button>
         </div>
-      </div>
-
-      <div className="view-switcher">
-        <button
-          className={`view-btn${view === 'calendar' ? ' active' : ''}`}
-          onClick={() => setView('calendar')}
-          aria-label="Vista calendario"
-        >
-          <CalendarRange size={15} strokeWidth={2} aria-hidden="true" />
-          Calendario
-        </button>
-        <button
-          className={`view-btn${view === 'agenda' ? ' active' : ''}`}
-          onClick={() => setView('agenda')}
-          aria-label="Vista agenda"
-        >
-          <List size={15} strokeWidth={2} aria-hidden="true" />
-          Agenda
-        </button>
       </div>
 
       {loading && (
@@ -239,8 +239,14 @@ export default function ClubDashboardView(props: Props) {
 
       <style>{`
         .dash-view { display: flex; flex-direction: column; gap: 0; }
-        .toolbar { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
-        .toolbar-actions { display: flex; gap: 0.5rem; padding-bottom: 1rem; flex-shrink: 0; }
+        /* Single compact topbar merging view-switcher + filters + actions */
+        .dash-topbar {
+          display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+          gap: 0.5rem; padding: 0.75rem 0; margin-bottom: 0.875rem;
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .dash-topbar-left { display: flex; align-items: center; gap: 0.375rem; flex-wrap: wrap; }
+        .dash-topbar-right { display: flex; gap: 0.5rem; flex-shrink: 0; }
         .link-btn, .action-btn {
           display: flex; align-items: center; gap: 5px;
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
@@ -250,10 +256,6 @@ export default function ClubDashboardView(props: Props) {
           transition: background 0.12s, color 0.12s;
         }
         .link-btn:hover, .action-btn:hover { background: rgba(246,164,0,0.08); color: hsl(42 100% 65%); }
-        .view-switcher {
-          display: flex; gap: 4px; margin-bottom: 1.25rem;
-          border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.875rem;
-        }
         .view-btn {
           display: flex; align-items: center; gap: 0.35rem;
           background: transparent; border: 1px solid rgba(255,255,255,0.08);
