@@ -1,21 +1,26 @@
 /**
- * DashboardFilters — date, court, and status filter controls for the dashboard
+ * DashboardFilters — quick selectors and court/status filters for the dashboard
  *
  * Decision Context:
- * - Why: Separates filter state/UI from the main ClubDashboardView to keep components
- *   under the 250-line limit. Receives onFiltersChange callback from the parent.
- * - Quick selectors (Hoy, Esta semana, Este mes) compute ISO date strings using
- *   the UTC helpers consistent with the service layer.
- * - Date range validation: ensures startDate is never after endDate. Empty strings from
- *   date inputs are converted to `undefined` to pass optional Zod validation.
- * - Week pagination: provides prev/next week buttons for quick navigation.
- * - courtIds and matchStatuses use simple multi-select UI (checkboxes in a dropdown).
- * - Previously fixed bugs: "Invalid request body" error caused by sending empty strings
- *   for dates, which failed the backend's regex validation.
+ * - Simplified: date range inputs and week pagination arrows were removed because
+ *   ClubScheduleView and ClubAgendaView now have their own internal "< week >" nav bar
+ *   (same as SlotCalendarView in horarios), making the date picker in this toolbar
+ *   redundant. Keeping two navigation systems cluttered the layout and diverged visually
+ *   from the clean horarios page.
+ * - What remains: three quick-select buttons (Hoy / Esta semana / Este mes) that jump
+ *   to the relevant week, plus court and status multi-select dropdowns for filtering.
+ *   The calendar's internal arrows handle week-by-week navigation from there.
+ * - "Este mes" sets startDate to the first day of the month; the calendar nav computes
+ *   the Monday of that week and shows it as the initial view.
+ * - courtIds and matchStatuses use simple multi-select dropdowns.
+ * - Previously fixed bugs:
+ *   - "Invalid request body" from empty strings for dates (fixed by converting '' → undefined).
+ *   - Date picker week nav duplicated the calendar's internal nav, causing two conflicting
+ *     navigation systems. Fixed by removing it from this component entirely.
  */
 
 import { useState } from 'react';
-import { X, CalendarRange, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, X } from 'lucide-react';
 import type { ClubDashboardFilters, MatchStatus } from '../../graphql/operations/club-dashboard';
 
 interface Court {
@@ -38,64 +43,38 @@ const STATUSES: { value: MatchStatus; label: string }[] = [
   { value: 'CANCELLED', label: 'Cancelado' },
 ];
 
-function addDays(dateStr: string, days: number): string {
-    const date = new Date(dateStr + 'T00:00:00Z');
-    date.setUTCDate(date.getUTCDate() + days);
-    return date.toISOString().slice(0, 10);
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function weekRange(date: Date = new Date()) {
-  const d = new Date(date);
-  const day = d.getUTCDay(); // Sunday = 0
-  const monday = new Date(d);
-  monday.setUTCDate(d.getUTCDate() - ((day + 6) % 7));
-  const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
-  return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
-}
-
-function monthRange() {
+function currentWeek(): { start: string; end: string } {
   const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  const day = now.getDay() || 7;
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - day + 1);
+  mon.setHours(0, 0, 0, 0);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  return { start: localISO(mon), end: localISO(sun) };
+}
+
+function currentMonthStart(): { start: string; end: string } {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { start: localISO(first), end: localISO(last) };
+}
+
+function todayRange(): { start: string; end: string } {
+  const s = localISO(new Date());
+  return { start: s, end: s };
 }
 
 export default function DashboardFilters({ filters, courts, onChange, onReset }: Props) {
   const [showCourtMenu, setShowCourtMenu] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
 
-  const activeFiltersCount = [
-    filters.courtIds?.length,
-    filters.matchStatuses?.length,
-  ].filter(Boolean).length;
-
-  function handleStartDateChange(dateStr: string | undefined) {
-    if (filters.endDate && dateStr && dateStr > filters.endDate) {
-      onChange({ startDate: dateStr, endDate: dateStr });
-    } else {
-      onChange({ startDate: dateStr });
-    }
-  }
-
-  function handleEndDateChange(dateStr: string | undefined) {
-    if (filters.startDate && dateStr && dateStr < filters.startDate) {
-      onChange({ startDate: dateStr, endDate: dateStr });
-    } else {
-      onChange({ endDate: dateStr });
-    }
-  }
-
-  function handleWeekChange(direction: 'prev' | 'next') {
-    const currentStartDate = filters.startDate ?? todayISO();
-    const newDate = addDays(currentStartDate, direction === 'prev' ? -7 : 7);
-    const newRange = weekRange(new Date(newDate + 'T00:00:00Z'));
-    onChange({ startDate: newRange.start, endDate: newRange.end });
-  }
+  const activeFiltersCount = [filters.courtIds?.length, filters.matchStatuses?.length].filter(Boolean).length;
 
   function toggleCourt(id: string) {
     const current = filters.courtIds ?? [];
@@ -115,53 +94,21 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
       <div className="quick-btns">
         <button
           className="quick-btn"
-          onClick={() => onChange({ startDate: todayISO(), endDate: todayISO() })}
+          onClick={() => { const r = todayRange(); onChange({ startDate: r.start, endDate: r.end }); }}
         >
           Hoy
         </button>
         <button
           className="quick-btn"
-          onClick={() => {
-            const r = weekRange();
-            onChange({ startDate: r.start, endDate: r.end });
-          }}
+          onClick={() => { const r = currentWeek(); onChange({ startDate: r.start, endDate: r.end }); }}
         >
           Esta semana
         </button>
         <button
           className="quick-btn"
-          onClick={() => {
-            const r = monthRange();
-            onChange({ startDate: r.start, endDate: r.end });
-          }}
+          onClick={() => { const r = currentMonthStart(); onChange({ startDate: r.start, endDate: r.end }); }}
         >
           Este mes
-        </button>
-      </div>
-
-      {/* Date range inputs with week pagination */}
-      <div className="date-range">
-        <button className="week-nav-btn" onClick={() => handleWeekChange('prev')} aria-label="Semana anterior">
-            <ChevronLeft size={16} />
-        </button>
-        <span className="filter-icon"><CalendarRange size={14} strokeWidth={2} aria-hidden="true" /></span>
-        <input
-          type="date"
-          className="date-input"
-          value={filters.startDate ?? ''}
-          onChange={(e) => handleStartDateChange(e.target.value || undefined)}
-          aria-label="Fecha de inicio"
-        />
-        <span className="date-sep">—</span>
-        <input
-          type="date"
-          className="date-input"
-          value={filters.endDate ?? ''}
-          onChange={(e) => handleEndDateChange(e.target.value || undefined)}
-          aria-label="Fecha de fin"
-        />
-        <button className="week-nav-btn" onClick={() => handleWeekChange('next')} aria-label="Siguiente semana">
-            <ChevronRight size={16} />
         </button>
       </div>
 
@@ -176,11 +123,7 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
             <div className="dropdown-menu">
               {courts.map((c) => (
                 <label key={c.id} className="dropdown-item">
-                  <input
-                    type="checkbox"
-                    checked={(filters.courtIds ?? []).includes(c.id)}
-                    onChange={() => toggleCourt(c.id)}
-                  />
+                  <input type="checkbox" checked={(filters.courtIds ?? []).includes(c.id)} onChange={() => toggleCourt(c.id)} />
                   {c.name}
                 </label>
               ))}
@@ -199,11 +142,7 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
           <div className="dropdown-menu">
             {STATUSES.map((s) => (
               <label key={s.value} className="dropdown-item">
-                <input
-                  type="checkbox"
-                  checked={(filters.matchStatuses ?? []).includes(s.value)}
-                  onChange={() => toggleStatus(s.value)}
-                />
+                <input type="checkbox" checked={(filters.matchStatuses ?? []).includes(s.value)} onChange={() => toggleStatus(s.value)} />
                 {s.label}
               </label>
             ))}
@@ -211,7 +150,7 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
         )}
       </div>
 
-      {/* Reset */}
+      {/* Reset active filters */}
       {activeFiltersCount > 0 && (
         <button className="reset-btn" onClick={onReset} aria-label="Limpiar filtros">
           <X size={13} strokeWidth={2} aria-hidden="true" />
@@ -221,9 +160,8 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
 
       <style>{`
         .filters-bar {
-          display: flex; align-items: center; gap: 0.625rem; flex-wrap: wrap;
-          padding: 0.875rem 0; margin-bottom: 1rem;
-          border-bottom: 1px solid rgba(255,255,255,0.06);
+          display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+          padding: 0.625rem 0; margin-bottom: 0.75rem;
         }
         .quick-btns { display: flex; gap: 0.375rem; }
         .quick-btn {
@@ -234,23 +172,6 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
           transition: background 0.12s, color 0.12s;
         }
         .quick-btn:hover { background: rgba(246,164,0,0.1); color: hsl(42 100% 65%); }
-        .date-range {
-          display: flex; align-items: center; gap: 0.375rem;
-          background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 8px; padding: 0 0.25rem;
-        }
-        .week-nav-btn {
-            background: transparent; border: none; color: hsl(215 20% 60%); padding: 0.5rem;
-            cursor: pointer; border-radius: 6px; transition: background .12s, color .12s;
-        }
-        .week-nav-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-        .filter-icon { display: inline-flex; color: hsl(215 20% 50%); margin-left: 0.25rem; }
-        .date-input {
-          background: transparent; border: none; color: hsl(210 20% 80%);
-          font-size: 0.8rem; font-family: 'Barlow', sans-serif; outline: none;
-          cursor: pointer; padding: 0.3rem 0.25rem;
-        }
-        .date-sep { color: hsl(215 20% 40%); font-size: 0.75rem; }
         .dropdown-wrap { position: relative; }
         .filter-btn {
           display: flex; align-items: center; gap: 0.35rem;
