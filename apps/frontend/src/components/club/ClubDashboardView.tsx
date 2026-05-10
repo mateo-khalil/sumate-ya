@@ -209,7 +209,11 @@ export default function ClubDashboardView(props: Props) {
             />
           )}
           {view === 'agenda' && (
-            <ClubAgendaView matches={data.matches} onMatchClick={setSelectedMatch} />
+            <ClubAgendaView
+              matches={data.matches}
+              onMatchClick={setSelectedMatch}
+              startDate={filters.startDate}
+            />
           )}
         </div>
       )}
