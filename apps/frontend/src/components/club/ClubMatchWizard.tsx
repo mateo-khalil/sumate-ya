@@ -46,7 +46,10 @@ function isFormatAllowed(format: MatchFormat, maxFormat: string | undefined): bo
 }
 
 function formatDateNice(iso: string) {
-  const d = new Date(iso + 'T00:00:00Z');
+  // Parse as LOCAL date components (not UTC) to avoid off-by-one in timezones behind UTC.
+  // new Date("YYYY-MM-DD") is UTC midnight which shifts to the previous day in UTC-3.
+  const [year, month, day] = iso.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
   return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
@@ -230,7 +233,7 @@ export default function ClubMatchWizard({ accessToken, prefillSlotId, prefillDat
             </div>
             <div className="summary-row">
               <Calendar size={13} strokeWidth={2} color="hsl(215 20% 50%)" aria-hidden="true" />
-              {formatDateNice(selectedOccurrence.date)} · {selectedOccurrence.startTime}–{selectedOccurrence.endTime}
+              {formatDateNice(selectedOccurrence.date)} · {selectedOccurrence.startTime.slice(0, 5)}–{selectedOccurrence.endTime.slice(0, 5)}
             </div>
           </div>
 
@@ -326,7 +329,7 @@ export default function ClubMatchWizard({ accessToken, prefillSlotId, prefillDat
           <div className="confirm-card">
             <div className="confirm-row"><span>Cancha</span><strong>{selectedOccurrence.courtName}</strong></div>
             <div className="confirm-row"><span>Fecha</span><strong>{formatDateNice(selectedOccurrence.date)}</strong></div>
-            <div className="confirm-row"><span>Horario</span><strong>{selectedOccurrence.startTime}–{selectedOccurrence.endTime}</strong></div>
+            <div className="confirm-row"><span>Horario</span><strong>{selectedOccurrence.startTime.slice(0, 5)}–{selectedOccurrence.endTime.slice(0, 5)}</strong></div>
             <div className="confirm-row"><span>Formato</span><strong>{FORMAT_LABELS[format]}</strong></div>
             <div className="confirm-row"><span>Capacidad</span><strong>{capacity} jugadores</strong></div>
             {description && <div className="confirm-row"><span>Descripción</span><strong>{description}</strong></div>}
