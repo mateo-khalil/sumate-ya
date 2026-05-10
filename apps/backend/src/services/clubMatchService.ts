@@ -156,8 +156,11 @@ function expandSlotsToDateRange(
       if (slot.dayOfWeek !== dayStr) continue;
 
       const scheduledAt = `${dateStr}T${slot.startTime}`;
-      // Skip past occurrences
-      if (new Date(scheduledAt) <= now) continue;
+      // Skip occurrences past the 15-minute booking grace period.
+      // A slot can still be booked up to 15 min after its start time (same rule
+      // applied in createClubMatch and in AvailableSlotsPicker on the frontend).
+      const GRACE_MS = 15 * 60 * 1000;
+      if (new Date(scheduledAt).getTime() + GRACE_MS <= now.getTime()) continue;
 
       result.push({
         slotId: slot.id,
@@ -261,22 +264,32 @@ export const clubMatchService = {
       throw new Error(`La capacidad para ${dbFormat} debe estar entre 2 y ${maxCap} jugadores`);
     }
 
-    // 6. Date validation: future, max 90 days
-    const scheduledDate = new Date(input.scheduledDate + 'T00:00:00Z');
+    // 6. Date validation: slot must be within the 15-minute booking grace period.
+    // Previously used new Date(date + 'T00:00:00Z') which compared UTC midnight
+    // against now — any slot on today's date was rejected after midnight UTC even
+    // if the slot started hours later in local time (UTC-3 bug).
+    // Fix: compare the actual slot datetime (date + startTime) against now, applying
+    // the same 15-minute grace period used in buildSlotOccurrences and the frontend.
+    const scheduledAt = `${input.scheduledDate}T${slot.startTime}`;
+    const scheduledDateTime = new Date(scheduledAt);
     const now = new Date();
-    if (scheduledDate <= now) throw new Error('La fecha del partido debe ser futura');
-    const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 90);
-    if (scheduledDate > maxDate) throw new Error('La fecha no puede ser más de 90 días en el futuro');
+    const GRACE_MS = 15 * 60 * 1000;
+    if (scheduledDateTime.getTime() + GRACE_MS <= now.getTime()) {
+      throw new Error('El horario seleccionado ya pasó el período de reserva (más de 15 min desde el inicio del slot)');
+    }
+    const maxDate = new Date(now);
+    maxDate.setDate(now.getDate() + 90);
+    if (scheduledDateTime > maxDate) throw new Error('La fecha no puede ser más de 90 días en el futuro');
 
-    // 7. Day-of-week check
-    const expectedDay = ISO_DOW_TO_DB[scheduledDate.getUTCDay()];
+    // 7. Day-of-week check (use UTC day from the date-only string to avoid tz shifts)
+    const scheduledDateUTC = new Date(input.scheduledDate + 'T00:00:00Z');
+    const expectedDay = ISO_DOW_TO_DB[scheduledDateUTC.getUTCDay()];
     if (slot.dayOfWeek !== expectedDay) {
       throw new Error(`El horario seleccionado es para ${slot.dayOfWeek}, pero la fecha elegida corresponde a ${expectedDay}`);
     }
 
     // 8. Check no existing active match at this slot on this date
-    const scheduledAt = `${input.scheduledDate}T${slot.startTime}`;
+    // (scheduledAt already defined above)
     const filter: SlotAvailabilityFilter = {
       clubId: club.id,
       startDate: input.scheduledDate,
