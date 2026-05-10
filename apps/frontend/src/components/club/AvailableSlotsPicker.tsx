@@ -1,23 +1,31 @@
 /**
- * AvailableSlotsPicker — Step 1 of the club match wizard (slot + date selection)
+ * AvailableSlotsPicker — Step 1 of the club match wizard: weekly calendar slot picker
  *
  * Decision Context:
- * - Why: Renders available slot occurrences grouped by date so the admin picks a
- *   concrete (slot, date) pair rather than an abstract recurring template.
- * - Data source: `availableSlotsForClubMatch` query which already filters to active,
- *   non-blocked slots in the future; `hasMatch=true` occurrences are shown greyed out
- *   to give context but cannot be selected.
- * - Group by court first, then by date: admin thinks "when is Cancha A free?" not the reverse.
- * - includeNonBookable=true: admin override — they can always create matches on their slots.
- * - Single-cancha auto-select: if only one court is returned, it's pre-selected (improvement 15).
- * - Date range defaults to the next 14 days (not 90 — reduces noise; admin can expand).
- * - Pre-fill: if prefillSlotId + prefillDate are provided (from dashboard), the matching
- *   occurrence is auto-selected and the parent wizard skips to Step 2.
- * - Previously fixed bugs: none relevant (new feature).
+ * - View: uses CalendarGrid (same base as ClubScheduleView / SlotCalendarView) so the
+ *   admin sees a 7-column × 17-row weekly grid instead of a scrollable card list.
+ *   Consistency with the horarios and dashboard calendars reduces cognitive overhead.
+ * - 15-minute grace period: a slot is bookable if `now < slotStart + 15 min`. This lets
+ *   the admin create a match for a slot that already started (e.g., 14:10 → 14:00 slot
+ *   is still selectable because 14:15 > 14:10). After 14:15 the slot is shown as past.
+ * - Date range: defaults to the CURRENT week (Mon–Sun) including today, not from tomorrow.
+ *   Today's past slots are dimmed individually via grace-period check, not the whole day.
+ * - Past days (< today): entire column is grayed, no cells are clickable.
+ * - Multi-court same hour: primary court shown; extra count displayed as "+N" badge.
+ * - Selected cell: gold outline + tinted background (distinct from green "available").
+ * - hasMatch cell: yellow/match-open style, not clickable.
+ * - Empty cell (no slot): transparent.
+ * - Previously fixed bugs:
+ *   - defaultRange started from tomorrow, hiding today's bookable future slots.
+ *   - No time-of-day filtering: past-hour slots on today remained selectable.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Calendar, MapPin, Clock, Lock, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, Lock, MapPin, Loader2 } from 'lucide-react';
+import CalendarGrid, { type CellRenderInfo, type CellRenderResult } from '../calendar/CalendarGrid';
+import {
+  DISPLAY_HOURS, getMonday, addDays, isSameDay, weekDaysFrom, fmtWeekRange,
+} from '../../lib/calendar-utils';
 import type { ClubMatchSlotOccurrence } from '../../graphql/operations/club-match';
 import { AVAILABLE_SLOTS_QUERY } from '../../graphql/operations/club-match';
 
@@ -28,89 +36,35 @@ interface Props {
   onSelect: (occurrence: ClubMatchSlotOccurrence) => void;
 }
 
-// Use graphql-auth proxy (triple-layer auth: locals → cookie → explicit header).
-// /api/graphql suffers from Astro dev hot-reload caching that breaks auth forwarding.
 const BACKEND_GQL = '/api/graphql-auth';
 
-const DAY_LABELS: Record<string, string> = {
-  monday: 'Lun', tuesday: 'Mar', wednesday: 'Mié',
-  thursday: 'Jue', friday: 'Vie', saturday: 'Sáb', sunday: 'Dom',
-};
-
-function defaultRange() {
-  const start = new Date();
-  start.setDate(start.getDate() + 1); // tomorrow
-  const end = new Date(start);
-  end.setDate(start.getDate() + 13); // 14 days
-  return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
-  };
+// ISO date string from a local Date
+function toISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function formatDate(iso: string) {
-  const d = new Date(iso + 'T00:00:00Z');
-  return d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-
-function SlotCard({
-  occ,
-  selected,
-  onClick,
-}: {
-  occ: ClubMatchSlotOccurrence;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const disabled = occ.hasMatch;
-  return (
-    <button
-      className={`slot-card ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      aria-label={`${occ.courtName} ${occ.startTime}–${occ.endTime} el ${occ.date}`}
-    >
-      <div className="slot-time">
-        <Clock size={12} strokeWidth={2} aria-hidden="true" />
-        {occ.startTime}–{occ.endTime}
-      </div>
-      <div className="slot-date">{formatDate(occ.date)}</div>
-      {occ.hasMatch && (
-        <div className="slot-occupied">
-          <Lock size={10} strokeWidth={2} aria-hidden="true" />
-          Ocupado
-        </div>
-      )}
-      {occ.priceArs != null && !occ.hasMatch && (
-        <div className="slot-price">${Math.round(occ.priceArs)}</div>
-      )}
-
-      <style>{`
-        .slot-card {
-          display: flex; flex-direction: column; gap: 3px;
-          background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 8px; padding: 0.625rem 0.75rem; cursor: pointer;
-          text-align: left; font-family: 'Barlow', sans-serif; color: hsl(210 20% 75%);
-          transition: all 0.12s; min-width: 120px;
-        }
-        .slot-card:hover:not(.disabled) { background: rgba(246,164,0,0.08); border-color: rgba(246,164,0,0.25); }
-        .slot-card.selected { background: rgba(246,164,0,0.12); border-color: rgba(246,164,0,0.4); color: hsl(42 100% 70%); }
-        .slot-card.disabled { opacity: 0.45; cursor: not-allowed; }
-        .slot-time { display: flex; align-items: center; gap: 4px; font-size: 0.82rem; font-weight: 600; }
-        .slot-date { font-size: 0.72rem; color: hsl(215 20% 50%); }
-        .slot-occupied { display: flex; align-items: center; gap: 3px; font-size: 0.68rem; color: hsl(0 72% 60%); margin-top: 2px; }
-        .slot-price { font-size: 0.7rem; color: hsl(142 70% 50%); margin-top: 2px; }
-      `}</style>
-    </button>
-  );
+/**
+ * A slot is bookable if now is before slotStart + 15 min grace period.
+ * Ignores hasMatch — that check is done separately.
+ */
+function isWithinGracePeriod(occ: ClubMatchSlotOccurrence, now: Date): boolean {
+  const [hh, mm] = occ.startTime.split(':').map(Number);
+  const [year, month, day] = occ.date.split('-').map(Number);
+  const slotStart = new Date(year, month - 1, day, hh, mm, 0, 0);
+  return now.getTime() < slotStart.getTime() + 15 * 60 * 1000;
 }
 
 export default function AvailableSlotsPicker({ accessToken, prefillSlotId, prefillDate, onSelect }: Props) {
+  const today = new Date();
+  const nowHour = today.getHours();
+
+  const [weekStart, setWeekStart] = useState<Date>(() => getMonday(today));
   const [slots, setSlots] = useState<ClubMatchSlotOccurrence[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState(defaultRange);
   const [selected, setSelected] = useState<ClubMatchSlotOccurrence | null>(null);
+
+  const weekDays = useMemo(() => weekDaysFrom(weekStart), [weekStart]);
 
   const fetchSlots = useCallback(async (startDate: string, endDate: string) => {
     setLoading(true);
@@ -135,13 +89,11 @@ export default function AvailableSlotsPicker({ accessToken, prefillSlotId, prefi
       const result = json.data?.availableSlotsForClubMatch ?? [];
       setSlots(result);
 
-      // Auto-select if prefill provided
       if (prefillSlotId && prefillDate) {
-        const match = result.find((o) => o.slotId === prefillSlotId && o.date === prefillDate && !o.hasMatch);
-        if (match) {
-          setSelected(match);
-          onSelect(match);
-        }
+        const match = result.find(
+          (o) => o.slotId === prefillSlotId && o.date === prefillDate && !o.hasMatch,
+        );
+        if (match) { setSelected(match); onSelect(match); }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar horarios disponibles');
@@ -150,111 +102,157 @@ export default function AvailableSlotsPicker({ accessToken, prefillSlotId, prefi
     }
   }, [accessToken, prefillSlotId, prefillDate, onSelect]);
 
+  // Fetch when week changes
   useEffect(() => {
-    fetchSlots(range.startDate, range.endDate);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchSlots(toISO(weekStart), toISO(addDays(weekStart, 6)));
+  }, [weekStart]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Group by court
-  const courts = new Map<string, { name: string; occurrences: ClubMatchSlotOccurrence[] }>();
-  for (const occ of slots) {
-    if (!courts.has(occ.courtId)) courts.set(occ.courtId, { name: occ.courtName, occurrences: [] });
-    courts.get(occ.courtId)!.occurrences.push(occ);
-  }
+  // Map "YYYY-MM-DD-HH" → occurrences for O(1) cell lookup
+  const slotsMap = useMemo(() => {
+    const map = new Map<string, ClubMatchSlotOccurrence[]>();
+    for (const occ of slots) {
+      const hour = parseInt(occ.startTime.slice(0, 2), 10);
+      const key = `${occ.date}-${hour}`;
+      const arr = map.get(key) ?? [];
+      arr.push(occ);
+      map.set(key, arr);
+    }
+    return map;
+  }, [slots]);
 
   function handleSelect(occ: ClubMatchSlotOccurrence) {
     setSelected(occ);
     onSelect(occ);
   }
 
+  function renderCell(info: CellRenderInfo): CellRenderResult {
+    const { date, hour, isPastDay } = info;
+    const now = new Date();
+    const dateISO = toISO(date);
+    const cellOccs = slotsMap.get(`${dateISO}-${hour}`) ?? [];
+    const primary = cellOccs[0];
+    const extraCount = cellOccs.length - 1;
+
+    // Past days: gray, no interaction
+    if (isPastDay || !primary) {
+      return { className: isPastDay ? 'cal-cell--past-day-free' : 'cal-cell--empty' };
+    }
+
+    const withinGrace = isWithinGracePeriod(primary, now);
+    const isSelectable = !primary.hasMatch && withinGrace;
+    const isSelected = selected?.slotId === primary.slotId && selected?.date === primary.date;
+
+    let className: string;
+    if (primary.hasMatch) {
+      className = 'cal-cell--match-open';
+    } else if (!withinGrace) {
+      // Past grace period — treat like a past slot (gray)
+      className = isSameDay(date, today) ? 'cal-cell--past-day-free cal-cell--dimmed' : 'cal-cell--past-day-free';
+    } else if (isSelected) {
+      className = 'cal-cell--avail picker-sel';
+    } else {
+      className = 'cal-cell--avail';
+    }
+
+    const courtLabel = primary.courtName.length > 10
+      ? primary.courtName.slice(0, 9) + '…'
+      : primary.courtName;
+
+    const content = (
+      <>
+        <span className="pk-court">{courtLabel}</span>
+        {primary.hasMatch && <Lock size={9} strokeWidth={2.5} className="pk-icon" aria-hidden="true" />}
+        {primary.priceArs != null && !primary.hasMatch && withinGrace && (
+          <span className="pk-price">${Math.round(primary.priceArs)}</span>
+        )}
+        {extraCount > 0 && <span className="pk-extra">+{extraCount}</span>}
+      </>
+    );
+
+    return {
+      className,
+      content,
+      onClick: isSelectable ? () => handleSelect(primary) : undefined,
+      isClickable: isSelectable,
+      ariaLabel: `${primary.courtName} ${primary.startTime.slice(0, 5)}–${primary.endTime.slice(0, 5)} el ${dateISO}`,
+    };
+  }
+
+  const isThisWeek = isSameDay(weekStart, getMonday(today));
+
+  const nav = (
+    <div className="pk-nav">
+      <button className="pk-nav-btn" onClick={() => setWeekStart((d) => addDays(d, -7))} aria-label="Semana anterior">
+        <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <span className="pk-week-label">{fmtWeekRange(weekStart)}</span>
+      <button className="pk-nav-btn" onClick={() => setWeekStart((d) => addDays(d, 7))} aria-label="Semana siguiente">
+        <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      {!isThisWeek && (
+        <button className="pk-today-btn" onClick={() => setWeekStart(getMonday(today))}>
+          Hoy
+        </button>
+      )}
+      {loading && <Loader2 size={14} strokeWidth={2} className="pk-spin" aria-hidden="true" />}
+      <style>{`
+        .pk-nav { display:flex; align-items:center; gap:.5rem; padding:.625rem .875rem; border-bottom:1px solid hsl(var(--border)); }
+        .pk-nav-btn { background:none; border:1px solid hsl(var(--border)); border-radius:6px; padding:.25rem; color:hsl(var(--muted-foreground)); cursor:pointer; display:inline-flex; transition:background .12s; }
+        .pk-nav-btn:hover { background:hsl(var(--muted)/.3); }
+        .pk-week-label { font-family:'Barlow Condensed',sans-serif; font-size:.82rem; font-weight:700; letter-spacing:.04em; color:hsl(var(--foreground)); }
+        .pk-today-btn { background:hsl(var(--primary)/.12); border:1px solid hsl(var(--primary)/.3); border-radius:6px; padding:.2rem .625rem; font-family:'Barlow Condensed',sans-serif; font-size:.7rem; font-weight:700; letter-spacing:.08em; color:hsl(var(--primary)); cursor:pointer; text-transform:uppercase; }
+        @keyframes pk-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        .pk-spin { animation:pk-spin 1s linear infinite; color:hsl(var(--muted-foreground)); margin-left:.25rem; }
+      `}</style>
+    </div>
+  );
+
+  const legend = (
+    <div className="cal-legend">
+      {([
+        ['cal-led--avail',      'Disponible'],
+        ['cal-led--match-open', 'Ocupado'],
+        ['cal-led--past-free',  'Pasado / sin gracia'],
+      ] as const).map(([cls, label]) => (
+        <span key={label} className="cal-legend-item">
+          <span className={`cal-led ${cls}`} aria-hidden="true" />
+          {label}
+        </span>
+      ))}
+      {selected && (
+        <span className="pk-selected-info">
+          <MapPin size={11} strokeWidth={2} aria-hidden="true" />
+          {selected.courtName} · {selected.startTime.slice(0, 5)} — {selected.date}
+        </span>
+      )}
+      <style>{`
+        .pk-court { font-family:'Barlow Condensed',sans-serif; font-size:.68rem; font-weight:700; letter-spacing:.04em; color:inherit; position:absolute; bottom:3px; left:5px; right:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .pk-icon { position:absolute; top:50%; left:50%; transform:translate(-50%,-60%); color:hsl(var(--destructive-foreground)); }
+        .pk-price { position:absolute; top:3px; right:4px; font-size:.62rem; font-weight:700; color:hsl(142 70% 55%); font-family:'Barlow Condensed',sans-serif; }
+        .pk-extra { position:absolute; top:3px; left:4px; font-size:.62rem; font-weight:700; color:hsl(var(--muted-foreground)); font-family:'Barlow Condensed',sans-serif; }
+        .picker-sel { background:hsl(42 100% 55% / 0.2) !important; outline:2px solid hsl(42 100% 55%); outline-offset:-2px; }
+        .pk-selected-info { display:flex; align-items:center; gap:4px; margin-left:auto; font-family:'Barlow',sans-serif; font-size:.72rem; color:hsl(42 100% 60%); font-weight:600; }
+      `}</style>
+    </div>
+  );
+
   return (
     <div className="picker-wrap">
-      {/* Date range control */}
-      <div className="range-bar">
-        <Calendar size={14} strokeWidth={2} color="hsl(215 20% 50%)" aria-hidden="true" />
-        <input
-          type="date"
-          className="date-input"
-          value={range.startDate}
-          onChange={(e) => setRange((r) => ({ ...r, startDate: e.target.value }))}
-          aria-label="Fecha desde"
-        />
-        <span className="date-sep">—</span>
-        <input
-          type="date"
-          className="date-input"
-          value={range.endDate}
-          onChange={(e) => setRange((r) => ({ ...r, endDate: e.target.value }))}
-          aria-label="Fecha hasta"
-        />
-        <button className="search-btn" onClick={() => fetchSlots(range.startDate, range.endDate)}>
-          Buscar
-        </button>
-      </div>
+      {error && <div className="pk-error" role="alert">{error}</div>}
 
-      {loading && (
-        <div className="loading-row">
-          <Loader2 size={16} strokeWidth={2} className="spin" aria-hidden="true" />
-          Cargando horarios...
-        </div>
-      )}
-
-      {error && <div className="error-row" role="alert">{error}</div>}
-
-      {!loading && !error && slots.length === 0 && (
-        <p className="empty-text">No hay horarios disponibles en este rango. Expandí las fechas o revisá los slots en Horarios.</p>
-      )}
-
-      {!loading && [...courts.entries()].map(([courtId, court]) => (
-        <div key={courtId} className="court-group">
-          <div className="court-header">
-            <MapPin size={13} strokeWidth={2} aria-hidden="true" />
-            {court.name}
-          </div>
-          <div className="slots-row">
-            {court.occurrences.map((occ) => (
-              <SlotCard
-                key={`${occ.slotId}-${occ.date}`}
-                occ={occ}
-                selected={selected?.slotId === occ.slotId && selected?.date === occ.date}
-                onClick={() => handleSelect(occ)}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
+      <CalendarGrid
+        weekDays={weekDays}
+        hours={DISPLAY_HOURS}
+        today={today}
+        nowHour={nowHour}
+        renderCell={renderCell}
+        navSlot={nav}
+        legendSlot={legend}
+      />
 
       <style>{`
-        .picker-wrap { display: flex; flex-direction: column; gap: 1.25rem; }
-        .range-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-        .date-input {
-          background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 6px; padding: 0.3rem 0.625rem; color: hsl(210 20% 80%);
-          font-size: 0.82rem; font-family: 'Barlow', sans-serif; outline: none; cursor: pointer;
-        }
-        .date-sep { color: hsl(215 20% 40%); font-size: 0.8rem; }
-        .search-btn {
-          background: rgba(246,164,0,0.1); border: 1px solid rgba(246,164,0,0.25);
-          border-radius: 6px; padding: 0.3rem 0.875rem; font-family: 'Barlow Condensed', sans-serif;
-          font-size: 0.82rem; font-weight: 700; letter-spacing: 0.05em; color: hsl(42 100% 65%);
-          cursor: pointer; transition: background 0.12s;
-        }
-        .search-btn:hover { background: rgba(246,164,0,0.18); }
-        .loading-row, .error-row, .empty-text {
-          display: flex; align-items: center; gap: 0.5rem;
-          font-family: 'Barlow', sans-serif; font-size: 0.875rem;
-          color: hsl(215 20% 50%); padding: 1rem 0;
-        }
-        .error-row { color: hsl(0 72% 65%); }
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        .spin { animation: spin 1s linear infinite; }
-        .court-group { display: flex; flex-direction: column; gap: 0.625rem; }
-        .court-header {
-          display: flex; align-items: center; gap: 5px;
-          font-family: 'Barlow Condensed', sans-serif; font-size: 0.78rem;
-          font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-          color: hsl(42 100% 55%);
-        }
-        .slots-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .picker-wrap { display:flex; flex-direction:column; gap:.75rem; }
+        .pk-error { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25); border-radius:8px; padding:.625rem 1rem; font-family:'Barlow',sans-serif; font-size:.875rem; color:hsl(0 72% 65%); }
       `}</style>
     </div>
   );
