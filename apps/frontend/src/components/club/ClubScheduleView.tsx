@@ -13,13 +13,14 @@
  *     MATCH_OPEN → cal-cell--match-open (yellow)
  *     MATCH_FULL → cal-cell--match-full (orange) — previously both mapped to same class
  *     MATCH_IN_PROGRESS → cal-cell--inprog (blue)
- *   This fixes the regression where OPEN and FULL were visually indistinguishable.
+ * - Week nav bar (navSlot): same visual as SlotCalendarView so the Dashboard Calendar
+ *   looks identical to the Horarios calendar. onWeekChange callback propagates prev/next
+ *   to ClubDashboardView → updateFilters, triggering a new GraphQL fetch.
+ *   DashboardFilters still handles court/status filters and quick-select buttons.
  * - Cell click routing:
  *     match slot     → onMatchClick (opens MatchDetailModal)
  *     free slot      → onFreeSlotClick (create/block options panel)
  *     blocked slot   → onBlockedSlotClick (block info panel)
- * - Day range: weekDays derived from startDate/endDate filter (can be any range,
- *   not always 7 days). Falls back to current Mon–Sun if dates are missing.
  * - Previously fixed bugs:
  *   - MATCH_OPEN and MATCH_FULL sharing the same CSS class lost semantic information.
  *     Fixed by introducing cal-cell--match-open and cal-cell--match-full.
@@ -29,9 +30,11 @@
  */
 
 import { useMemo } from 'react';
-import { Lock, Plus } from 'lucide-react';
+import { Lock, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import CalendarGrid, { type CellRenderInfo, type CellRenderResult } from '../calendar/CalendarGrid';
-import { DISPLAY_HOURS, getMonday, weekDaysFrom } from '../../lib/calendar-utils';
+import {
+  DISPLAY_HOURS, getMonday, addDays, isSameDay, weekDaysFrom, fmtWeekRange,
+} from '../../lib/calendar-utils';
 import type { ScheduleSlot, DashboardMatch } from '../../graphql/operations/club-dashboard';
 
 interface Props {
@@ -41,12 +44,15 @@ interface Props {
   onBlockedSlotClick?: (slot: ScheduleSlot) => void;
   startDate?: string;
   endDate?: string;
+  onWeekChange?: (startDate: string, endDate: string) => void;
+}
+
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function buildWeekDays(startDateStr?: string, endDateStr?: string): Date[] {
   if (!startDateStr || !endDateStr) return weekDaysFrom(getMonday(new Date()));
-  // Parse as LOCAL date components — appending 'T00:00:00Z' forces UTC midnight which
-  // shifts the displayed date by the timezone offset (e.g. UTC-3 shows May 4 as May 3).
   const [sy, sm, sd] = startDateStr.split('-').map(Number);
   const [ey, em, ed] = endDateStr.split('-').map(Number);
   const start = new Date(sy, sm - 1, sd);
@@ -84,12 +90,34 @@ function slotCellClass(slot: ScheduleSlot | undefined, info: CellRenderInfo): st
 }
 
 export default function ClubScheduleView({
-  slots, onMatchClick, onFreeSlotClick, onBlockedSlotClick, startDate, endDate,
+  slots, onMatchClick, onFreeSlotClick, onBlockedSlotClick,
+  startDate, endDate, onWeekChange,
 }: Props) {
   const today = new Date();
   const nowHour = today.getHours();
 
   const weekDays = useMemo(() => buildWeekDays(startDate, endDate), [startDate, endDate]);
+
+  // Compute Monday of the current filter week for nav and "Hoy" detection
+  const filterMonday = useMemo(() => {
+    if (!startDate) return getMonday(today);
+    const [y, m, d] = startDate.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }, [startDate]);
+
+  const isThisWeek = isSameDay(filterMonday, getMonday(today));
+
+  function navigate(direction: -1 | 1) {
+    if (!onWeekChange) return;
+    const newMon = addDays(filterMonday, direction * 7);
+    onWeekChange(localISO(newMon), localISO(addDays(newMon, 6)));
+  }
+
+  function goToToday() {
+    if (!onWeekChange) return;
+    const mon = getMonday(today);
+    onWeekChange(localISO(mon), localISO(addDays(mon, 6)));
+  }
 
   const slotsMap = useMemo(() => {
     const map = new Map<string, ScheduleSlot>();
@@ -147,10 +175,7 @@ export default function ClubScheduleView({
     );
 
     return {
-      className,
-      content,
-      onClick,
-      isClickable,
+      className, content, onClick, isClickable,
       ariaLabel: `${dow} ${String(hour).padStart(2, '0')}:00 — ${primary.status}`,
     };
   }
@@ -162,6 +187,28 @@ export default function ClubScheduleView({
       </div>
     );
   }
+
+  const nav = onWeekChange ? (
+    <div className="slot-nav">
+      <button className="slot-nav-btn" onClick={() => navigate(-1)} aria-label="Semana anterior">
+        <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <span className="slot-week-label">{fmtWeekRange(filterMonday)}</span>
+      <button className="slot-nav-btn" onClick={() => navigate(1)} aria-label="Semana siguiente">
+        <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      {!isThisWeek && (
+        <button className="slot-today-btn" onClick={goToToday}>Hoy</button>
+      )}
+      <style>{`
+        .slot-nav { display:flex; align-items:center; gap:.5rem; padding:.625rem .875rem; border-bottom:1px solid hsl(var(--border)); }
+        .slot-nav-btn { background:none; border:1px solid hsl(var(--border)); border-radius:6px; padding:.25rem; color:hsl(var(--muted-foreground)); cursor:pointer; display:inline-flex; transition:background .12s; }
+        .slot-nav-btn:hover { background:hsl(var(--muted)/.3); color:hsl(var(--foreground)); }
+        .slot-week-label { font-family:'Barlow Condensed',sans-serif; font-size:.82rem; font-weight:700; letter-spacing:.04em; color:hsl(var(--foreground)); }
+        .slot-today-btn { background:hsl(var(--primary)/.12); border:1px solid hsl(var(--primary)/.3); border-radius:6px; padding:.2rem .625rem; font-family:'Barlow Condensed',sans-serif; font-size:.7rem; font-weight:700; letter-spacing:.08em; color:hsl(var(--primary)); cursor:pointer; text-transform:uppercase; }
+      `}</style>
+    </div>
+  ) : undefined;
 
   const legend = (
     <div className="cal-legend">
@@ -179,10 +226,10 @@ export default function ClubScheduleView({
         </span>
       ))}
       <style>{`
-        .sched-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: hsl(var(--destructive-foreground)); }
-        .sched-icon--faint { opacity: 0.22; color: hsl(var(--muted-foreground)); }
-        .sched-pip { position: absolute; top: 4px; left: 4px; width: 6px; height: 6px; border-radius: 50%; background: hsl(42 100% 55%); }
-        .sched-extra { position: absolute; bottom: 2px; right: 4px; font-size: 0.62rem; font-weight: 700; color: hsl(var(--muted-foreground)); font-family: 'Barlow Condensed', sans-serif; }
+        .sched-icon { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:hsl(var(--destructive-foreground)); }
+        .sched-icon--faint { opacity:.22; color:hsl(var(--muted-foreground)); }
+        .sched-pip { position:absolute; top:4px; left:4px; width:6px; height:6px; border-radius:50%; background:hsl(42 100% 55%); }
+        .sched-extra { position:absolute; bottom:2px; right:4px; font-size:.62rem; font-weight:700; color:hsl(var(--muted-foreground)); font-family:'Barlow Condensed',sans-serif; }
       `}</style>
     </div>
   );
@@ -194,6 +241,7 @@ export default function ClubScheduleView({
       today={today}
       nowHour={nowHour}
       renderCell={renderCell}
+      navSlot={nav}
       legendSlot={legend}
     />
   );
