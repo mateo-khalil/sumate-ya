@@ -15,18 +15,24 @@
  * - When toggleSlotBlock returns impactPreview (matches exist, no confirmForce), the UI
  *   transitions to the BulkBlockDialog for the single-slot case too, reusing the same flow.
  * - Semantic color classes: available=green, hasMatch=yellow, blocked=red, inactive=gray.
+ * - courts derived via useMemo from slots (unique courtId → court.name). Passed to
+ *   SlotEditModal so the create form shows a named <select> instead of a UUID input.
+ *   Courts are sorted alphabetically. Empty array triggers a "no courts configured" hint.
  * - Previously fixed bugs:
  *   - Initial GraphQL query returned "Authentication required" because the /api/graphql
  *     proxy could not reliably read the HttpOnly cookie. Fix: SSR-hydrated initialSlots.
+ *   - Create Slot form required manual UUID entry for "ID de cancha". Fixed by deriving
+ *     CourtOption[] from slots and rendering a named <select> in SlotEditModal.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Plus, List, CalendarDays, DollarSign } from 'lucide-react';
 import { useClubSlots } from './useClubSlots';
 import { SlotListView } from './SlotListView';
 import { SlotCalendarView } from './SlotCalendarView';
 import { CourtPricingPanel } from './CourtPricingPanel';
 import { SlotEditModal } from './SlotEditModal';
+import type { CourtOption } from './SlotEditModal';
 import { BulkBlockDialog } from './BulkBlockDialog';
 import type { ManagedClubSlot, BlockSlotInput, SlotImpactPreview } from '../../graphql/operations/club-slots';
 
@@ -45,6 +51,20 @@ interface SlotManagerProps {
 export default function SlotManager({ initialSlots = [], initialError = null, accessToken = '' }: SlotManagerProps) {
   const { slots, loading, error, refetch, createSlot, updateSlot, deleteSlot, toggleBlock, bulkBlock } =
     useClubSlots({ initialSlots, initialError, accessToken });
+
+  // Derive unique courts from loaded slots so SlotEditModal can show a named <select>
+  // instead of a raw UUID text field. Sorted alphabetically by name.
+  const courts = useMemo((): CourtOption[] => {
+    const seen = new Set<string>();
+    const result: CourtOption[] = [];
+    for (const slot of slots) {
+      if (!seen.has(slot.courtId)) {
+        seen.add(slot.courtId);
+        result.push({ id: slot.courtId, name: slot.court.name });
+      }
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [slots]);
 
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
   const [showPricing, setShowPricing] = useState(false);
@@ -233,6 +253,7 @@ export default function SlotManager({ initialSlots = [], initialError = null, ac
       {(modal.type === 'create' || modal.type === 'edit') && (
         <SlotEditModal
           slot={modal.type === 'edit' ? modal.slot : null}
+          courts={courts}
           onClose={closeModal}
           onSaveCreate={createSlot}
           onSaveUpdate={updateSlot}
