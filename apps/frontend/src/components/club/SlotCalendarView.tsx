@@ -115,6 +115,7 @@ export function SlotCalendarView({ slots, selectedIds, onToggleSelect, onEdit }:
         )}
         {status === 'match' && <span className="slot-pip" aria-hidden="true" />}
         {extra > 0 && <span className="slot-extra">+{extra}</span>}
+        <span className="cal-court-label">{primary.court.name}</span>
       </>
     );
 

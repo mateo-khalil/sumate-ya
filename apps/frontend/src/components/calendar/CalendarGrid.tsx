@@ -205,7 +205,7 @@ export default function CalendarGrid({
         .cal-body { max-height: 68vh; overflow-y: auto; }
         .cal-row {
           display: grid;
-          min-height: 38px;
+          min-height: 52px;
         }
         .cal-row:not(:last-child) { border-bottom: 1px solid hsl(var(--border) / 0.4); }
         .cal-time {
@@ -229,7 +229,14 @@ export default function CalendarGrid({
           display: flex;
           align-items: center;
           justify-content: center;
-          min-height: 38px;
+          min-height: 52px;
+        }
+        /* Shared court label — used by ClubScheduleView, SlotCalendarView, AvailableSlotsPicker */
+        .cal-court-label {
+          position: absolute; bottom: 4px; left: 5px; right: 5px;
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.68rem; font-weight: 700;
+          letter-spacing: 0.04em; color: inherit; white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis; line-height: 1;
         }
         .cal-cell:last-child { border-right: none; }
         .cal-cell[role="button"] { cursor: pointer; }

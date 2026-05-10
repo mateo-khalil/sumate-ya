@@ -36,7 +36,7 @@ export const DOW_ABBR: Record<DayOfWeek, string> = {
 export const DISPLAY_HOURS = Array.from({ length: 17 }, (_, i) => i + 7);
 
 /** Pixel height per calendar row — must match .cal-row min-height in CalendarGrid */
-export const ROW_HEIGHT_PX = 38;
+export const ROW_HEIGHT_PX = 52;
 
 /** The hour to auto-scroll into view on calendar mount */
 export const SCROLL_TO_HOUR = 7;
