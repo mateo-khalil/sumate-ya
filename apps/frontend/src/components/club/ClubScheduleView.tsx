@@ -23,6 +23,9 @@
  * - Previously fixed bugs:
  *   - MATCH_OPEN and MATCH_FULL sharing the same CSS class lost semantic information.
  *     Fixed by introducing cal-cell--match-open and cal-cell--match-full.
+ *   - buildWeekDays used 'T00:00:00Z' (UTC midnight), shifting displayed column dates
+ *     one day back in UTC-3 (May 4 showed as May 3). Fixed by parsing YYYY-MM-DD as
+ *     local date components — same fix applied to ClubAgendaView and formatDateNice.
  */
 
 import { useMemo } from 'react';
@@ -42,13 +45,17 @@ interface Props {
 
 function buildWeekDays(startDateStr?: string, endDateStr?: string): Date[] {
   if (!startDateStr || !endDateStr) return weekDaysFrom(getMonday(new Date()));
-  const start = new Date(startDateStr + 'T00:00:00Z');
-  const end = new Date(endDateStr + 'T00:00:00Z');
+  // Parse as LOCAL date components — appending 'T00:00:00Z' forces UTC midnight which
+  // shifts the displayed date by the timezone offset (e.g. UTC-3 shows May 4 as May 3).
+  const [sy, sm, sd] = startDateStr.split('-').map(Number);
+  const [ey, em, ed] = endDateStr.split('-').map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
   const days: Date[] = [];
   const cur = new Date(start);
   while (cur <= end && days.length < 14) {
     days.push(new Date(cur));
-    cur.setUTCDate(cur.getUTCDate() + 1);
+    cur.setDate(cur.getDate() + 1);
   }
   return days;
 }
