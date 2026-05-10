@@ -206,6 +206,7 @@ export default function ClubDashboardView(props: Props) {
               onBlockedSlotClick={setSelectedBlockedSlot}
               startDate={filters.startDate}
               endDate={filters.endDate}
+              onWeekChange={(s, e) => updateFilters({ startDate: s, endDate: e })}
             />
           )}
           {view === 'agenda' && (
@@ -213,6 +214,7 @@ export default function ClubDashboardView(props: Props) {
               matches={data.matches}
               onMatchClick={setSelectedMatch}
               startDate={filters.startDate}
+              onWeekChange={(s, e) => updateFilters({ startDate: s, endDate: e })}
             />
           )}
         </div>

@@ -22,11 +22,15 @@
  */
 
 import { useMemo } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import CalendarGrid, { type CellRenderInfo, type CellRenderResult } from '../calendar/CalendarGrid';
 import {
   DISPLAY_HOURS,
   getMonday,
+  addDays,
+  isSameDay,
   weekDaysFrom,
+  fmtWeekRange,
 } from '../../lib/calendar-utils';
 import type { DashboardMatch } from '../../graphql/operations/club-dashboard';
 import { FORMAT_LABELS, STATUS_LABELS } from '../../graphql/operations/club-dashboard';
@@ -35,6 +39,11 @@ interface Props {
   matches: DashboardMatch[];
   onMatchClick: (match: DashboardMatch) => void;
   startDate?: string;
+  onWeekChange?: (startDate: string, endDate: string) => void;
+}
+
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function buildWeekDays(startDate?: string): Date[] {
@@ -59,10 +68,30 @@ function matchStatusClass(status: DashboardMatch['status']): string {
   return map[status] ?? 'cal-cell--match-open';
 }
 
-export default function ClubAgendaView({ matches, onMatchClick, startDate }: Props) {
+export default function ClubAgendaView({ matches, onMatchClick, startDate, onWeekChange }: Props) {
   const today = new Date();
   const nowHour = today.getHours();
   const weekDays = useMemo(() => buildWeekDays(startDate), [startDate]);
+
+  const filterMonday = useMemo(() => {
+    if (!startDate) return getMonday(today);
+    const [y, m, d] = startDate.split('-').map(Number);
+    return getMonday(new Date(y, m - 1, d));
+  }, [startDate]);
+
+  const isThisWeek = isSameDay(filterMonday, getMonday(today));
+
+  function navigate(direction: -1 | 1) {
+    if (!onWeekChange) return;
+    const newMon = addDays(filterMonday, direction * 7);
+    onWeekChange(localISO(newMon), localISO(addDays(newMon, 6)));
+  }
+
+  function goToToday() {
+    if (!onWeekChange) return;
+    const mon = getMonday(today);
+    onWeekChange(localISO(mon), localISO(addDays(mon, 6)));
+  }
 
   // Index matches by "YYYY-MM-DD-HH" using LOCAL date/time
   const matchesMap = useMemo(() => {
@@ -145,11 +174,38 @@ export default function ClubAgendaView({ matches, onMatchClick, startDate }: Pro
     </div>
   );
 
+  const nav = onWeekChange ? (
+    <div className="slot-nav">
+      <button className="slot-nav-btn" onClick={() => navigate(-1)} aria-label="Semana anterior">
+        <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <span className="slot-week-label">{fmtWeekRange(filterMonday)}</span>
+      <button className="slot-nav-btn" onClick={() => navigate(1)} aria-label="Semana siguiente">
+        <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      {!isThisWeek && (
+        <button className="slot-today-btn" onClick={goToToday}>Hoy</button>
+      )}
+      <style>{`
+        .slot-nav { display:flex; align-items:center; gap:.5rem; padding:.625rem .875rem; border-bottom:1px solid hsl(var(--border)); }
+        .slot-nav-btn { background:none; border:1px solid hsl(var(--border)); border-radius:6px; padding:.25rem; color:hsl(var(--muted-foreground)); cursor:pointer; display:inline-flex; transition:background .12s; }
+        .slot-nav-btn:hover { background:hsl(var(--muted)/.3); color:hsl(var(--foreground)); }
+        .slot-week-label { font-family:'Barlow Condensed',sans-serif; font-size:.82rem; font-weight:700; letter-spacing:.04em; color:hsl(var(--foreground)); }
+        .slot-today-btn { background:hsl(var(--primary)/.12); border:1px solid hsl(var(--primary)/.3); border-radius:6px; padding:.2rem .625rem; font-family:'Barlow Condensed',sans-serif; font-size:.7rem; font-weight:700; letter-spacing:.08em; color:hsl(var(--primary)); cursor:pointer; text-transform:uppercase; }
+      `}</style>
+    </div>
+  ) : undefined;
+
   if (!matches.length) {
     return (
-      <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))', fontFamily: "'Barlow', sans-serif" }}>
-        No hay partidos para el rango seleccionado.
-      </div>
+      <CalendarGrid
+        weekDays={weekDays}
+        hours={DISPLAY_HOURS}
+        today={today}
+        nowHour={nowHour}
+        renderCell={() => ({ className: 'cal-cell--empty' })}
+        navSlot={nav}
+      />
     );
   }
 
@@ -160,6 +216,7 @@ export default function ClubAgendaView({ matches, onMatchClick, startDate }: Pro
       today={today}
       nowHour={nowHour}
       renderCell={renderCell}
+      navSlot={nav}
       legendSlot={legend}
     />
   );
