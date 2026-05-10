@@ -1,75 +1,183 @@
 ---
-import { Landmark, LayoutDashboard, Calendar, Volleyball, Users, Settings } from 'lucide-react';
-import { cn } from '@/lib/utils';
+/**
+ * ClubSidebar — shared navigation sidebar for the club admin panel
+ *
+ * Decision Context:
+ * - Extracted from per-page inline sidebars to eliminate duplication across
+ *   dashboard.astro, horarios.astro, and crear-partido.astro.
+ * - "Crear partido" is a real implemented route (/panel-club/crear-partido), added in
+ *   the panel-club-crear-partido branch. It uses sidebar-link--highlight style to stand
+ *   out as the primary CTA action — same treatment it had in the pre-extraction sidebars.
+ * - Active detection: strict equality on pathname so /panel-club/horarios doesn't
+ *   accidentally activate /panel-club.
+ * - Placeholder routes (#): Canchas, Reservas, Configuración, Estadísticas are not yet
+ *   implemented. They stay in the nav with muted style to show the intended structure.
+ * - Previously fixed bugs:
+ *   - "Crear partido" link was missing after sidebar extraction, making the match
+ *     creation feature unreachable from navigation. Fixed by adding it here.
+ */
+
+import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3 } from 'lucide-react';
 
 const { currentPath } = Astro.props;
 
-const navLinks = [
-  { href: '/panel-club/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/panel-club/horarios', icon: Calendar, label: 'Horarios' },
-  { href: '#', icon: Volleyball, label: 'Canchas' },
-  { href: '#', icon: Users, label: 'Reservas' },
-  { href: '#', icon: Settings, label: 'Configuración' },
-];
+function isActive(href: string): boolean {
+  return currentPath === href;
+}
 ---
 
 <aside class="sidebar">
   <div class="sidebar-section">
     <div class="sidebar-label">GESTIÓN</div>
     <nav class="sidebar-nav">
-      {
-        navLinks.map((link) => {
-          const Icon = link.icon;
-          const isActive = currentPath === link.href;
-          return (
-            <a
-              href={link.href}
-              class={cn(
-                'sidebar-link',
-                isActive && 'sidebar-link--active'
-              )}
-            >
-              <span class="sidebar-icon">
-                <Icon size={16} strokeWidth={2} aria-hidden="true" />
-              </span>
-              {link.label}
-            </a>
-          );
-        })
-      }
+      <a
+        href="/panel-club/dashboard"
+        class={`sidebar-link${isActive('/panel-club/dashboard') ? ' sidebar-link--active' : ''}`}
+      >
+        <span class="sidebar-icon"><LayoutDashboard size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Dashboard
+      </a>
+
+      <a
+        href="/panel-club/crear-partido"
+        class={`sidebar-link sidebar-link--highlight${isActive('/panel-club/crear-partido') ? ' sidebar-link--active' : ''}`}
+      >
+        <span class="sidebar-icon"><Plus size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Crear partido
+      </a>
+
+      <a
+        href="/panel-club/horarios"
+        class={`sidebar-link${isActive('/panel-club/horarios') ? ' sidebar-link--active' : ''}`}
+      >
+        <span class="sidebar-icon"><Calendar size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Horarios
+      </a>
+
+      <a href="#" class="sidebar-link sidebar-link--placeholder">
+        <span class="sidebar-icon"><Volleyball size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Canchas
+      </a>
+
+      <a href="#" class="sidebar-link sidebar-link--placeholder">
+        <span class="sidebar-icon"><Users size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Reservas
+      </a>
+
+      <a href="#" class="sidebar-link sidebar-link--placeholder">
+        <span class="sidebar-icon"><Settings size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Configuración
+      </a>
+    </nav>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">REPORTES</div>
+    <nav class="sidebar-nav">
+      <a href="#" class="sidebar-link sidebar-link--placeholder">
+        <span class="sidebar-icon"><BarChart3 size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Estadísticas
+      </a>
     </nav>
   </div>
 </aside>
 
 <style>
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+  }
+
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .sidebar-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: hsl(215 20% 40%);
+    text-transform: uppercase;
+    padding: 0 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   .sidebar-link {
     display: flex;
     align-items: center;
+    gap: 0.625rem;
     padding: 0.5rem 0.75rem;
-    border-radius: 0.375rem;
+    border-radius: 8px;
     font-size: 0.875rem;
+    font-family: 'Barlow', sans-serif;
     font-weight: 500;
-    color: hsl(var(--muted-foreground));
-    transition:
-      color 0.2s ease-in-out,
-      background-color 0.2s ease-in-out;
+    color: hsl(215 20% 55%);
     text-decoration: none;
+    border: 1px solid transparent;
+    transition: background 0.12s, color 0.12s;
   }
+
   .sidebar-link:hover {
-    background-color: hsl(var(--muted));
-    color: hsl(var(--foreground));
+    background: rgba(255, 255, 255, 0.05);
+    color: hsl(210 20% 85%);
   }
+
   .sidebar-link--active {
-    background-color: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-    font-weight: 600;
+    background: rgba(246, 164, 0, 0.1);
+    color: hsl(42 100% 65%);
+    border-color: rgba(246, 164, 0, 0.18);
   }
+
   .sidebar-link--active:hover {
-    background-color: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
+    background: rgba(246, 164, 0, 0.14);
+    color: hsl(42 100% 70%);
   }
+
+  /* Crear partido — CTA destacado */
+  .sidebar-link--highlight {
+    color: hsl(35 100% 58%);
+    border-color: rgba(246, 120, 0, 0.22);
+  }
+
+  .sidebar-link--highlight:hover {
+    background: rgba(246, 120, 0, 0.1);
+    color: hsl(35 100% 68%);
+    border-color: rgba(246, 120, 0, 0.35);
+  }
+
+  /* Placeholder routes — slightly dimmed */
+  .sidebar-link--placeholder {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .sidebar-link--placeholder:hover {
+    background: transparent;
+    color: hsl(215 20% 55%);
+    opacity: 0.55;
+  }
+
   .sidebar-icon {
-    margin-right: 0.75rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    color: inherit;
     flex-shrink: 0;
   }
 </style>
