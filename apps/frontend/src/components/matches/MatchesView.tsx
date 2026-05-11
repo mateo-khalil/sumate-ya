@@ -225,6 +225,7 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
           align-items: center;
           gap: 0.4rem;
           padding: 0.4rem 1rem;
+          min-height: 44px; /* iOS HIG touch target minimum */
           background: transparent;
           border: none;
           color: hsl(215 20% 55%);
