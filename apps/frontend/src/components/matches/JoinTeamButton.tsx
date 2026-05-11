@@ -108,6 +108,7 @@ export default function JoinTeamButton({
         .join-btn-wrapper { display: flex; flex-direction: column; gap: 0.4rem; }
         .join-btn {
           padding: 0.65rem 1.25rem;
+          min-height: 44px; /* iOS HIG touch target */
           background: hsl(35 100% 48%);
           color: hsl(220 72% 7%);
           border: none; border-radius: 8px; cursor: pointer;

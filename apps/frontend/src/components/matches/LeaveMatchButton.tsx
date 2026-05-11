@@ -162,6 +162,7 @@ const styles = `
 
   .leave-btn {
     padding: 0.6rem 1.25rem;
+    min-height: 44px; /* iOS HIG touch target */
     background: transparent;
     color: hsl(0 72% 65%);
     border: 1px solid hsl(0 72% 50% / 0.45);
@@ -170,7 +171,7 @@ const styles = `
     font-size: 0.875rem; font-weight: 700;
     letter-spacing: 0.08em; text-transform: uppercase;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
-    white-space: nowrap;
+    white-space: normal; /* allow wrapping on narrow screens */
   }
   .leave-btn:hover { background: hsl(0 72% 50% / 0.1); border-color: hsl(0 72% 55% / 0.7); color: hsl(0 72% 72%); }
   .leave-btn--loading { opacity: 0.6; cursor: wait; }
