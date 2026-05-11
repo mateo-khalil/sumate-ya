@@ -23,7 +23,7 @@
  */
 export const prerender = false;
 
-import { Volleyball } from 'lucide-react';
+import { Volleyball, Lock, Settings } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
 import ProfileCard from '@/components/profile/ProfileCard.astro';
 import AvatarUpload from '@/components/profile/AvatarUpload.tsx';
@@ -32,7 +32,9 @@ import { ACCESS_TOKEN_COOKIE } from '../lib/auth';
 import {
   GET_MY_PROFILE,
   GET_MY_MATCHES,
+  GET_MY_SETTINGS,
   type Profile,
+  type PrivacySettings,
   type MatchHistoryConnection,
 } from '../graphql/operations/profile';
 
@@ -56,22 +58,30 @@ const EMPTY_HISTORY: MatchHistoryConnection = {
 let profile: Profile | null = null;
 let errorMessage: string | null = null;
 let historyData: MatchHistoryConnection = EMPTY_HISTORY;
+let privacySettings: PrivacySettings | null = null;
 
 if (!accessToken) {
   // Middleware already redirects on this path, but we keep a defensive guard.
   errorMessage = 'Sesión inválida. Iniciá sesión nuevamente.';
 } else {
-  // Fetch profile and first page of history in parallel
-  const [profileResponse, historyResponse] = await Promise.allSettled([
+  const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` };
+
+  // Fetch profile, first page of history, and privacy settings in parallel
+  const [profileResponse, historyResponse, settingsResponse] = await Promise.allSettled([
     fetch(graphqlUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      headers: authHeaders,
       body: JSON.stringify({ query: GET_MY_PROFILE }),
     }),
     fetch(graphqlUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      headers: authHeaders,
       body: JSON.stringify({ query: GET_MY_MATCHES, variables: { page: 1, pageSize: 10 } }),
+    }),
+    fetch(graphqlUrl, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ query: GET_MY_SETTINGS }),
     }),
   ]);
 
@@ -101,6 +111,15 @@ if (!accessToken) {
     }
     // Graceful degradation: if history fails, historyData stays EMPTY_HISTORY
   }
+
+  if (settingsResponse.status === 'fulfilled') {
+    const settJson = (await settingsResponse.value.json().catch(() => null)) as
+      | { data?: { mySettings?: PrivacySettings }; errors?: Array<{ message: string }> }
+      | null;
+    if (settJson?.data?.mySettings) {
+      privacySettings = settJson.data.mySettings;
+    }
+  }
 }
 ---
 
@@ -115,6 +134,10 @@ if (!accessToken) {
         </div>
         <div class="topbar-actions">
           <a href="/partidos" class="nav-link">Partidos</a>
+          <a href="/ajustes" class="nav-link nav-link--settings" title="Ajustes de privacidad">
+            <Settings size={15} strokeWidth={2} aria-hidden="true" />
+            Ajustes
+          </a>
           <span class="user-badge">
             <span class="user-dot"></span>
             {displayName}
@@ -138,6 +161,14 @@ if (!accessToken) {
       <section class="profile-section">
         {profile ? (
           <div class="profile-card-wrapper">
+            {/* Badge de perfil privado — solo visible para el propio usuario */}
+            {privacySettings?.isPublic === false && (
+              <div class="privacy-notice">
+                <Lock size={14} strokeWidth={2.5} aria-hidden="true" />
+                <span>Tu perfil está privado.</span>
+                <a href="/ajustes" class="privacy-notice-link">Cambiar en Ajustes</a>
+              </div>
+            )}
             <ProfileCard profile={profile} />
             <button id="change-avatar-btn" class="btn-change-avatar" title="Cambiar foto de perfil">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
@@ -280,12 +311,42 @@ if (!accessToken) {
     padding: 0.3rem 0.6rem;
     border-radius: 6px;
     transition: color 0.15s, background 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
   }
 
   .nav-link:hover {
     background: rgba(255, 255, 255, 0.06);
     color: hsl(210 20% 94%);
   }
+
+  /* ---- Privacy notice badge ---- */
+  .privacy-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.875rem;
+    margin-bottom: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.85rem;
+    color: hsl(215 20% 60%);
+  }
+  .privacy-notice-link {
+    margin-left: auto;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(35 100% 55%);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .privacy-notice-link:hover { color: hsl(35 100% 65%); }
 
   .user-badge {
     display: flex;

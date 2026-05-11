@@ -1,12 +1,17 @@
-# GraphQL Schema: Profile type and myProfile query
+# GraphQL Schema: Profile type, privacy settings, and profile queries/mutations
 #
 # Decision Context:
-# - Why: Player-facing profile page needs a self-scoped query (`myProfile`) instead of a
-#   public `profile(id)` so the resolver can enforce auth + RLS via the caller's JWT.
-# - Why Int for `division`: DB column is smallint; keeping it as Int here avoids exposing
-#   a made-up enum that would drift from the DB default (1) without a migration.
-# - `winrate` is Float? and nullable: a player with 0 matches has no meaningful winrate,
-#   so we surface `null` instead of a misleading 0.0.
+# - Why: Player-facing profile page needs a self-scoped query (`myProfile`) and a public
+#   query (`profile(id)`) that respects privacy settings at the service layer.
+# - Privacy model: fields are nullable when the requester is NOT the profile owner AND
+#   the owner has disabled that field via their privacy settings. The backend service
+#   applies the filter — RLS allows all authenticated users to SELECT any profile row,
+#   but only the backend knows which columns to redact.
+# - profile(id) vs myProfile: `myProfile` always returns all fields (owner sees everything).
+#   `profile(id)` applies privacy filters when the requester != owner.
+# - PrivacySettings is only accessible by the owner (`mySettings` requires auth).
+# - `isPublic` is not exposed on Profile to visitors — inferring it from a null response
+#   would leak the same info, so visitors just see nulls on private fields.
 # - Previously fixed bugs: none relevant.
 
 # User role enum (mirrors DB enum "userRole": player | club_admin)
@@ -24,20 +29,60 @@ enum PlayerPosition {
 }
 
 # A player or club-admin profile linked to auth.users
+# Fields marked nullable may be null when viewed by another user and the owner
+# has disabled that field via their privacy settings.
 type Profile {
   id: ID!
   displayName: String!
   avatarUrl: String
   role: UserRole!
+  # Null if owner set showPosition = false and requester != owner
   preferredPosition: PlayerPosition
-  division: Int!
-  matchesPlayed: Int!
-  matchesWon: Int!
-  # Win percentage 0-100 with 2 decimals, or null when matchesPlayed = 0
+  # Null if owner set showDivision = false and requester != owner
+  division: Int
+  # Null if owner set showStats = false and requester != owner
+  matchesPlayed: Int
+  # Null if owner set showStats = false and requester != owner
+  matchesWon: Int
+  # Null if owner set showStats = false or matchesPlayed = 0 and requester != owner
   winrate: Float
+  # True when this profile is private and the requester is not the owner
+  isPrivate: Boolean
+}
+
+# Granular privacy settings — visible only to the profile owner via mySettings
+type PrivacySettings {
+  isPublic: Boolean!
+  showStats: Boolean!
+  showHistory: Boolean!
+  showPosition: Boolean!
+  showDivision: Boolean!
+}
+
+# Input for updatePrivacy mutation — all fields optional (partial update)
+input UpdatePrivacyInput {
+  isPublic: Boolean
+  showStats: Boolean
+  showHistory: Boolean
+  showPosition: Boolean
+  showDivision: Boolean
 }
 
 extend type Query {
-  # Returns the authenticated user's profile. Auth required.
+  # Returns the authenticated user's own profile (all fields, no privacy filter).
+  # Auth required.
   myProfile: Profile!
+
+  # Returns another player's public profile, respecting their privacy settings.
+  # Fields may be null if the owner disabled them. Auth required.
+  profile(id: ID!): Profile
+
+  # Returns the authenticated user's current privacy settings. Auth required.
+  mySettings: PrivacySettings!
+}
+
+extend type Mutation {
+  # Updates the authenticated user's privacy settings. Auth required.
+  # At least one field must be provided.
+  updatePrivacy(input: UpdatePrivacyInput!): PrivacySettings!
 }

@@ -491,6 +491,7 @@ export type Mutation = {
   toggleSlotBlock: ClubSlotMutationResult;
   updateClubSlot: ClubSlotMutationResult;
   updateCourtPricing: CourtPricingMutationResult;
+  updatePrivacy: PrivacySettings;
   voteMatchResult: VoteSubmissionResult;
 };
 
@@ -565,6 +566,11 @@ export type MutationUpdateCourtPricingArgs = {
 };
 
 
+export type MutationUpdatePrivacyArgs = {
+  input: UpdatePrivacyInput;
+};
+
+
 export type MutationVoteMatchResultArgs = {
   input: VoteMatchResultInput;
 };
@@ -576,14 +582,24 @@ export enum PlayerPosition {
   Midfielder = 'MIDFIELDER'
 }
 
+export type PrivacySettings = {
+  __typename?: 'PrivacySettings';
+  isPublic: Scalars['Boolean']['output'];
+  showDivision: Scalars['Boolean']['output'];
+  showHistory: Scalars['Boolean']['output'];
+  showPosition: Scalars['Boolean']['output'];
+  showStats: Scalars['Boolean']['output'];
+};
+
 export type Profile = {
   __typename?: 'Profile';
   avatarUrl?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
-  division: Scalars['Int']['output'];
+  division?: Maybe<Scalars['Int']['output']>;
   id: Scalars['ID']['output'];
-  matchesPlayed: Scalars['Int']['output'];
-  matchesWon: Scalars['Int']['output'];
+  isPrivate?: Maybe<Scalars['Boolean']['output']>;
+  matchesPlayed?: Maybe<Scalars['Int']['output']>;
+  matchesWon?: Maybe<Scalars['Int']['output']>;
   preferredPosition?: Maybe<PlayerPosition>;
   role: UserRole;
   winrate?: Maybe<Scalars['Float']['output']>;
@@ -619,6 +635,8 @@ export type Query = {
   myClubSlots: Array<ManagedClubSlot>;
   myMatches: MatchHistoryConnection;
   myProfile: Profile;
+  mySettings: PrivacySettings;
+  profile?: Maybe<Profile>;
   slotAuditLog: Array<SlotAuditLog>;
   slotImpactPreview: SlotImpactPreview;
 };
@@ -674,6 +692,11 @@ export type QueryMatchesArgs = {
 export type QueryMyMatchesArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   pageSize?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryProfileArgs = {
+  id: Scalars['ID']['input'];
 };
 
 
@@ -851,6 +874,14 @@ export type UpdateCourtPricingInput = {
   peakStart?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type UpdatePrivacyInput = {
+  isPublic?: InputMaybe<Scalars['Boolean']['input']>;
+  showDivision?: InputMaybe<Scalars['Boolean']['input']>;
+  showHistory?: InputMaybe<Scalars['Boolean']['input']>;
+  showPosition?: InputMaybe<Scalars['Boolean']['input']>;
+  showStats?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
 export enum UserRole {
   ClubAdmin = 'CLUB_ADMIN',
   Player = 'PLAYER'
@@ -1006,6 +1037,7 @@ export type ResolversTypes = ResolversObject<{
   MatchUserResult: MatchUserResult;
   Mutation: ResolverTypeWrapper<Record<PropertyKey, never>>;
   PlayerPosition: PlayerPosition;
+  PrivacySettings: ResolverTypeWrapper<PrivacySettings>;
   Profile: ResolverTypeWrapper<Profile>;
   ProfileSummary: ResolverTypeWrapper<ProfileSummary>;
   ProposeMatchResultInput: ProposeMatchResultInput;
@@ -1028,6 +1060,7 @@ export type ResolversTypes = ResolversObject<{
   TournamentTeamRegistrationResult: ResolverTypeWrapper<TournamentTeamRegistrationResult>;
   UpdateClubSlotInput: UpdateClubSlotInput;
   UpdateCourtPricingInput: UpdateCourtPricingInput;
+  UpdatePrivacyInput: UpdatePrivacyInput;
   UserRole: UserRole;
   VoteMatchResultInput: VoteMatchResultInput;
   VoteSubmissionResult: ResolverTypeWrapper<VoteSubmissionResult>;
@@ -1083,6 +1116,7 @@ export type ResolversParentTypes = ResolversObject<{
   MatchResultSubmission: MatchResultSubmission;
   MatchResultVote: MatchResultVote;
   Mutation: Record<PropertyKey, never>;
+  PrivacySettings: PrivacySettings;
   Profile: Profile;
   ProfileSummary: ProfileSummary;
   ProposeMatchResultInput: ProposeMatchResultInput;
@@ -1100,6 +1134,7 @@ export type ResolversParentTypes = ResolversObject<{
   TournamentTeamRegistrationResult: TournamentTeamRegistrationResult;
   UpdateClubSlotInput: UpdateClubSlotInput;
   UpdateCourtPricingInput: UpdateCourtPricingInput;
+  UpdatePrivacyInput: UpdatePrivacyInput;
   VoteMatchResultInput: VoteMatchResultInput;
   VoteSubmissionResult: VoteSubmissionResult;
 }>;
@@ -1404,16 +1439,26 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   toggleSlotBlock?: Resolver<ResolversTypes['ClubSlotMutationResult'], ParentType, ContextType, RequireFields<MutationToggleSlotBlockArgs, 'input'>>;
   updateClubSlot?: Resolver<ResolversTypes['ClubSlotMutationResult'], ParentType, ContextType, RequireFields<MutationUpdateClubSlotArgs, 'input'>>;
   updateCourtPricing?: Resolver<ResolversTypes['CourtPricingMutationResult'], ParentType, ContextType, RequireFields<MutationUpdateCourtPricingArgs, 'input'>>;
+  updatePrivacy?: Resolver<ResolversTypes['PrivacySettings'], ParentType, ContextType, RequireFields<MutationUpdatePrivacyArgs, 'input'>>;
   voteMatchResult?: Resolver<ResolversTypes['VoteSubmissionResult'], ParentType, ContextType, RequireFields<MutationVoteMatchResultArgs, 'input'>>;
+}>;
+
+export type PrivacySettingsResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['PrivacySettings'] = ResolversParentTypes['PrivacySettings']> = ResolversObject<{
+  isPublic?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  showDivision?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  showHistory?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  showPosition?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  showStats?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
 }>;
 
 export type ProfileResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Profile'] = ResolversParentTypes['Profile']> = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  division?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  division?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
-  matchesPlayed?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
-  matchesWon?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  isPrivate?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
+  matchesPlayed?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  matchesWon?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   preferredPosition?: Resolver<Maybe<ResolversTypes['PlayerPosition']>, ParentType, ContextType>;
   role?: Resolver<ResolversTypes['UserRole'], ParentType, ContextType>;
   winrate?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
@@ -1440,6 +1485,8 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   myClubSlots?: Resolver<Array<ResolversTypes['ManagedClubSlot']>, ParentType, ContextType>;
   myMatches?: Resolver<ResolversTypes['MatchHistoryConnection'], ParentType, ContextType, Partial<QueryMyMatchesArgs>>;
   myProfile?: Resolver<ResolversTypes['Profile'], ParentType, ContextType>;
+  mySettings?: Resolver<ResolversTypes['PrivacySettings'], ParentType, ContextType>;
+  profile?: Resolver<Maybe<ResolversTypes['Profile']>, ParentType, ContextType, RequireFields<QueryProfileArgs, 'id'>>;
   slotAuditLog?: Resolver<Array<ResolversTypes['SlotAuditLog']>, ParentType, ContextType, RequireFields<QuerySlotAuditLogArgs, 'slotId'>>;
   slotImpactPreview?: Resolver<ResolversTypes['SlotImpactPreview'], ParentType, ContextType, RequireFields<QuerySlotImpactPreviewArgs, 'slotIds'>>;
 }>;
@@ -1564,6 +1611,7 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   MatchResultSubmission?: MatchResultSubmissionResolvers<ContextType>;
   MatchResultVote?: MatchResultVoteResolvers<ContextType>;
   Mutation?: MutationResolvers<ContextType>;
+  PrivacySettings?: PrivacySettingsResolvers<ContextType>;
   Profile?: ProfileResolvers<ContextType>;
   ProfileSummary?: ProfileSummaryResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;

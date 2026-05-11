@@ -3,13 +3,12 @@
  *
  * Decision Context:
  * - Why: frontend.md forbids inline GraphQL inside UI components — operations live here.
- *   Frontend codegen isn't wired up yet, so we keep a hand-typed mirror of the schema
- *   until it is. If you edit the query, update BOTH `profile.graphql` and this file.
- * - Enums mirror the backend schema exactly (`player` → `PLAYER`, etc.) so the frontend
- *   can compare without a runtime mapping layer.
- * - MatchHistoryItem.scoreA/scoreB are always null until "registrar resultado" US is merged.
- *   The types include them as nullable so the UI can conditionally render scores when
- *   that US is eventually implemented.
+ *   Frontend codegen isn't wired up yet, so we keep a hand-typed mirror of the schema.
+ *   If you edit the query, update BOTH `profile.graphql` and this file.
+ * - Privacy fields: Profile fields are nullable when the owner has disabled them.
+ *   `isPrivate` is true when the profile is private and the viewer is not the owner.
+ * - PrivacySettings is only fetched via mySettings (owner only). UpdatePrivacyInput
+ *   allows partial updates — all fields are optional.
  * - Previously fixed bugs: none relevant.
  */
 
@@ -28,11 +27,34 @@ export interface Profile {
   displayName: string;
   avatarUrl: string | null;
   role: UserRole;
+  /** Null if owner set showPosition=false and viewer is not the owner */
   preferredPosition: PlayerPosition | null;
-  division: number;
-  matchesPlayed: number;
-  matchesWon: number;
+  /** Null if owner set showDivision=false and viewer is not the owner */
+  division: number | null;
+  /** Null if owner set showStats=false and viewer is not the owner */
+  matchesPlayed: number | null;
+  /** Null if owner set showStats=false and viewer is not the owner */
+  matchesWon: number | null;
+  /** Null if owner set showStats=false or matchesPlayed=0 */
   winrate: number | null;
+  /** True when this profile is private and the viewer is not the owner */
+  isPrivate: boolean | null;
+}
+
+export interface PrivacySettings {
+  isPublic: boolean;
+  showStats: boolean;
+  showHistory: boolean;
+  showPosition: boolean;
+  showDivision: boolean;
+}
+
+export interface UpdatePrivacyInput {
+  isPublic?: boolean;
+  showStats?: boolean;
+  showHistory?: boolean;
+  showPosition?: boolean;
+  showDivision?: boolean;
 }
 
 export interface MatchHistoryClub {
@@ -80,6 +102,48 @@ export const GET_MY_PROFILE = /* GraphQL */ `
       matchesPlayed
       matchesWon
       winrate
+      isPrivate
+    }
+  }
+`;
+
+export const GET_PROFILE = /* GraphQL */ `
+  query GetProfile($id: ID!) {
+    profile(id: $id) {
+      id
+      displayName
+      avatarUrl
+      role
+      preferredPosition
+      division
+      matchesPlayed
+      matchesWon
+      winrate
+      isPrivate
+    }
+  }
+`;
+
+export const GET_MY_SETTINGS = /* GraphQL */ `
+  query GetMySettings {
+    mySettings {
+      isPublic
+      showStats
+      showHistory
+      showPosition
+      showDivision
+    }
+  }
+`;
+
+export const UPDATE_PRIVACY = /* GraphQL */ `
+  mutation UpdatePrivacy($input: UpdatePrivacyInput!) {
+    updatePrivacy(input: $input) {
+      isPublic
+      showStats
+      showHistory
+      showPosition
+      showDivision
     }
   }
 `;

@@ -1,0 +1,582 @@
+---
+/**
+ * Perfil público — /perfil/[id] (SSR, auth required)
+ *
+ * Decision Context:
+ * - Why SSR: the profile(id) query requires auth (the resolver calls requireAuth) and
+ *   the response varies per-viewer (privacy filtering is applied server-side). Static
+ *   rendering would embed a single visitor's filtered view for everyone.
+ * - UUID regex: uses a permissive regex (\w+-\w+-\w+-\w+-\w+) to avoid rejecting valid
+ *   seed UUIDs that may differ from the canonical RFC format.
+ * - Privacy handling: when isPrivate=true (backend returned a limited profile), we render
+ *   only the name + avatar and show the "perfil privado" message. Stats, position, and
+ *   division sections are omitted entirely to avoid empty placeholders confusing the user.
+ * - Own profile redirect: if the authenticated user visits their own /perfil/[id], we
+ *   redirect to /perfil (the full self-view) instead of showing the privacy-filtered view.
+ * - Auth: middleware guarantees an access token is present. We still read the cookie
+ *   directly here to forward it to the backend (same pattern as /perfil.astro).
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
+import { Volleyball, Lock, ArrowLeft, BarChart3 } from 'lucide-react';
+import Layout from '../../layouts/Layout.astro';
+import { ACCESS_TOKEN_COOKIE } from '../../lib/auth';
+import {
+  GET_PROFILE,
+  type Profile,
+} from '../../graphql/operations/profile';
+
+const { id } = Astro.params;
+
+// Permissive UUID regex — accepts seed UUIDs that may not match strict RFC format
+const UUID_LIKE = /^[\w-]{8,}$/;
+if (!id || !UUID_LIKE.test(id)) {
+  return Astro.redirect('/partidos');
+}
+
+const backendUrl =
+  import.meta.env.PRIVATE_BACKEND_URL ||
+  process.env.PRIVATE_BACKEND_URL ||
+  'http://localhost:4000';
+const graphqlUrl =
+  import.meta.env.PUBLIC_GRAPHQL_URL ||
+  process.env.PUBLIC_GRAPHQL_URL ||
+  `${backendUrl}/graphql`;
+
+const user = Astro.locals.user;
+const accessToken = Astro.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
+const displayName = user?.displayName || user?.email || 'Jugador';
+
+// If the user is viewing their own profile, redirect to /perfil (full self-view)
+if (user?.id === id) {
+  return Astro.redirect('/perfil');
+}
+
+const POSITION_LABEL: Record<string, string> = {
+  GOALKEEPER: 'Arquero',
+  DEFENDER: 'Defensor',
+  MIDFIELDER: 'Mediocampista',
+  FORWARD: 'Delantero',
+};
+
+let profile: Profile | null = null;
+let errorMessage: string | null = null;
+
+if (!accessToken) {
+  errorMessage = 'Sesión inválida. Iniciá sesión nuevamente.';
+} else {
+  const res = await fetch(graphqlUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ query: GET_PROFILE, variables: { id } }),
+  });
+
+  const json = (await res.json().catch(() => null)) as
+    | { data?: { profile: Profile | null }; errors?: Array<{ message: string }> }
+    | null;
+
+  if (!json || !res.ok) {
+    errorMessage = 'No pudimos cargar el perfil. Intentá de nuevo en unos segundos.';
+  } else if (json.errors?.length) {
+    errorMessage = json.errors[0]?.message ?? 'Error al cargar el perfil.';
+  } else if (json.data?.profile) {
+    profile = json.data.profile;
+  } else {
+    errorMessage = 'Este jugador no existe o su perfil no está disponible.';
+  }
+}
+
+const positionLabel = profile?.preferredPosition
+  ? (POSITION_LABEL[profile.preferredPosition] ?? null)
+  : null;
+
+const winrateDisplay =
+  profile?.winrate != null
+    ? `${profile.winrate.toFixed(1)}%`
+    : '—';
+---
+
+<Layout title={profile ? `Perfil de ${profile.displayName} — Sumate Ya` : 'Perfil — Sumate Ya'}>
+  <div class="app-shell">
+    <!-- Topbar -->
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-brand">
+          <span class="topbar-ball">
+            <Volleyball size={20} strokeWidth={2} aria-hidden="true" />
+          </span>
+          <span class="topbar-name">SUMATE YA</span>
+        </div>
+        <div class="topbar-actions">
+          <a href="/partidos" class="nav-link">Partidos</a>
+          <span class="user-badge">
+            <span class="user-dot"></span>
+            {displayName}
+          </span>
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="btn-logout">Salir</button>
+          </form>
+        </div>
+      </div>
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <main class="page-content">
+      <div class="back-row">
+        <a href="/partidos" class="back-link">
+          <ArrowLeft size={16} strokeWidth={2} aria-hidden="true" />
+          Volver
+        </a>
+      </div>
+
+      {profile ? (
+        <div class="profile-view">
+          <!-- Profile card -->
+          <article class="profile-card">
+            <!-- Card header -->
+            <div class="card-header">
+              {profile.division != null && (
+                <span class="division-badge">DIV {profile.division}</span>
+              )}
+              <span class="role-badge">Jugador</span>
+            </div>
+
+            <!-- Avatar -->
+            <div class="avatar-ring">
+              {profile.avatarUrl ? (
+                <img
+                  class="avatar-img"
+                  src={profile.avatarUrl}
+                  alt={`Foto de ${profile.displayName}`}
+                  width="120"
+                  height="120"
+                  loading="eager"
+                />
+              ) : (
+                <div class="avatar-placeholder" aria-label="Sin foto de perfil">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+                  </svg>
+                </div>
+              )}
+            </div>
+
+            <!-- Identity -->
+            <div class="player-identity">
+              <h1 class="player-name">{profile.displayName}</h1>
+              {positionLabel && !profile.isPrivate && (
+                <span class="position-tag">{positionLabel}</span>
+              )}
+              {profile.isPrivate && (
+                <span class="private-tag">
+                  <Lock size={12} strokeWidth={2.5} aria-hidden="true" />
+                  Perfil privado
+                </span>
+              )}
+            </div>
+
+            {profile.isPrivate ? (
+              <!-- Private profile message -->
+              <div class="private-message">
+                <p class="private-message-text">
+                  Este jugador mantiene su perfil privado.
+                </p>
+                <p class="private-message-sub">
+                  Solo se muestra su nombre y foto en los partidos donde participa.
+                </p>
+              </div>
+            ) : (
+              <!-- Stats (visible only if not private and showStats=true) -->
+              {profile.matchesPlayed != null ? (
+                <div class="stats-grid">
+                  <div class="stat-cell">
+                    <span class="stat-value">{profile.matchesPlayed}</span>
+                    <span class="stat-label">Partidos</span>
+                  </div>
+                  <div class="stat-cell stat-divider">
+                    <span class="stat-value">{profile.matchesWon ?? 0}</span>
+                    <span class="stat-label">Victorias</span>
+                  </div>
+                  <div class="stat-cell">
+                    <span class="stat-value winrate">{winrateDisplay}</span>
+                    <span class="stat-label">Efectividad</span>
+                  </div>
+                </div>
+              ) : (
+                <div class="stats-hidden">
+                  <BarChart3 size={16} strokeWidth={2} aria-hidden="true" />
+                  <span>Estadísticas no disponibles</span>
+                </div>
+              )}
+            )}
+          </article>
+        </div>
+      ) : (
+        <div class="error-card" role="alert">
+          <p class="error-title">No pudimos mostrar este perfil</p>
+          <p class="error-body">{errorMessage}</p>
+          <a href="/partidos" class="btn-primary">Ir a partidos</a>
+        </div>
+      )}
+    </main>
+  </div>
+</Layout>
+
+<style>
+  .app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---- Topbar ---- */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(7, 15, 31, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .topbar-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 1.25rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 0.5rem; }
+  .topbar-ball { line-height: 1; display: inline-flex; color: hsl(35 100% 55%); }
+  .topbar-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.35rem;
+    letter-spacing: 0.1em;
+    color: #ffffff;
+  }
+  .topbar-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .topbar-accent {
+    height: 2px;
+    background: linear-gradient(90deg, hsl(35 100% 48%), hsl(216 85% 45%), transparent);
+  }
+  .nav-link {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(215 20% 65%);
+    text-decoration: none;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .nav-link:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 94%); }
+  .user-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(246, 164, 0, 0.12);
+    border: 1px solid rgba(246, 164, 0, 0.25);
+    color: hsl(35 100% 65%);
+    border-radius: 20px;
+    padding: 0.25rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: 'Barlow Condensed', sans-serif;
+    letter-spacing: 0.03em;
+  }
+  .user-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: hsl(35 100% 55%);
+    box-shadow: 0 0 4px hsl(35 100% 55%);
+  }
+  .btn-logout {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8125rem;
+    font-family: 'Barlow', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    color: hsl(215 20% 60%);
+    transition: background 0.15s, color 0.15s;
+  }
+  .btn-logout:hover { background: rgba(255,255,255,0.07); color: hsl(210 20% 90%); }
+
+  /* ---- Page ---- */
+  .page-content {
+    flex: 1;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 2rem 1.25rem;
+  }
+
+  .back-row {
+    margin-bottom: 1.5rem;
+  }
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(215 20% 60%);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .back-link:hover { color: hsl(210 20% 90%); }
+
+  /* ---- Profile card ---- */
+  .profile-view {
+    display: flex;
+    justify-content: center;
+  }
+
+  .profile-card {
+    background: hsl(220 55% 11%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    overflow: hidden;
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  }
+
+  .card-header {
+    width: 100%;
+    padding: 0.75rem 1.25rem;
+    background: linear-gradient(135deg, hsl(216 85% 22%), hsl(220 72% 15%));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .division-badge {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.9rem;
+    letter-spacing: 0.12em;
+    color: hsl(35 100% 65%);
+    background: rgba(246,164,0,0.12);
+    border: 1px solid rgba(246,164,0,0.25);
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+  }
+  .role-badge {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(215 20% 65%);
+  }
+
+  .avatar-ring {
+    margin-top: 1.75rem;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    padding: 3px;
+    background: linear-gradient(135deg, hsl(35 100% 48%), hsl(216 85% 45%));
+    box-shadow: 0 0 20px rgba(246,164,0,0.2);
+    flex-shrink: 0;
+  }
+  .avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    background: hsl(220 40% 16%);
+    display: block;
+  }
+  .avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: hsl(220 40% 16%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: hsl(215 20% 40%);
+  }
+
+  .player-identity {
+    margin-top: 1.1rem;
+    text-align: center;
+    padding: 0 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .player-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1;
+  }
+  .position-tag {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: hsl(35 100% 55%);
+    background: rgba(246,164,0,0.1);
+    border: 1px solid rgba(246,164,0,0.2);
+    padding: 0.2rem 0.75rem;
+    border-radius: 20px;
+  }
+  .private-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: hsl(215 20% 55%);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 0.2rem 0.7rem;
+    border-radius: 20px;
+  }
+
+  /* ---- Private message ---- */
+  .private-message {
+    width: 100%;
+    margin-top: 1.25rem;
+    padding: 1.25rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    text-align: center;
+  }
+  .private-message-text {
+    margin: 0 0 0.4rem;
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.9375rem;
+    color: hsl(215 20% 70%);
+    font-weight: 500;
+  }
+  .private-message-sub {
+    margin: 0;
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.825rem;
+    color: hsl(215 20% 45%);
+    line-height: 1.45;
+  }
+
+  /* ---- Stats ---- */
+  .stats-grid {
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: 1.25rem 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .stat-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+  }
+  .stat-divider {
+    border-left: 1px solid rgba(255,255,255,0.06);
+    border-right: 1px solid rgba(255,255,255,0.06);
+  }
+  .stat-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem;
+    color: #ffffff;
+    line-height: 1;
+  }
+  .stat-value.winrate { color: hsl(35 100% 55%); }
+  .stat-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(215 20% 50%);
+  }
+
+  .stats-hidden {
+    width: 100%;
+    margin-top: 1.25rem;
+    padding: 1rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(215 20% 40%);
+  }
+
+  /* ---- Error ---- */
+  .error-card {
+    max-width: 560px;
+    margin: 2rem auto;
+    text-align: center;
+    padding: 2rem 1.5rem;
+    border-radius: 0.75rem;
+    background: hsl(220 55% 11%);
+    border: 1px solid hsl(0 72% 51% / 0.35);
+  }
+  .error-title {
+    margin: 0 0 0.5rem;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.5rem;
+    letter-spacing: 0.04em;
+    color: hsl(0 72% 70%);
+  }
+  .error-body {
+    margin: 0 0 1.25rem;
+    color: hsl(215 20% 60%);
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.95rem;
+  }
+  .btn-primary {
+    display: inline-block;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    padding: 0.6rem 1.25rem;
+    border-radius: 6px;
+    background: hsl(35 100% 48%);
+    color: hsl(220 72% 7%);
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: hsl(35 100% 55%); }
+
+  /* ── Responsive ── */
+  @media (max-width: 767px) {
+    .topbar-actions .nav-link { display: none; }
+    .page-content { padding: 1.25rem 1rem; }
+    .profile-card { max-width: 100%; }
+  }
+</style>
