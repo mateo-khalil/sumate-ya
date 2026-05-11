@@ -256,7 +256,7 @@ const nombre = user?.displayName || user?.email;
 
   .section-title {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 2.5rem;
+    font-size: clamp(1.75rem, 5vw, 2.5rem);
     font-weight: 400;
     letter-spacing: 0.04em;
     color: #ffffff;
@@ -274,5 +274,27 @@ const nombre = user?.displayName || user?.email;
   /* ---- Matches section ---- */
   .matches-section {
     min-height: 200px;
+  }
+
+  /* ── Responsive ───────────────────────────── */
+  @media (max-width: 767px) {
+    .topbar-inner { padding: 0 1rem; }
+    /* Hide secondary nav actions on mobile — keep only login/logout */
+    .btn-crear, .btn-panel-club, .nav-link { display: none; }
+    /* Truncate user badge on mobile */
+    .user-badge {
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0.25rem 0.625rem;
+    }
+    .page-content { padding: 1.25rem 1rem; }
+    .section-header { margin-bottom: 1.5rem; }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .page-content { padding: 2rem 1.25rem; }
+    .topbar-inner { gap: 0.5rem; }
+    .topbar-actions { gap: 0.5rem; }
   }
 </style>

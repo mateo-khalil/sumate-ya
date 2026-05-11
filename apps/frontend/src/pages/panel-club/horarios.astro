@@ -23,6 +23,7 @@ export const prerender = false;
 
 import { Volleyball } from 'lucide-react';
 import ClubSidebar from '../../components/panel-club/ClubSidebar.astro';
+import ClubMobileNav from '../../components/panel-club/ClubMobileNav.tsx';
 import Layout from '../../layouts/Layout.astro';
 import SlotManager from '../../components/club/SlotManager';
 import { readAccessToken } from '../../lib/auth';
@@ -90,6 +91,9 @@ const nombre = user.displayName || user.email;
           <span class="topbar-name">SUMATE YA</span>
           <span class="topbar-role-pill">CLUB</span>
         </div>
+        <!-- Mobile nav: hamburger button (hidden on md+) -->
+        <ClubMobileNav client:load currentPath={Astro.url.pathname} userName={nombre} />
+        <!-- Desktop actions: hidden on mobile -->
         <div class="topbar-actions">
           <span class="user-badge">
             <span class="user-dot"></span>
@@ -266,7 +270,7 @@ const nombre = user.displayName || user.email;
 
   .section-title {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 2.5rem;
+    font-size: clamp(1.6rem, 5vw, 2.5rem);
     font-weight: 400;
     letter-spacing: 0.04em;
     color: #ffffff;
@@ -279,5 +283,15 @@ const nombre = user.displayName || user.email;
     color: hsl(215 20% 50%);
     font-size: 0.9rem;
     font-family: 'Barlow', sans-serif;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 767px) {
+    .topbar-actions { display: none; }
+    .page-layout { padding: 1rem; gap: 0; }
+    .section-header { margin-bottom: 1rem; }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .page-layout { padding: 1.5rem 1.25rem; gap: 1.5rem; }
   }
 </style>
