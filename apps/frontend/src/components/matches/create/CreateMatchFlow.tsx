@@ -247,6 +247,13 @@ export default function CreateMatchFlow({ initialClubs, redirectBase = '/partido
         }
         .btn-next:hover:not(:disabled) { background: hsl(35 100% 55%); }
         .btn-next:disabled { opacity: 0.35; cursor: not-allowed; }
+        /* ── Responsive ── */
+        @media (max-width: 480px) {
+          .btn-next, .btn-back { min-height: 44px; padding: 0.75rem 1rem; }
+          .wizard-nav { flex-direction: column-reverse; gap: 0.5rem; }
+          .btn-next, .btn-back { width: 100%; }
+          .step-num { width: 20px; height: 20px; font-size: 0.65rem; }
+        }
       `}</style>
     </div>
   );

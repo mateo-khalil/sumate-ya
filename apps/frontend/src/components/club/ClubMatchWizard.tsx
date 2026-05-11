@@ -472,4 +472,16 @@ const WIZARD_STYLES = `
     transition:color 0.12s; padding:0;
   }
   .btn-ghost:hover { color:hsl(210 20% 80%); }
+  /* ── Responsive ── */
+  @media (max-width: 540px) {
+    .wizard-card { padding: 1.25rem 1rem; border-radius: 10px; }
+    .step-footer { flex-direction: column-reverse; gap: 0.5rem; }
+    .btn-primary, .btn-secondary {
+      width: 100%; justify-content: center;
+      padding: 0.75rem 1rem; min-height: 44px;
+    }
+    .btn-ghost { align-self: center; }
+    .confirm-row { flex-direction: column; gap: 0.15rem; }
+    .confirm-row span { font-size: 0.72rem; }
+  }
 `;
