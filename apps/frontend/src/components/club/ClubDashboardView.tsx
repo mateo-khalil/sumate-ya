@@ -329,6 +329,16 @@ export default function ClubDashboardView(props: Props) {
         .slot-action-btn--primary:hover { background: rgba(246,164,0,0.2); }
         .slot-action-btn--danger { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.25); color: hsl(0 72% 65%); }
         .slot-action-btn--danger:hover { background: rgba(239,68,68,0.18); }
+        /* ── Responsive ── */
+        @media (max-width: 767px) {
+          .dash-topbar { padding: 0.625rem 0; }
+          .dash-topbar-right { display: none; } /* action links move to mobile drawer */
+          .view-btn { min-height: 44px; }
+          .link-btn, .action-btn { min-height: 44px; }
+          /* Slot action panel full-width on mobile */
+          .slot-panel { width: 100%; max-width: 100%; border-radius: 0; position: fixed; bottom: 0; top: auto; left: 0; right: 0; border-bottom: none; }
+          .slot-panel-backdrop { align-items: flex-end; }
+        }
       `}</style>
     </div>
   );
