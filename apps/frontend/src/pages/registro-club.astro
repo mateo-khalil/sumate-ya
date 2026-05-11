@@ -285,7 +285,8 @@ if (Astro.request.method === 'POST') {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px; padding: 0.7rem 0.875rem;
-    font-size: 0.9375rem; font-family: 'Barlow', sans-serif;
+    /* min 16px to prevent iOS Safari from auto-zooming on focus */
+    font-size: 1rem; font-family: 'Barlow', sans-serif;
     color: hsl(210 20% 94%);
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     outline: none; width: 100%;
@@ -351,4 +352,10 @@ if (Astro.request.method === 'POST') {
   /* ── Required indicator ── */
   .req-star { color: hsl(0 72% 60%); font-weight: 700; }
 
+  /* ── Responsive ───────────────────────────── */
+  @media (max-width: 480px) {
+    .reg-card { padding: 1.75rem 1.125rem; border-radius: 12px; }
+    .reg-wrapper { padding: 1rem; align-items: flex-start; padding-top: 2rem; }
+    .brand-name { font-size: 1.75rem; }
+  }
 </style>

@@ -91,6 +91,10 @@ export default function CalendarGrid({
     <div className="cal-wrap">
       {navSlot}
 
+      {/* cal-scroll-area: on mobile this becomes the horizontal scroll container
+          so header and body columns stay aligned when scrolling left/right */}
+      <div className="cal-scroll-area">
+
       {/* Day headers */}
       <div className="cal-header-row" style={{ gridTemplateColumns: gridCols }}>
         <div className="cal-corner" />
@@ -153,6 +157,8 @@ export default function CalendarGrid({
           </div>
         ))}
       </div>
+
+      </div>{/* end cal-scroll-area */}
 
       {legendSlot}
 
@@ -297,6 +303,42 @@ export default function CalendarGrid({
         .cal-led--past-busy {
           background: repeating-linear-gradient(45deg, hsl(var(--muted)/0.2) 0 4px, hsl(var(--muted)/0.32) 4px 8px);
           border: 1px solid hsl(var(--muted-foreground) / 0.35);
+        }
+        /* ── Mobile: horizontal scroll + sticky time column ──────── */
+        /* On mobile the 7-column grid exceeds the screen width.
+         * cal-scroll-area becomes the horizontal scroll container so
+         * header and body rows scroll together and stay aligned.
+         * The time column (left) and corner are made sticky-left so
+         * the hour labels remain visible when scrolling right.
+         * Previously fixed bugs: none relevant (new responsive feature). */
+        .cal-scroll-area { } /* desktop: transparent wrapper */
+        @media (max-width: 767px) {
+          .cal-scroll-area {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          /* Minimum column width prevents day columns from being too narrow */
+          .cal-day-head { min-width: 74px; }
+          .cal-cell     { min-width: 74px; }
+          /* Sticky time column so hours stay visible when scrolling right */
+          .cal-time {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            background: hsl(var(--card));
+          }
+          /* Sticky corner (top-left intersection of header + time column) */
+          .cal-corner {
+            position: sticky;
+            left: 0;
+            z-index: 4;
+            background: hsl(var(--card));
+          }
+          /* Header stays at top within the scroll area */
+          .cal-header-row { z-index: 3; }
+          /* Reduce legend text on very small screens */
+          .cal-legend { gap: 0.5rem; padding: 0.5rem 0.75rem; }
+          .cal-legend-item { font-size: 0.65rem; }
         }
       `}</style>
     </div>

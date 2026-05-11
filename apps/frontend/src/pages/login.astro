@@ -410,4 +410,13 @@ if (Astro.request.method === 'POST') {
   .register-link a:hover {
     text-decoration: underline;
   }
+
+  /* ── Responsive ───────────────────────────── */
+  @media (max-width: 480px) {
+    .login-card {
+      padding: 2rem 1.25rem;
+      border-radius: 12px;
+    }
+    .login-wrapper { padding: 1rem; }
+  }
 </style>

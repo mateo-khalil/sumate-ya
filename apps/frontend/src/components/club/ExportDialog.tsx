@@ -161,6 +161,19 @@ export default function ExportDialog({ filters, onExport, onClose }: Props) {
           }
           .btn-download:hover { background: hsl(35 100% 42%); }
           .btn-download:disabled { opacity: 0.6; cursor: not-allowed; }
+          /* ── Responsive: bottom-sheet on mobile ── */
+          @media (max-width: 600px) {
+            .export-backdrop { align-items: flex-end; padding: 0; }
+            .export-panel {
+              width: 100%; border-radius: 16px 16px 0 0;
+              padding: 1.25rem 1rem;
+            }
+            .export-close { min-width: 44px; min-height: 44px; justify-content: center; }
+            .export-actions { flex-direction: column-reverse; }
+            .btn-cancel, .btn-download {
+              width: 100%; justify-content: center; min-height: 44px;
+            }
+          }
         `}</style>
       </div>
     </div>

@@ -182,4 +182,14 @@ try {
     padding: 1.75rem;
     box-shadow: 0 4px 24px rgba(0,0,0,0.35);
   }
+
+  /* ── Responsive ── */
+  @media (max-width: 767px) {
+    .topbar-actions .nav-link,
+    .topbar-actions .btn-panel-club { display: none; }
+    .page-content { padding: 1.25rem 1rem; }
+    .section-title { font-size: clamp(1.6rem, 5vw, 2.5rem); }
+    .section-header { margin-bottom: 1.25rem; }
+    .wizard-container { padding: 1.25rem 1rem; border-radius: 0.875rem; }
+  }
 </style>

@@ -608,4 +608,23 @@ if (!accessToken) {
     font-size: 0.875rem;
     font-family: 'Barlow', sans-serif;
   }
+
+  /* ── Responsive ───────────────────────────────────────────── */
+  @media (max-width: 767px) {
+    /* Topbar */
+    .topbar-actions .nav-link,
+    .topbar-actions .btn-crear { display: none; }
+    /* Page */
+    .page-content { padding: 1.25rem 1rem; }
+    .section-header { margin-bottom: 1.25rem; }
+    .section-title { font-size: clamp(1.75rem, 6vw, 2.5rem); }
+    /* Modal */
+    .modal-content { padding: 1.25rem 1rem; }
+    /* Profile card */
+    .profile-card-wrapper { max-width: 100%; }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .page-content { padding: 2rem 1.25rem; }
+    .section-title { font-size: 2rem; }
+  }
 </style>

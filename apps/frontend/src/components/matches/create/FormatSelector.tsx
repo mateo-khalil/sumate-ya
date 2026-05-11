@@ -127,9 +127,10 @@ export default function FormatSelector({
       <style>{`
         .format-step { display: flex; flex-direction: column; gap: 1.25rem; }
         .format-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+        @media (max-width: 400px) { .format-grid { grid-template-columns: 1fr; } }
         .fmt-card {
           display: flex; flex-direction: column; align-items: center;
-          gap: 0.3rem; padding: 1.25rem 0.75rem;
+          gap: 0.3rem; padding: 1.25rem 0.75rem; min-height: 44px;
           background: hsl(220 55% 11%);
           border: 1px solid rgba(255,255,255,0.07);
           border-radius: 0.75rem; cursor: pointer;

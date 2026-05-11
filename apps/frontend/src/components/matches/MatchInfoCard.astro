@@ -319,4 +319,10 @@ function initial(name: string) {
     font-size: 0.72rem;
     color: hsl(215 20% 50%);
   }
+
+  /* ── Responsive ── */
+  @media (max-width: 767px) {
+    .info-card { padding: 1.25rem 1rem; border-radius: 0.875rem; }
+    .match-title { font-size: clamp(1.4rem, 5vw, 2rem); }
+  }
 </style>

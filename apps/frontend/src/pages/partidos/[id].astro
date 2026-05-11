@@ -532,4 +532,29 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
     background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.08);
     border-radius: 1rem; padding: 1.5rem 2rem;
   }
+
+  /* ── Responsive ───────────────────────────────────────────── */
+  @media (max-width: 767px) {
+    /* Topbar: hide secondary nav items, keep login/logout */
+    .topbar-actions .nav-link,
+    .topbar-actions .btn-panel-club,
+    .topbar-actions .btn-crear { display: none; }
+    .topbar-actions .user-badge {
+      max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    /* Page */
+    .page-content { padding: 1.25rem 1rem; }
+    .match-detail { gap: 1rem; }
+    /* Teams: already 1-col at 640px, reinforce padding */
+    .team-card { padding: 1rem 1.125rem; }
+    /* Banners */
+    .banner { padding: 0.75rem 1rem; font-size: 0.875rem; }
+    /* Fallback card */
+    .info-card-fallback { padding: 1.25rem 1rem; }
+    /* Titles */
+    .nf-title { font-size: 1.5rem; }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .page-content { padding: 2rem 1.25rem; }
+  }
 </style>
