@@ -195,8 +195,14 @@ export default function MatchDetailModal({ match, onClose }: Props) {
             background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
             border-radius: 8px; padding: 0.4rem; cursor: pointer; color: hsl(215 20% 60%);
             display: inline-flex; transition: background 0.12s;
+            min-width: 44px; min-height: 44px; /* iOS touch target */
+            align-items: center; justify-content: center;
           }
           .modal-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+          /* On mobile, panel takes full width */
+          @media (max-width: 480px) {
+            .modal-panel { width: 100%; padding: 1.25rem 1rem; }
+          }
           .modal-status {
             font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem;
             font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;

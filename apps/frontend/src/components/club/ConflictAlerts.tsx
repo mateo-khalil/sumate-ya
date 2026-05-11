@@ -81,7 +81,8 @@ export default function ConflictAlerts({ conflicts }: Props) {
         .alert-meta { font-size: 0.75rem; color: hsl(0 72% 50%); margin-top: 2px; }
         .alert-dismiss {
           background: none; border: none; cursor: pointer; color: hsl(0 72% 50%);
-          display: inline-flex; padding: 2px; flex-shrink: 0;
+          display: inline-flex; align-items: center; justify-content: center;
+          min-width: 44px; min-height: 44px; flex-shrink: 0;
           transition: color 0.12s;
         }
         .alert-dismiss:hover { color: hsl(0 72% 70%); }
