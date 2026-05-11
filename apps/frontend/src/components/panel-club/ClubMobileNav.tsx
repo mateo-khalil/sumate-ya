@@ -17,7 +17,7 @@
 import { useState } from 'react';
 import {
   Menu, X, LayoutDashboard, Calendar, Plus,
-  Volleyball, Users, Settings, BarChart3, LogOut,
+  Volleyball, Users, Settings, BarChart3, LogOut, Trophy,
 } from 'lucide-react';
 
 interface Props {
@@ -29,6 +29,7 @@ const NAV_LINKS = [
   { href: '/panel-club/dashboard', icon: LayoutDashboard, label: 'Dashboard', highlight: false },
   { href: '/panel-club/crear-partido', icon: Plus, label: 'Crear partido', highlight: true },
   { href: '/panel-club/horarios', icon: Calendar, label: 'Horarios', highlight: false },
+  { href: '/torneos/crear', icon: Trophy, label: 'Crear torneo', highlight: false },
 ];
 
 const PLACEHOLDER_LINKS = [

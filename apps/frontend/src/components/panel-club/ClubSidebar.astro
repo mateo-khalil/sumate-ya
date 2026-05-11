@@ -17,7 +17,7 @@
  *     creation feature unreachable from navigation. Fixed by adding it here.
  */
 
-import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3, Trophy } from 'lucide-react';
 
 const { currentPath } = Astro.props;
 
@@ -52,6 +52,14 @@ function isActive(href: string): boolean {
       >
         <span class="sidebar-icon"><Calendar size={16} strokeWidth={2} aria-hidden="true" /></span>
         Horarios
+      </a>
+
+      <a
+        href="/torneos/crear"
+        class={`sidebar-link${isActive('/torneos/crear') ? ' sidebar-link--active' : ''}`}
+      >
+        <span class="sidebar-icon"><Trophy size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Crear torneo
       </a>
 
       <a href="#" class="sidebar-link sidebar-link--placeholder">
