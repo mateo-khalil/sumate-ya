@@ -32,6 +32,7 @@ export const resolvers = {
   Mutation: {
     ...matchResolvers.Mutation,
     ...matchResultResolvers.Mutation,
+    ...profileResolvers.Mutation,
     ...clubSlotResolvers.Mutation,
     ...clubMatchResolvers.Mutation,
     ...tournamentResolvers.Mutation,

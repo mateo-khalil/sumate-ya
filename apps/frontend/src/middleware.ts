@@ -42,7 +42,7 @@ import {
 } from './lib/auth';
 
 /** Rutas que requieren autenticación */
-const PROTECTED_ROUTES: string[] = ['/panel-club', '/perfil', '/partidos/crear', '/torneos/crear'];
+const PROTECTED_ROUTES: string[] = ['/panel-club', '/perfil', '/ajustes', '/partidos/crear', '/torneos/crear'];
 
 /** Rutas restringidas por rol: sólo accesibles para el rol indicado */
 const ROLE_RESTRICTED: Record<string, UserRole> = {

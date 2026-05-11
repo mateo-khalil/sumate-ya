@@ -1,32 +1,61 @@
 /**
- * Profile Service — business logic for player profiles
+ * Profile Service — business logic for player profiles and privacy settings
  *
  * Decision Context:
- * - Why: Services return data only (backend.md). Winrate is computed here, not in the DB,
- *   because `matchesWon` / `matchesPlayed` counters already live on the row and a DB
- *   generated column would not gracefully represent the null-when-zero case.
- * - Caching: TTL = USER_DATA (5 min) matches backend.md guidance "player profiles 5m".
- *   Cache key is scoped per user (`profile:me:<userId>`) so each JWT gets its own entry.
- *   When a mutation lands that updates stats (join match, record result), it MUST call
- *   `cacheDelete(${CACHE_PREFIX.PROFILE_ME}${userId})` to avoid stale stats.
- * - RLS: the service uses `ctx.supabase ?? supabase` so the user-scoped client (created in
- *   the resolver from the caller's JWT) is used for DB reads. The fallback to the singleton
- *   is defensive — `myProfile` always requires auth and the resolver always passes
- *   `ctx.supabase`, but backend.md mandates the pattern for consistency with future services.
- * - Winrate formula: (won / played) * 100, rounded to 2 decimals, or null when played = 0.
- *   Rounding uses Number(fixed(2)) so GraphQL Float stays numeric instead of a string.
+ * - Privacy model (getProfile): when requesterId !== profileId, the service applies
+ *   field-level filtering based on the profile owner's privacy flags:
+ *     · isPublic=false  → only id, displayName, avatarUrl, role; isPrivate=true
+ *     · showStats=false → matchesPlayed, matchesWon, winrate all return null
+ *     · showPosition=false → preferredPosition returns null
+ *     · showDivision=false → division returns null
+ *   The owner always sees all fields (requesterId === profileId path bypasses filtering).
+ * - Why filter in the service and not via RLS: PostgreSQL RLS cannot filter individual
+ *   columns, only rows. A row-level filter on isPublic would let visitors infer privacy
+ *   from a missing row. The backend column-filter approach prevents that information leak.
+ * - Caching: profile:me:<userId> is cached at TTL.USER_DATA (5 min). When privacy
+ *   settings change, we invalidate both the me-cache and the public profile cache.
+ * - updatePrivacy: validates at service layer (Zod), writes with the user-scoped client
+ *   so the RLS UPDATE policy enforces auth.uid() = id. Records an audit log entry after
+ *   a successful update. Invalidates Redis caches so stale data is not served.
+ * - winrate computation: moved into a shared helper to keep both toOwnProfile and
+ *   toPublicProfile consistent.
  * - Previously fixed bugs: none relevant.
  */
 
-import { cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
+import { z } from 'zod';
+import { cacheDelete, cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
 import { supabase } from '../config/supabase.js';
 import {
   PlayerPosition,
   UserRole,
+  type PrivacySettings,
   type Profile,
 } from '../graphql/generated/graphql.js';
-import { profileRepository, type ProfileRow } from '../repositories/profileRepository.js';
+import {
+  profileRepository,
+  type ProfileRow,
+  type ProfileWithPrivacyRow,
+  type PrivacySettingsRow,
+  type UpdatePrivacyFields,
+} from '../repositories/profileRepository.js';
 import type { ServiceContext } from '../types/context.js';
+
+// =====================================================
+// Validation
+// =====================================================
+
+const UpdatePrivacySchema = z
+  .object({
+    isPublic: z.boolean().optional(),
+    showStats: z.boolean().optional(),
+    showHistory: z.boolean().optional(),
+    showPosition: z.boolean().optional(),
+    showDivision: z.boolean().optional(),
+  })
+  .refine(
+    (data) => Object.values(data).some((v) => v !== undefined),
+    { message: 'Debés proporcionar al menos un campo para actualizar' },
+  );
 
 // =====================================================
 // Enum Mapping (DB -> GraphQL)
@@ -45,16 +74,15 @@ const DB_TO_POSITION: Record<string, PlayerPosition> = {
 };
 
 // =====================================================
-// Data Transformation
+// Data Transformation Helpers
 // =====================================================
 
 function computeWinrate(matchesWon: number, matchesPlayed: number): number | null {
   if (matchesPlayed <= 0) return null;
-  const rate = (matchesWon / matchesPlayed) * 100;
-  return Number(rate.toFixed(2));
+  return Number(((matchesWon / matchesPlayed) * 100).toFixed(2));
 }
 
-function toProfile(row: ProfileRow): Profile {
+function toOwnProfile(row: ProfileRow): Profile {
   return {
     id: row.id,
     displayName: row.displayName,
@@ -67,6 +95,49 @@ function toProfile(row: ProfileRow): Profile {
     matchesPlayed: row.matchesPlayed,
     matchesWon: row.matchesWon,
     winrate: computeWinrate(row.matchesWon, row.matchesPlayed),
+    isPrivate: false,
+  };
+}
+
+function toPublicProfile(row: ProfileWithPrivacyRow): Profile {
+  if (!row.isPublic) {
+    return {
+      id: row.id,
+      displayName: row.displayName,
+      avatarUrl: row.avatarUrl,
+      role: DB_TO_ROLE[row.role] ?? UserRole.Player,
+      preferredPosition: null,
+      division: null,
+      matchesPlayed: null,
+      matchesWon: null,
+      winrate: null,
+      isPrivate: true,
+    };
+  }
+
+  return {
+    id: row.id,
+    displayName: row.displayName,
+    avatarUrl: row.avatarUrl,
+    role: DB_TO_ROLE[row.role] ?? UserRole.Player,
+    preferredPosition: row.showPosition && row.preferredPosition
+      ? (DB_TO_POSITION[row.preferredPosition] ?? null)
+      : null,
+    division: row.showDivision ? row.division : null,
+    matchesPlayed: row.showStats ? row.matchesPlayed : null,
+    matchesWon: row.showStats ? row.matchesWon : null,
+    winrate: row.showStats ? computeWinrate(row.matchesWon, row.matchesPlayed) : null,
+    isPrivate: false,
+  };
+}
+
+function toPrivacySettings(row: PrivacySettingsRow): PrivacySettings {
+  return {
+    isPublic: row.isPublic,
+    showStats: row.showStats,
+    showHistory: row.showHistory,
+    showPosition: row.showPosition,
+    showDivision: row.showDivision,
   };
 }
 
@@ -75,13 +146,12 @@ function toProfile(row: ProfileRow): Profile {
 // =====================================================
 
 /**
- * Returns the authenticated user's profile. Requires `ctx.userId` and should be called
- * with a user-scoped Supabase client for RLS enforcement.
+ * Returns the authenticated user's own profile (all fields, no privacy filtering).
  */
 export async function getMyProfile(ctx: ServiceContext): Promise<Profile> {
   if (!ctx.userId) {
     console.warn('[profileService.getMyProfile] Called without userId');
-    throw new Error('Authentication required');
+    throw new Error('Autenticación requerida');
   }
 
   const db = ctx.supabase ?? supabase;
@@ -95,22 +165,133 @@ export async function getMyProfile(ctx: ServiceContext): Promise<Profile> {
     );
 
     if (!row) {
-      console.warn(
-        `[profileService.getMyProfile] Profile not found for userId=${ctx.userId}`,
-      );
-      throw new Error('Profile not found');
+      console.warn(`[profileService.getMyProfile] Profile not found for userId=${ctx.userId}`);
+      throw new Error('Perfil no encontrado');
     }
 
-    return toProfile(row);
+    return toOwnProfile(row);
+  } catch (error) {
+    console.error(`[profileService.getMyProfile] Failed for userId=${ctx.userId}:`, error);
+    throw error instanceof Error ? error : new Error('Error al obtener el perfil');
+  }
+}
+
+/**
+ * Returns another user's profile, applying privacy filtering.
+ * If requesterId === profileId, returns all fields (same as myProfile).
+ */
+export async function getProfile(
+  profileId: string,
+  requesterId: string | null,
+): Promise<Profile | null> {
+  try {
+    if (requesterId === profileId) {
+      const row = await profileRepository.getProfileById(profileId);
+      if (!row) return null;
+      return toOwnProfile(row);
+    }
+
+    const cacheKey = `profile:public:${profileId}`;
+    const row = await cacheGetOrSet<ProfileWithPrivacyRow | null>(
+      cacheKey,
+      () => profileRepository.getProfileWithPrivacy(profileId),
+      CACHE_TTL.USER_DATA,
+    );
+
+    if (!row) return null;
+    return toPublicProfile(row);
   } catch (error) {
     console.error(
-      `[profileService.getMyProfile] Failed for userId=${ctx.userId}:`,
+      `[profileService.getProfile] Failed for profileId=${profileId}, requesterId=${requesterId}:`,
       error,
     );
-    throw error instanceof Error ? error : new Error('Failed to fetch profile');
+    throw error instanceof Error ? error : new Error('Error al obtener el perfil');
+  }
+}
+
+/**
+ * Returns the privacy settings for the authenticated user.
+ */
+export async function getMySettings(ctx: ServiceContext): Promise<PrivacySettings> {
+  if (!ctx.userId) {
+    throw new Error('Autenticación requerida');
+  }
+
+  const db = ctx.supabase ?? supabase;
+
+  try {
+    const row = await profileRepository.getPrivacySettings(ctx.userId, db);
+    if (!row) {
+      throw new Error('Configuración de privacidad no encontrada');
+    }
+    return toPrivacySettings(row);
+  } catch (error) {
+    console.error(`[profileService.getMySettings] Failed for userId=${ctx.userId}:`, error);
+    throw error instanceof Error ? error : new Error('Error al obtener la configuración');
+  }
+}
+
+/**
+ * Updates the authenticated user's privacy settings.
+ * Validates input with Zod, writes with user-scoped client for RLS enforcement,
+ * records an audit log entry, and invalidates Redis caches.
+ */
+export async function updatePrivacy(
+  input: UpdatePrivacyFields,
+  ctx: ServiceContext,
+): Promise<PrivacySettings> {
+  if (!ctx.userId) {
+    throw new Error('Autenticación requerida');
+  }
+
+  const parsed = UpdatePrivacySchema.safeParse(input);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? 'Datos de privacidad inválidos';
+    throw new Error(msg);
+  }
+
+  const db = ctx.supabase ?? supabase;
+
+  try {
+    // Fetch current settings for audit log (before snapshot)
+    const previousRow = await profileRepository.getPrivacySettings(ctx.userId, db);
+    if (!previousRow) {
+      throw new Error('Perfil no encontrado');
+    }
+
+    // Apply the update
+    await profileRepository.updatePrivacyFields(ctx.userId, parsed.data, db);
+
+    // Fetch the updated settings
+    const updatedRow = await profileRepository.getPrivacySettings(ctx.userId, db);
+    if (!updatedRow) {
+      throw new Error('Error al verificar la actualización');
+    }
+
+    // Record audit log (non-blocking failure)
+    await profileRepository.insertPrivacyAuditLog(ctx.userId, previousRow, updatedRow);
+
+    // Invalidate caches
+    await Promise.all([
+      cacheDelete(`${CACHE_PREFIX.PROFILE_ME}${ctx.userId}`),
+      cacheDelete(`profile:public:${ctx.userId}`),
+      // Invalidate match history cache if showHistory changed
+      ...(parsed.data.showHistory !== undefined
+        ? [cacheDelete(`${CACHE_PREFIX.USER_MATCHES}${ctx.userId}`)]
+        : []),
+    ]);
+
+    console.info(`[profileService.updatePrivacy] Privacy updated for userId=${ctx.userId}`);
+    return toPrivacySettings(updatedRow);
+  } catch (error) {
+    console.error(`[profileService.updatePrivacy] Failed for userId=${ctx.userId}:`, error);
+    throw error instanceof Error ? error : new Error('Error al actualizar la privacidad');
   }
 }
 
 export const profileService = {
   getMyProfile,
+  getProfile,
+  getMySettings,
+  updatePrivacy,
 };

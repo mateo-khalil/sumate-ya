@@ -1,4 +1,4 @@
-# Profile operations — GraphQL source of truth (see matches.graphql pattern)
+# Profile operations — GraphQL source of truth
 
 query GetMyProfile {
   myProfile {
@@ -11,6 +11,42 @@ query GetMyProfile {
     matchesPlayed
     matchesWon
     winrate
+    isPrivate
+  }
+}
+
+query GetProfile($id: ID!) {
+  profile(id: $id) {
+    id
+    displayName
+    avatarUrl
+    role
+    preferredPosition
+    division
+    matchesPlayed
+    matchesWon
+    winrate
+    isPrivate
+  }
+}
+
+query GetMySettings {
+  mySettings {
+    isPublic
+    showStats
+    showHistory
+    showPosition
+    showDivision
+  }
+}
+
+mutation UpdatePrivacy($input: UpdatePrivacyInput!) {
+  updatePrivacy(input: $input) {
+    isPublic
+    showStats
+    showHistory
+    showPosition
+    showDivision
   }
 }
 
