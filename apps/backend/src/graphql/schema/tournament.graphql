@@ -1,0 +1,99 @@
+# Tournament creation and fixture planning
+#
+# Decision Context:
+# - Tournaments already exist in the DB schema, but this is the first GraphQL contract
+#   that lets authenticated users create them.
+# - createTournament accepts concrete slot/date pairs. The service validates each selected
+#   occurrence and writes planned fixtureMatches rows with round numbers. Team ids stay
+#   null until registration is complete, at which point the service can fill them using
+#   round-robin pairing.
+# - MatchFormat is reused from match.graphql so tournament formats stay aligned with
+#   player and club match creation.
+
+enum TournamentStatus {
+  REGISTRATION
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum FixtureMatchStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+type TournamentClub {
+  id: ID!
+  name: String!
+  zone: String
+  address: String
+  imageUrl: String
+}
+
+type TournamentFixtureMatch {
+  id: ID!
+  tournamentId: ID!
+  round: Int!
+  homeTeamId: ID
+  awayTeamId: ID
+  courtId: ID
+  scheduledAt: String
+  status: FixtureMatchStatus!
+}
+
+type Tournament {
+  id: ID!
+  organizerId: ID!
+  name: String!
+  format: MatchFormat!
+  teamCount: Int!
+  playersPerTeam: Int!
+  status: TournamentStatus!
+  description: String
+  startDate: String
+  endDate: String
+  createdAt: String!
+  club: TournamentClub
+  fixtureMatches: [TournamentFixtureMatch!]!
+}
+
+input TournamentScheduleSlotInput {
+  slotId: ID!
+  date: String!
+}
+
+input CreateTournamentInput {
+  clubId: ID!
+  name: String!
+  format: MatchFormat!
+  teamCount: Int!
+  playersPerTeam: Int!
+  description: String
+  schedule: [TournamentScheduleSlotInput!]!
+}
+
+type CreateTournamentResult {
+  success: Boolean!
+  tournamentId: ID
+  message: String
+  tournament: Tournament
+}
+
+type TournamentTeamRegistrationResult {
+  success: Boolean!
+  teamId: ID
+  message: String
+  tournament: Tournament
+}
+
+input RegisterTournamentTeamInput {
+  tournamentId: ID!
+  name: String!
+}
+
+extend type Mutation {
+  createTournament(input: CreateTournamentInput!): CreateTournamentResult!
+  registerTournamentTeam(input: RegisterTournamentTeamInput!): TournamentTeamRegistrationResult!
+}

@@ -17,6 +17,7 @@ import { clubMatchResolvers } from './domains/club-match.js';
 import { matchResolvers } from './domains/match.js';
 import { matchResultResolvers } from './domains/match-result.js';
 import { profileResolvers } from './domains/profile.js';
+import { tournamentResolvers } from './domains/tournament.js';
 
 export const resolvers = {
   Query: {
@@ -33,5 +34,6 @@ export const resolvers = {
     ...matchResultResolvers.Mutation,
     ...clubSlotResolvers.Mutation,
     ...clubMatchResolvers.Mutation,
+    ...tournamentResolvers.Mutation,
   },
 };

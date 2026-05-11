@@ -1,0 +1,59 @@
+# Tournament creation
+
+mutation CreateTournament($input: CreateTournamentInput!) {
+  createTournament(input: $input) {
+    success
+    tournamentId
+    message
+    tournament {
+      id
+      organizerId
+      name
+      format
+      teamCount
+      playersPerTeam
+      status
+      description
+      startDate
+      endDate
+      createdAt
+      club {
+        id
+        name
+        zone
+        address
+        imageUrl
+      }
+      fixtureMatches {
+        id
+        tournamentId
+        round
+        homeTeamId
+        awayTeamId
+        courtId
+        scheduledAt
+        status
+      }
+    }
+  }
+}
+
+mutation RegisterTournamentTeam($input: RegisterTournamentTeamInput!) {
+  registerTournamentTeam(input: $input) {
+    success
+    teamId
+    message
+    tournament {
+      id
+      status
+      fixtureMatches {
+        id
+        round
+        homeTeamId
+        awayTeamId
+        scheduledAt
+        status
+      }
+    }
+  }
+}

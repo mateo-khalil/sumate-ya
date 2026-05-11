@@ -35,6 +35,7 @@ const nombre = user?.displayName || user?.email;
               {user?.role === 'player' && (
                 <a href="/partidos/crear" class="btn-crear">+ Crear partido</a>
               )}
+              <a href="/torneos/crear" class="btn-torneo">Crear torneo</a>
               {user?.role === 'club_admin' && (
                 <a href="/panel-club" class="btn-panel-club">Panel de Club</a>
               )}
@@ -184,6 +185,25 @@ const nombre = user?.displayName || user?.email;
     background: hsl(35 100% 55%);
   }
 
+  .btn-torneo {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding: 0.35rem 0.875rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: hsl(210 20% 84%);
+    transition: background 0.15s, color 0.15s;
+  }
+  .btn-torneo:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
   /* ---- User badge ---- */
   .user-badge {
     display: flex;
@@ -280,7 +300,7 @@ const nombre = user?.displayName || user?.email;
   @media (max-width: 767px) {
     .topbar-inner { padding: 0 1rem; }
     /* Hide secondary nav actions on mobile — keep only login/logout */
-    .btn-crear, .btn-panel-club, .nav-link { display: none; }
+    .btn-crear, .btn-torneo, .btn-panel-club, .nav-link { display: none; }
     /* Truncate user badge on mobile */
     .user-badge {
       max-width: 120px;

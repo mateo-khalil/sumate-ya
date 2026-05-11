@@ -1,0 +1,240 @@
+---
+/**
+ * /torneos/crear - authenticated tournament creation page.
+ *
+ * Decision Context:
+ * - Both players and club_admins may create tournaments, so the page is auth-only with
+ *   no role gate.
+ * - Clubs are prefetched SSR for a fast first paint; slot availability stays client-side
+ *   because it depends on the chosen date.
+ * - accessToken is passed to the React island so createTournament can call the authenticated
+ *   GraphQL proxy.
+ */
+export const prerender = false;
+
+import { Trophy, Volleyball } from 'lucide-react';
+import Layout from '../../layouts/Layout.astro';
+import CreateTournamentFlow from '../../components/tournaments/create/CreateTournamentFlow';
+import { ACCESS_TOKEN_COOKIE } from '../../lib/auth';
+import { GET_CLUBS, type ClubDetail } from '../../graphql/operations/matches';
+
+const user = Astro.locals.user;
+
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const accessToken = Astro.cookies.get(ACCESS_TOKEN_COOKIE)?.value ?? '';
+const backendUrl =
+  import.meta.env.PRIVATE_BACKEND_URL ||
+  (typeof process !== 'undefined' ? process.env.PRIVATE_BACKEND_URL : undefined) ||
+  'http://localhost:4000';
+
+let clubs: ClubDetail[] = [];
+try {
+  const res = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ query: GET_CLUBS }),
+  });
+  const json = (await res.json()) as { data?: { clubs: ClubDetail[] }; errors?: unknown[] };
+  clubs = json.data?.clubs ?? [];
+} catch (error) {
+  console.error('[torneos/crear] Failed to pre-fetch clubs:', error);
+}
+
+const displayName = user.displayName || user.email;
+const backHref = user.role === 'club_admin' ? '/panel-club/dashboard' : '/partidos';
+---
+
+<Layout title="Crear Torneo - Sumate Ya">
+  <div class="app-shell">
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <a class="topbar-brand" href={backHref}>
+          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
+          <span class="topbar-name">SUMATE YA</span>
+        </a>
+        <div class="topbar-actions">
+          <a href="/partidos" class="nav-link">Partidos</a>
+          {user.role === 'club_admin' && <a href="/panel-club/dashboard" class="nav-link">Panel</a>}
+          {user.role === 'player' && <a href="/perfil" class="nav-link">Mi Perfil</a>}
+          <span class="user-badge">
+            <span class="user-dot"></span>
+            {displayName}
+          </span>
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="btn-logout">Salir</button>
+          </form>
+        </div>
+      </div>
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <main class="page-content">
+      <header class="section-header">
+        <div class="section-label">
+          <Trophy size={15} strokeWidth={2} aria-hidden="true" />
+          TORNEOS
+        </div>
+        <h1 class="section-title">Crear Torneo</h1>
+        <p class="section-sub">Round-robin con horarios reservados desde el inicio</p>
+      </header>
+
+      {clubs.length > 0 ? (
+        <CreateTournamentFlow
+          client:load
+          initialClubs={clubs}
+          accessToken={accessToken}
+          userName={displayName}
+          userRole={user.role}
+        />
+      ) : (
+        <section class="empty-state" role="status">
+          <h2>No hay clubes disponibles</h2>
+          <p>Cuando haya clubes cargados vas a poder reservar horarios para torneos.</p>
+        </section>
+      )}
+    </main>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(7,15,31,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .topbar-inner {
+    max-width: 1280px; margin: 0 auto;
+    height: 56px; padding: 0 1.25rem;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar-brand {
+    display: flex; align-items: center; gap: 0.5rem;
+    text-decoration: none;
+  }
+  .topbar-ball { display: inline-flex; color: hsl(42 100% 60%); }
+  .topbar-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.35rem;
+    letter-spacing: 0.1em;
+    color: #fff;
+  }
+  .topbar-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .topbar-accent {
+    height: 2px;
+    background: linear-gradient(90deg, hsl(42 100% 55%), hsl(216 85% 45%), transparent);
+  }
+  .nav-link {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: hsl(215 20% 65%);
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+  }
+  .nav-link:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 92%); }
+  .user-badge {
+    display: flex; align-items: center; gap: 0.4rem;
+    background: rgba(246,164,0,0.1);
+    border: 1px solid rgba(246,164,0,0.24);
+    color: hsl(42 100% 65%);
+    border-radius: 20px;
+    padding: 0.25rem 0.875rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .user-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: hsl(42 100% 58%);
+    box-shadow: 0 0 4px hsl(42 100% 58%);
+  }
+  .btn-logout {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    padding: 0.3rem 0.75rem;
+    color: hsl(215 20% 60%);
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+  .btn-logout:hover { background: rgba(255,255,255,0.07); color: hsl(210 20% 90%); }
+  .page-content {
+    flex: 1;
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+  }
+  .section-header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .section-label {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: hsl(42 100% 55%);
+    margin-bottom: 0.5rem;
+  }
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(1.8rem, 5vw, 2.7rem);
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: #fff;
+    margin: 0 0 0.35rem;
+    line-height: 1;
+  }
+  .section-sub {
+    margin: 0;
+    color: hsl(215 20% 50%);
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.92rem;
+  }
+  .empty-state {
+    max-width: 520px;
+    background: hsl(220 55% 10%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .empty-state h2 {
+    margin: 0 0 0.5rem;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.5rem;
+    color: #fff;
+  }
+  .empty-state p {
+    margin: 0;
+    color: hsl(215 20% 55%);
+    font-family: 'Barlow', sans-serif;
+  }
+  @media (max-width: 767px) {
+    .topbar-actions .nav-link { display: none; }
+    .topbar-inner { padding: 0 1rem; }
+    .user-badge {
+      max-width: 130px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      padding: 0.25rem 0.625rem;
+    }
+    .page-content { padding: 1.25rem 1rem 2rem; }
+  }
+</style>
