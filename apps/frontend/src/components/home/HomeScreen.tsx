@@ -11,6 +11,7 @@ import {
   Flame,
 } from 'lucide-react';
 import { MatchList } from '@/components/matches';
+import { TournamentList } from '@/components/tournaments/TournamentList';
 
 /**
  * HomeScreen Component
@@ -328,6 +329,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
 
           <MatchList isAuthenticated={isAuthenticated} />
+        </div>
+      </section>
+
+      {/* Torneos disponibles */}
+      <section className="px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-8 flex items-end justify-between gap-4">
+            <div>
+              <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary">
+                <Trophy className="h-4 w-4" aria-hidden="true" />
+                Copas abiertas
+              </p>
+              <h2 className="font-['Bebas_Neue'] text-5xl tracking-wide text-foreground">
+                Torneos Disponibles
+              </h2>
+            </div>
+            <Button variant="outline" size="sm" asChild className="shrink-0">
+              <a href="/torneos">
+                Ver todos
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </a>
+            </Button>
+          </div>
+
+          <TournamentList isAuthenticated={isAuthenticated} />
         </div>
       </section>
 

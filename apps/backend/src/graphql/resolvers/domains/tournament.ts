@@ -13,7 +13,7 @@ import { createUserClient } from '../../../config/supabase.js';
 import { tournamentService } from '../../../services/tournamentService.js';
 import { requireAuth } from '../../../types/context.js';
 import { MatchFormat } from '../../generated/graphql.js';
-import type { MutationResolvers } from '../../generated/graphql.js';
+import type { MutationResolvers, QueryResolvers } from '../../generated/graphql.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,6 +45,10 @@ const RegisterTournamentTeamSchema = z.object({
   tournamentId: z.string().regex(UUID_REGEX, 'tournamentId inválido'),
   name: z.string().trim().min(2, 'El nombre del equipo debe tener al menos 2 caracteres').max(80),
 });
+
+const Query: QueryResolvers = {
+  tournaments: async () => tournamentService.listRegistrationTournaments({}),
+};
 
 const Mutation: MutationResolvers = {
   createTournament: async (_parent, args, ctx) => {
@@ -92,4 +96,4 @@ const Mutation: MutationResolvers = {
   },
 };
 
-export const tournamentResolvers = { Mutation };
+export const tournamentResolvers = { Query, Mutation };

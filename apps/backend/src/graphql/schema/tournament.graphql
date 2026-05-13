@@ -50,6 +50,7 @@ type Tournament {
   format: MatchFormat!
   teamCount: Int!
   playersPerTeam: Int!
+  registeredTeamsCount: Int!
   status: TournamentStatus!
   description: String
   startDate: String
@@ -91,6 +92,10 @@ type TournamentTeamRegistrationResult {
 input RegisterTournamentTeamInput {
   tournamentId: ID!
   name: String!
+}
+
+extend type Query {
+  tournaments: [Tournament!]!
 }
 
 extend type Mutation {
