@@ -639,6 +639,7 @@ export type Query = {
   profile?: Maybe<Profile>;
   slotAuditLog: Array<SlotAuditLog>;
   slotImpactPreview: SlotImpactPreview;
+  tournaments: Array<Tournament>;
 };
 
 
@@ -809,6 +810,7 @@ export type Tournament = {
   name: Scalars['String']['output'];
   organizerId: Scalars['ID']['output'];
   playersPerTeam: Scalars['Int']['output'];
+  registeredTeamsCount: Scalars['Int']['output'];
   startDate?: Maybe<Scalars['String']['output']>;
   status: TournamentStatus;
   teamCount: Scalars['Int']['output'];
@@ -1489,6 +1491,7 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   profile?: Resolver<Maybe<ResolversTypes['Profile']>, ParentType, ContextType, RequireFields<QueryProfileArgs, 'id'>>;
   slotAuditLog?: Resolver<Array<ResolversTypes['SlotAuditLog']>, ParentType, ContextType, RequireFields<QuerySlotAuditLogArgs, 'slotId'>>;
   slotImpactPreview?: Resolver<ResolversTypes['SlotImpactPreview'], ParentType, ContextType, RequireFields<QuerySlotImpactPreviewArgs, 'slotIds'>>;
+  tournaments?: Resolver<Array<ResolversTypes['Tournament']>, ParentType, ContextType>;
 }>;
 
 export type ScheduleSlotResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ScheduleSlot'] = ResolversParentTypes['ScheduleSlot']> = ResolversObject<{
@@ -1544,6 +1547,7 @@ export type TournamentResolvers<ContextType = GraphQLContext, ParentType extends
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   organizerId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   playersPerTeam?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  registeredTeamsCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   startDate?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   status?: Resolver<ResolversTypes['TournamentStatus'], ParentType, ContextType>;
   teamCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;

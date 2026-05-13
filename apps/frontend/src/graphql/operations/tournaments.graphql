@@ -1,5 +1,27 @@
 # Tournament creation
 
+query GetTournaments {
+  tournaments {
+    id
+    name
+    format
+    teamCount
+    playersPerTeam
+    registeredTeamsCount
+    status
+    description
+    startDate
+    endDate
+    club {
+      id
+      name
+      zone
+      address
+      imageUrl
+    }
+  }
+}
+
 mutation CreateTournament($input: CreateTournamentInput!) {
   createTournament(input: $input) {
     success
@@ -12,6 +34,7 @@ mutation CreateTournament($input: CreateTournamentInput!) {
       format
       teamCount
       playersPerTeam
+      registeredTeamsCount
       status
       description
       startDate
@@ -45,7 +68,22 @@ mutation RegisterTournamentTeam($input: RegisterTournamentTeamInput!) {
     message
     tournament {
       id
+      name
+      format
+      teamCount
+      playersPerTeam
+      registeredTeamsCount
       status
+      description
+      startDate
+      endDate
+      club {
+        id
+        name
+        zone
+        address
+        imageUrl
+      }
       fixtureMatches {
         id
         round

@@ -86,6 +86,10 @@ export interface FixtureMatchRow {
   createdAt: string;
 }
 
+export interface TournamentTeamCountRow {
+  count: number;
+}
+
 export interface TournamentRow {
   id: string;
   organizerId: string;
@@ -101,6 +105,7 @@ export interface TournamentRow {
   createdAt: string;
   clubs?: TournamentClubRow | null;
   fixtureMatches?: FixtureMatchRow[];
+  tournamentTeams?: TournamentTeamCountRow[];
 }
 
 export interface TournamentSlotCourtRow {
@@ -373,7 +378,9 @@ export async function getTournamentById(
 ): Promise<TournamentRow | null> {
   const { data, error } = await client
     .from('tournaments')
-    .select(`${TOURNAMENT_COLUMNS}, clubs(${TOURNAMENT_CLUB_COLUMNS}), fixtureMatches(${FIXTURE_COLUMNS})`)
+    .select(
+      `${TOURNAMENT_COLUMNS}, clubs(${TOURNAMENT_CLUB_COLUMNS}), fixtureMatches(${FIXTURE_COLUMNS}), tournamentTeams(count)`,
+    )
     .eq('id', tournamentId)
     .single();
 
@@ -384,6 +391,24 @@ export async function getTournamentById(
   }
 
   return data as unknown as TournamentRow;
+}
+
+export async function getRegistrationTournaments(
+  client: SupabaseClient = supabase,
+): Promise<TournamentRow[]> {
+  const { data, error } = await client
+    .from('tournaments')
+    .select(`${TOURNAMENT_COLUMNS}, clubs(${TOURNAMENT_CLUB_COLUMNS}), tournamentTeams(count)`)
+    .eq('status', 'registration')
+    .order('startDate', { ascending: true })
+    .order('createdAt', { ascending: false });
+
+  if (error) {
+    console.error('[tournamentRepository.getRegistrationTournaments] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return (data as unknown as TournamentRow[]) ?? [];
 }
 
 export async function getTournamentTeams(
@@ -485,6 +510,7 @@ export const tournamentRepository = {
   registerTournamentTeamRpc,
   insertFixtureMatches,
   getTournamentById,
+  getRegistrationTournaments,
   getTournamentTeams,
   createTournamentTeam,
   createTournamentTeamMember,

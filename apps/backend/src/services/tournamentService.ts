@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '../config/supabase.js';
+import { cacheDeletePattern, cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
 import {
   FixtureMatchStatus,
   MatchFormat,
@@ -70,6 +71,8 @@ const FORMAT_ORDER: Record<string, number> = {
   '11v11': 4,
 };
 
+const TOURNAMENTS_REGISTRATION_CACHE_KEY = `${CACHE_PREFIX.TOURNAMENTS_LIST}:status:registration`;
+
 // =====================================================
 // Helpers
 // =====================================================
@@ -123,6 +126,7 @@ function toTournament(row: TournamentRow): Tournament {
     if (a.round !== b.round) return a.round - b.round;
     return (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? '');
   });
+  const registeredTeamsCount = row.tournamentTeams?.[0]?.count ?? 0;
 
   return {
     id: row.id,
@@ -131,6 +135,7 @@ function toTournament(row: TournamentRow): Tournament {
     format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
     teamCount: row.teamCount,
     playersPerTeam: row.playersPerTeam,
+    registeredTeamsCount,
     status: DB_TO_STATUS[row.status] ?? TournamentStatus.Registration,
     description: row.description,
     startDate: row.startDate,
@@ -280,9 +285,23 @@ function buildRoundRobinPairings(teamIds: string[]): Array<{
   return pairings;
 }
 
+async function invalidateTournamentListCaches(): Promise<void> {
+  await cacheDeletePattern(`${CACHE_PREFIX.TOURNAMENTS_LIST}:*`);
+}
+
 // =====================================================
 // Service Functions
 // =====================================================
+
+export async function listRegistrationTournaments(_ctx: ServiceContext): Promise<Tournament[]> {
+  const tournaments = await cacheGetOrSet<TournamentRow[]>(
+    TOURNAMENTS_REGISTRATION_CACHE_KEY,
+    () => tournamentRepository.getRegistrationTournaments(),
+    CACHE_TTL.DYNAMIC_DATA,
+  );
+
+  return tournaments.map(toTournament);
+}
 
 export async function createTournament(
   input: CreateTournamentInput,
@@ -324,6 +343,7 @@ export async function createTournament(
   );
 
   await generateFixtureIfRegistrationComplete({ userId: ctx.userId, supabase: db }, tournamentId);
+  await invalidateTournamentListCaches();
 
   const created = await tournamentRepository.getTournamentById(tournamentId);
   if (!created) throw new Error('No se pudo cargar el torneo creado');
@@ -376,6 +396,7 @@ export async function generateFixtureIfRegistrationComplete(
   );
 
   await tournamentRepository.updateTournamentStatus(tournamentId, 'in_progress', writeClient);
+  await invalidateTournamentListCaches();
   return true;
 }
 
@@ -415,6 +436,7 @@ export async function registerTournamentTeam(
 
   const updatedTournament = await tournamentRepository.getTournamentById(input.tournamentId);
   if (!updatedTournament) throw new Error('No se pudo cargar el torneo actualizado');
+  await invalidateTournamentListCaches();
 
   return {
     success: true,
@@ -425,6 +447,7 @@ export async function registerTournamentTeam(
 }
 
 export const tournamentService = {
+  listRegistrationTournaments,
   createTournament,
   generateFixtureIfRegistrationComplete,
   registerTournamentTeam,

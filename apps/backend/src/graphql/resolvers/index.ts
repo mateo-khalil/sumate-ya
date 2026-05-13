@@ -28,6 +28,7 @@ export const resolvers = {
     ...clubSlotResolvers.Query,
     ...clubDashboardResolvers.Query,
     ...clubMatchResolvers.Query,
+    ...tournamentResolvers.Query,
   },
   Mutation: {
     ...matchResolvers.Mutation,

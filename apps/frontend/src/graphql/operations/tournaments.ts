@@ -46,6 +46,7 @@ export interface TournamentData {
   format: MatchFormat;
   teamCount: number;
   playersPerTeam: number;
+  registeredTeamsCount: number;
   status: TournamentStatus;
   description: string | null;
   startDate: string | null;
@@ -59,6 +60,26 @@ export interface TournamentData {
     imageUrl: string | null;
   } | null;
   fixtureMatches: TournamentFixtureMatch[];
+}
+
+export interface TournamentListItem {
+  id: string;
+  name: string;
+  format: MatchFormat;
+  teamCount: number;
+  playersPerTeam: number;
+  registeredTeamsCount: number;
+  status: TournamentStatus;
+  description: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  club: {
+    id: string;
+    name: string;
+    zone: string | null;
+    address: string | null;
+    imageUrl: string | null;
+  } | null;
 }
 
 export interface CreateTournamentResult {
@@ -80,6 +101,30 @@ export interface TournamentTeamRegistrationResult {
   tournament: TournamentData | null;
 }
 
+export const GET_TOURNAMENTS = /* GraphQL */ `
+  query GetTournaments {
+    tournaments {
+      id
+      name
+      format
+      teamCount
+      playersPerTeam
+      registeredTeamsCount
+      status
+      description
+      startDate
+      endDate
+      club {
+        id
+        name
+        zone
+        address
+        imageUrl
+      }
+    }
+  }
+`;
+
 export const CREATE_TOURNAMENT = /* GraphQL */ `
   mutation CreateTournament($input: CreateTournamentInput!) {
     createTournament(input: $input) {
@@ -93,6 +138,7 @@ export const CREATE_TOURNAMENT = /* GraphQL */ `
         format
         teamCount
         playersPerTeam
+        registeredTeamsCount
         status
         description
         startDate
@@ -128,7 +174,22 @@ export const REGISTER_TOURNAMENT_TEAM = /* GraphQL */ `
       message
       tournament {
         id
+        name
+        format
+        teamCount
+        playersPerTeam
+        registeredTeamsCount
         status
+        description
+        startDate
+        endDate
+        club {
+          id
+          name
+          zone
+          address
+          imageUrl
+        }
         fixtureMatches {
           id
           round
