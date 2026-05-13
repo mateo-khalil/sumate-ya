@@ -14,9 +14,20 @@
  *   - match:participants:{id} and match:{id} → cleared so detail page shows updated score
  *   - user:matches:{userId}* → cleared for every participant so history shows result
  *   - matches result submissions cache → cleared so future reads reflect confirmed state
- * - Race condition on last vote: two simultaneous votes could both read approveCount < threshold
- *   and both trigger confirmSubmission. confirmSubmission is idempotent (UPDATE WHERE id=x
- *   always sets the same values). The second call is a harmless no-op.
+ * - Atomic confirmation: when approveCount > totalParticipants / 2 the cascade is delegated
+ *   to the `confirm_match_result_submission` RPC (see migration
+ *   20260511020000_confirm_match_result_rpc.sql). The RPC, inside a single transaction with
+ *   FOR UPDATE locks on the submission and the match, performs: (1) submission confirm +
+ *   reject siblings, (2) match score/status update, (3) profiles.matchesPlayed +1 for every
+ *   participant, (4) profiles.matchesWon +1 only when winningTeam is 'a' or 'b' (no
+ *   matchesWon updates on draws — no matchesDrawn column yet), (5) a `match_result_confirmed`
+ *   notification for every participant. The service stays responsible for cache invalidation.
+ * - Idempotency / race handling: the RPC returns `alreadyConfirmed: true` when a sibling
+ *   final-vote already confirmed under the lock. In that case statusChanged stays false and
+ *   the service skips cache invalidation (the first caller already did it). The match-level
+ *   `cacheDelete` for submissions still runs unconditionally so the vote itself shows up.
+ * - If the RPC raises (e.g. "No hay mayoría suficiente para confirmar" due to a vote retracted
+ *   between the count and the lock), the error propagates and NO caches are invalidated.
  * - UUID validation: uses uuidSchema from lib/validators.ts (permissive hex-format regex)
  *   instead of z.string().uuid(). Zod v4 uuid() enforces RFC 9562 version bits and rejects
  *   seeded test UUIDs (e.g., e1000000-0000-0000-0000-000000000001). The regex matches the
@@ -295,40 +306,46 @@ export async function voteMatchResult(
   let statusChanged = false;
 
   if (approveCount > totalParticipants / 2) {
-    statusChanged = true;
-
-    await matchResultVoteRepository.confirmSubmission(parsed.submissionId);
-    await matchResultVoteRepository.rejectOtherSubmissions(
-      submission.matchId,
+    const result = await matchResultVoteRepository.confirmMatchResultAtomic(
       parsed.submissionId,
-    );
-    await matchResultVoteRepository.updateMatchWithResult(
-      submission.matchId,
-      submission.scoreTeamA,
-      submission.scoreTeamB,
-      submission.winningTeam,
-    );
-    await matchResultVoteRepository.refreshCompetitiveStatsForMatch(submission.matchId);
-
-    console.info(
-      `[matchResultVoteService.voteMatchResult] submissionId=${parsed.submissionId} confirmed — match ${submission.matchId} completed`,
+      db,
     );
 
-    // Invalidate match caches
-    await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${submission.matchId}`);
-    await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${submission.matchId}`);
-    await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
-    await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+    if (!result.alreadyConfirmed) {
+      statusChanged = true;
 
-    // Invalidate history cache for all participants
-    const participantIds = await matchResultVoteRepository.getParticipantIds(submission.matchId);
-    await Promise.all(
-      participantIds.flatMap((uid) => [
-        cacheDeletePattern(`${CACHE_PREFIX.USER_MATCHES}${uid}*`),
-        cacheDelete(`${CACHE_PREFIX.PROFILE_ME}${uid}`),
-        cacheDelete(`profile:public:${uid}`),
-      ]),
-    );
+      // Recalcula la división competitiva (matchesPlayed/Won ya los hizo la RPC, pero el
+      // ranking derivado por matchId vive en otra tabla y se refresca aparte).
+      // Solo cuando este caller cruzó la mayoría — si fue idempotency, ya lo hizo el otro.
+      await matchResultVoteRepository.refreshCompetitiveStatsForMatch(result.matchId);
+
+      console.info(
+        `[matchResultVoteService.voteMatchResult] submissionId=${parsed.submissionId} confirmed atomically — match=${result.matchId} participantsUpdated=${result.participantCount} winnersUpdated=${result.winnersCount}`,
+      );
+
+      // Invalidate match-scoped caches
+      await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${result.matchId}`);
+      await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${result.matchId}`);
+      await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+      await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+
+      // Invalidate per-participant caches (history + profile views).
+      // participantIds viene en la respuesta de la RPC — evita el round-trip extra que
+      // hacía getParticipantIds (deprecated).
+      await Promise.all(
+        result.participantIds.flatMap((uid) => [
+          cacheDeletePattern(`${CACHE_PREFIX.USER_MATCHES}${uid}*`),
+          cacheDelete(`${CACHE_PREFIX.PROFILE_ME}${uid}`),
+          cacheDelete(`profile:public:${uid}`),
+        ]),
+      );
+    } else {
+      // Race condition: another vote already triggered confirmation.
+      // statusChanged stays false; caches/stats refresh were done by the first caller.
+      console.info(
+        `[matchResultVoteService.voteMatchResult] submissionId=${parsed.submissionId} already confirmed — no-op`,
+      );
+    }
   }
 
   await cacheDelete(`${SUBMISSIONS_PREFIX}${submission.matchId}`);

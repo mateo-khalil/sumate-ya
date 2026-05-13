@@ -37,7 +37,7 @@ BEGIN
     SELECT
       ap."playerId",
       COUNT(m.id)::int AS matches_played,
-      COUNT(m.id) FILTER (WHERE m."winningTeam" = mp.team)::int AS matches_won
+      COUNT(m.id) FILTER (WHERE m."winningTeam"::text = mp.team::text)::int AS matches_won
     FROM affected_players ap
     LEFT JOIN public."matchParticipants" mp
       ON mp."playerId" = ap."playerId"
@@ -67,7 +67,7 @@ WITH stats AS (
   SELECT
     p.id AS "playerId",
     COUNT(m.id)::int AS matches_played,
-    COUNT(m.id) FILTER (WHERE m."winningTeam" = mp.team)::int AS matches_won
+    COUNT(m.id) FILTER (WHERE m."winningTeam"::text = mp.team::text)::int AS matches_won
   FROM public.profiles p
   LEFT JOIN public."matchParticipants" mp
     ON mp."playerId" = p.id

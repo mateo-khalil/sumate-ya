@@ -306,6 +306,8 @@ export async function countMatchParticipants(matchId: string): Promise<number> {
 /**
  * Mark a submission as confirmed (service-role — system-triggered transition).
  * Also sets isConfirmed = true for backward compatibility.
+ *
+ * @deprecated Replaced by confirmMatchResultAtomic (RPC). Slated for removal in a follow-up cleanup.
  */
 export async function confirmSubmission(submissionId: string): Promise<void> {
   const { error } = await supabase
@@ -325,6 +327,8 @@ export async function confirmSubmission(submissionId: string): Promise<void> {
 /**
  * Reject all pending submissions for a match except the confirmed one.
  * Called after a submission reaches majority so the other candidates are closed.
+ *
+ * @deprecated Replaced by confirmMatchResultAtomic (RPC). Slated for removal in a follow-up cleanup.
  */
 export async function rejectOtherSubmissions(
   matchId: string,
@@ -350,6 +354,8 @@ export async function rejectOtherSubmissions(
  * Update the match with the confirmed score/winner/status.
  * Uses service-role because the authenticated UPDATE policy on matches only
  * allows the organizer — result confirmation is a system operation.
+ *
+ * @deprecated Replaced by confirmMatchResultAtomic (RPC). Slated for removal in a follow-up cleanup.
  */
 export async function updateMatchWithResult(
   matchId: string,
@@ -398,6 +404,9 @@ export async function refreshCompetitiveStatsForMatch(matchId: string): Promise<
 /**
  * Get all participant userIds for a match.
  * Used for cache invalidation after result confirmation.
+ *
+ * @deprecated Replaced by confirmMatchResultAtomic (RPC), which returns participantIds in its payload.
+ *   Slated for removal in a follow-up cleanup.
  */
 export async function getParticipantIds(matchId: string): Promise<string[]> {
   const { data, error } = await supabase
@@ -416,6 +425,77 @@ export async function getParticipantIds(matchId: string): Promise<string[]> {
   return (data ?? []).map((r) => (r as { playerId: string }).playerId);
 }
 
+// =====================================================
+// Atomic confirmation (RPC wrapper)
+// =====================================================
+
+export interface ConfirmAtomicResult {
+  alreadyConfirmed: boolean;
+  participantCount: number;
+  winnersCount: number;
+  matchId: string;
+  participantIds: string[];
+}
+
+/**
+ * Confirm a submission atomically through the `confirm_match_result_submission`
+ * Postgres RPC. The function runs the entire cascade (confirm submission,
+ * reject siblings, write the match result, increment matchesPlayed/Won,
+ * notify all participants) inside one transaction with row-level locks so two
+ * concurrent "final votes" cannot double-apply the changes.
+ *
+ * Decision Context:
+ * - Called with the user-scoped Supabase client (`ctx.supabase`) so the RPC
+ *   sees a valid `auth.uid()` — the function is SECURITY DEFINER but still
+ *   requires an authenticated caller. Singleton service-role would defeat
+ *   that check.
+ * - The RPC returns `alreadyConfirmed: true` when a sibling caller already
+ *   confirmed inside the lock; the service layer reads that flag to skip
+ *   cache invalidation a second time.
+ * - `participantIds` is carried in the response so the service can invalidate
+ *   `user:matches:{uid}*` keys without a follow-up query (this is what the
+ *   deprecated `getParticipantIds` helper used to do).
+ * - Errors from the RPC ("No hay mayoría suficiente para confirmar", "El
+ *   partido fue cancelado", "Submission no encontrada", etc.) propagate as
+ *   plain `Error`s — the service must not invalidate caches when the RPC
+ *   throws.
+ * - Previously fixed bugs: under concurrent final votes the legacy 4-call
+ *   sequence could double-increment stats; the RPC's FOR UPDATE locks
+ *   eliminate that race.
+ */
+export async function confirmMatchResultAtomic(
+  submissionId: string,
+  client: SupabaseClient,
+): Promise<ConfirmAtomicResult> {
+  const { data, error } = await client.rpc('confirm_match_result_submission', {
+    p_submission_id: submissionId,
+  });
+
+  if (error) {
+    console.error(
+      `[matchResultVoteRepository.confirmMatchResultAtomic] Supabase RPC error submissionId=${submissionId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  const payload = data as {
+    alreadyConfirmed: boolean;
+    participantCount: number;
+    winnersCount: number;
+    matchId: string;
+    participantIds: string[];
+  };
+
+  return {
+    alreadyConfirmed: payload.alreadyConfirmed,
+    participantCount: payload.participantCount,
+    winnersCount: payload.winnersCount,
+    matchId: payload.matchId,
+    participantIds: payload.participantIds ?? [],
+  };
+}
+
 export const matchResultVoteRepository = {
   getMatchStatus,
   isParticipant,
@@ -430,4 +510,5 @@ export const matchResultVoteRepository = {
   updateMatchWithResult,
   refreshCompetitiveStatsForMatch,
   getParticipantIds,
+  confirmMatchResultAtomic,
 };
