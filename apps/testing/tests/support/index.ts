@@ -22,6 +22,7 @@ export { MatchDetailPage } from './page-objects/MatchDetailPage';
 export { MatchesListPage } from './page-objects/MatchesListPage';
 export { MatchesMapPage } from './page-objects/MatchesMapPage';
 export { ProfilePage, ONE_PIXEL_PNG } from './page-objects/ProfilePage';
+export { SettingsPage } from './page-objects/SettingsPage';
 export {
   RegisterPlayerPage,
   VALID_PLAYER_REGISTER,
