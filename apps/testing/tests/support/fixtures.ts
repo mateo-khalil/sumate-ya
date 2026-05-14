@@ -8,6 +8,7 @@ import { MatchesMapPage } from './page-objects/MatchesMapPage';
 import { ProfilePage } from './page-objects/ProfilePage';
 import { RegisterClubPage } from './page-objects/RegisterClubPage';
 import { RegisterPlayerPage } from './page-objects/RegisterPlayerPage';
+import { SettingsPage } from './page-objects/SettingsPage';
 
 /**
  * Custom Playwright test fixture.
@@ -38,6 +39,7 @@ type Fixtures = {
   matchDetailPage: MatchDetailPage;
   createMatchPage: CreateMatchPage;
   profilePage: ProfilePage;
+  settingsPage: SettingsPage;
 };
 
 export const test = base.extend<Fixtures>({
@@ -67,6 +69,9 @@ export const test = base.extend<Fixtures>({
   },
   profilePage: async ({ page }, use) => {
     await use(new ProfilePage(page));
+  },
+  settingsPage: async ({ page }, use) => {
+    await use(new SettingsPage(page));
   },
 });
 

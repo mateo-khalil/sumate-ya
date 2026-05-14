@@ -11,6 +11,10 @@ import { type TestUser } from '../users';
  *   need a logged-in browser context should declare
  *   `test.use({ storageState: TEST_USERS.<role>.storageStatePath })` instead
  *   of calling `loginAs` — re-doing UI logins is the slowest way to get auth.
+ * - Navigation waits for DOMContentLoaded, then asserts the form is visible. The full
+ *   `load` event can be held hostage by fonts/assets even though the login form is ready.
+ *   Previously fixed bugs: auth.setup timed out on page.goto while the form was already
+ *   rendered in the Playwright error snapshot.
  * - Locators are defined once as fields so test bodies stay declarative.
  * - Previously fixed bugs: none relevant.
  */
@@ -33,7 +37,7 @@ export class LoginPage {
 
   async goto(query?: string): Promise<void> {
     const url = query ? `${FRONTEND_URL}/login?${query}` : `${FRONTEND_URL}/login`;
-    await this.page.goto(url);
+    await this.page.goto(url, { waitUntil: 'domcontentloaded' });
     await expect(this.form).toBeVisible();
   }
 
