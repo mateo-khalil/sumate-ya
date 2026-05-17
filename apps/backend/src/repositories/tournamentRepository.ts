@@ -46,6 +46,23 @@ const FIXTURE_COLUMNS = `
   "courtId",
   "scheduledAt",
   status,
+  "scoreHome",
+  "scoreAway",
+  "createdAt"
+`;
+
+const TOURNAMENT_PLAYER_COLUMNS = `
+  id,
+  "displayName",
+  "avatarUrl",
+  "preferredPosition"
+`;
+
+const TOURNAMENT_TEAM_COLUMNS = `
+  id,
+  "tournamentId",
+  name,
+  "captainId",
   "createdAt"
 `;
 
@@ -80,9 +97,13 @@ export interface FixtureMatchRow {
   round: number;
   homeTeamId: string | null;
   awayTeamId: string | null;
+  homeTeam?: TournamentTeamRow | null;
+  awayTeam?: TournamentTeamRow | null;
   courtId: string | null;
   scheduledAt: string | null;
   status: string;
+  scoreHome: number | null;
+  scoreAway: number | null;
   createdAt: string;
 }
 
@@ -104,8 +125,10 @@ export interface TournamentRow {
   endDate: string | null;
   createdAt: string;
   clubs?: TournamentClubRow | null;
+  organizer?: TournamentPlayerRow | null;
   fixtureMatches?: FixtureMatchRow[];
-  tournamentTeams?: TournamentTeamCountRow[];
+  registeredTeams?: TournamentTeamCountRow[];
+  tournamentTeams?: TournamentTeamRow[];
 }
 
 export interface TournamentSlotCourtRow {
@@ -180,8 +203,23 @@ export interface TournamentTeamRow {
   id: string;
   tournamentId?: string;
   name: string;
-  captainId?: string;
-  createdAt?: string;
+  captainId: string;
+  captain?: TournamentPlayerRow | null;
+  members?: TournamentTeamMemberRow[];
+  createdAt: string;
+}
+
+export interface TournamentPlayerRow {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: string | null;
+}
+
+export interface TournamentTeamMemberRow {
+  id: string;
+  joinedAt: string;
+  player: TournamentPlayerRow | null;
 }
 
 function isMissingTournamentRpcError(message: string): boolean {
@@ -379,7 +417,26 @@ export async function getTournamentById(
   const { data, error } = await client
     .from('tournaments')
     .select(
-      `${TOURNAMENT_COLUMNS}, clubs(${TOURNAMENT_CLUB_COLUMNS}), fixtureMatches(${FIXTURE_COLUMNS}), tournamentTeams(count)`,
+      `
+        ${TOURNAMENT_COLUMNS},
+        clubs(${TOURNAMENT_CLUB_COLUMNS}),
+        organizer:profiles!tournaments_organizerId_fkey(${TOURNAMENT_PLAYER_COLUMNS}),
+        registeredTeams:tournamentTeams(count),
+        tournamentTeams(
+          ${TOURNAMENT_TEAM_COLUMNS},
+          captain:profiles!tournamentTeams_captainId_fkey(${TOURNAMENT_PLAYER_COLUMNS}),
+          members:tournamentTeamMembers(
+            id,
+            "joinedAt",
+            player:profiles!tournamentTeamMembers_playerId_fkey(${TOURNAMENT_PLAYER_COLUMNS})
+          )
+        ),
+        fixtureMatches(
+          ${FIXTURE_COLUMNS},
+          homeTeam:tournamentTeams!fixtureMatches_homeTeamId_fkey(id, name, "captainId", "createdAt"),
+          awayTeam:tournamentTeams!fixtureMatches_awayTeamId_fkey(id, name, "captainId", "createdAt")
+        )
+      `,
     )
     .eq('id', tournamentId)
     .single();
@@ -398,7 +455,7 @@ export async function getRegistrationTournaments(
 ): Promise<TournamentRow[]> {
   const { data, error } = await client
     .from('tournaments')
-    .select(`${TOURNAMENT_COLUMNS}, clubs(${TOURNAMENT_CLUB_COLUMNS}), tournamentTeams(count)`)
+    .select(`${TOURNAMENT_COLUMNS}, clubs(${TOURNAMENT_CLUB_COLUMNS}), registeredTeams:tournamentTeams(count)`)
     .eq('status', 'registration')
     .order('startDate', { ascending: true })
     .order('createdAt', { ascending: false });
@@ -417,7 +474,7 @@ export async function getTournamentTeams(
 ): Promise<TournamentTeamRow[]> {
   const { data, error } = await client
     .from('tournamentTeams')
-    .select('id, name')
+    .select('id, "tournamentId", name, "captainId", "createdAt"')
     .eq('tournamentId', tournamentId)
     .order('createdAt', { ascending: true });
 

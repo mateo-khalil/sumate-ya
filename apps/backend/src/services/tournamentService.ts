@@ -14,19 +14,24 @@ import { cacheDeletePattern, cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../c
 import {
   FixtureMatchStatus,
   MatchFormat,
+  PlayerPosition,
   TournamentStatus,
   type CreateTournamentInput,
   type CreateTournamentResult,
   type RegisterTournamentTeamInput,
   type Tournament,
   type TournamentFixtureMatch,
+  type TournamentPlayer,
+  type TournamentTeam,
   type TournamentTeamRegistrationResult,
 } from '../graphql/generated/graphql.js';
 import {
   tournamentRepository,
   type FixtureMatchRow,
+  type TournamentPlayerRow,
   type TournamentRow,
   type TournamentSlotRow,
+  type TournamentTeamRow,
 } from '../repositories/tournamentRepository.js';
 import { clubRepository } from '../repositories/clubRepository.js';
 import { dateToDayOfWeek } from './clubService.js';
@@ -64,6 +69,13 @@ const DB_TO_FIXTURE_STATUS: Record<string, FixtureMatchStatus> = {
   cancelled: FixtureMatchStatus.Cancelled,
 };
 
+const DB_TO_PLAYER_POSITION: Record<string, PlayerPosition> = {
+  goalkeeper: PlayerPosition.Goalkeeper,
+  defender: PlayerPosition.Defender,
+  midfielder: PlayerPosition.Midfielder,
+  forward: PlayerPosition.Forward,
+};
+
 const FORMAT_ORDER: Record<string, number> = {
   '5v5': 1,
   '7v7': 2,
@@ -72,6 +84,7 @@ const FORMAT_ORDER: Record<string, number> = {
 };
 
 const TOURNAMENTS_REGISTRATION_CACHE_KEY = `${CACHE_PREFIX.TOURNAMENTS_LIST}:status:registration`;
+const TOURNAMENT_DETAIL_CACHE_PREFIX = `${CACHE_PREFIX.TOURNAMENTS_LIST}:detail:`;
 
 // =====================================================
 // Helpers
@@ -108,6 +121,32 @@ function slotTimeKey(courtId: string | null | undefined, scheduledAt: string | n
   return `${courtId ?? ''}|${dateFromTimestamp(scheduledAt)}|${timeFromTimestamp(scheduledAt)}`;
 }
 
+function toTournamentPlayer(row: TournamentPlayerRow | null | undefined): TournamentPlayer | null {
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    displayName: row.displayName,
+    avatarUrl: row.avatarUrl,
+    preferredPosition: row.preferredPosition ? (DB_TO_PLAYER_POSITION[row.preferredPosition] ?? null) : null,
+  };
+}
+
+function toTournamentTeam(row: TournamentTeamRow): TournamentTeam {
+  const players = (row.members ?? [])
+    .map((member) => toTournamentPlayer(member.player))
+    .filter((player): player is TournamentPlayer => Boolean(player));
+
+  return {
+    id: row.id,
+    name: row.name,
+    captainId: row.captainId,
+    captain: toTournamentPlayer(row.captain),
+    players,
+    createdAt: row.createdAt,
+  };
+}
+
 function toFixtureMatch(row: FixtureMatchRow): TournamentFixtureMatch {
   return {
     id: row.id,
@@ -115,9 +154,13 @@ function toFixtureMatch(row: FixtureMatchRow): TournamentFixtureMatch {
     round: row.round,
     homeTeamId: row.homeTeamId,
     awayTeamId: row.awayTeamId,
+    homeTeam: row.homeTeam ? toTournamentTeam(row.homeTeam) : null,
+    awayTeam: row.awayTeam ? toTournamentTeam(row.awayTeam) : null,
     courtId: row.courtId,
     scheduledAt: row.scheduledAt,
     status: DB_TO_FIXTURE_STATUS[row.status] ?? FixtureMatchStatus.Scheduled,
+    scoreHome: row.scoreHome,
+    scoreAway: row.scoreAway,
   };
 }
 
@@ -126,11 +169,12 @@ function toTournament(row: TournamentRow): Tournament {
     if (a.round !== b.round) return a.round - b.round;
     return (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? '');
   });
-  const registeredTeamsCount = row.tournamentTeams?.[0]?.count ?? 0;
+  const registeredTeamsCount = row.registeredTeams?.[0]?.count ?? row.tournamentTeams?.length ?? 0;
 
   return {
     id: row.id,
     organizerId: row.organizerId,
+    organizer: toTournamentPlayer(row.organizer),
     name: row.name,
     format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
     teamCount: row.teamCount,
@@ -150,6 +194,7 @@ function toTournament(row: TournamentRow): Tournament {
           imageUrl: row.clubs.imageUrl,
         }
       : null,
+    teams: (row.tournamentTeams ?? []).map(toTournamentTeam),
     fixtureMatches: fixtureMatches.map(toFixtureMatch),
   };
 }
@@ -303,6 +348,19 @@ export async function listRegistrationTournaments(_ctx: ServiceContext): Promise
   return tournaments.map(toTournament);
 }
 
+export async function getTournamentById(
+  _ctx: ServiceContext,
+  tournamentId: string,
+): Promise<Tournament | null> {
+  const tournament = await cacheGetOrSet<TournamentRow | null>(
+    `${TOURNAMENT_DETAIL_CACHE_PREFIX}${tournamentId}`,
+    () => tournamentRepository.getTournamentById(tournamentId),
+    CACHE_TTL.DYNAMIC_DATA,
+  );
+
+  return tournament ? toTournament(tournament) : null;
+}
+
 export async function createTournament(
   input: CreateTournamentInput,
   ctx: ServiceContext,
@@ -448,6 +506,7 @@ export async function registerTournamentTeam(
 
 export const tournamentService = {
   listRegistrationTournaments,
+  getTournamentById,
   createTournament,
   generateFixtureIfRegistrationComplete,
   registerTournamentTeam,

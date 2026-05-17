@@ -34,14 +34,40 @@ export interface TournamentFixtureMatch {
   round: number;
   homeTeamId: string | null;
   awayTeamId: string | null;
+  homeTeam: TournamentFixtureTeam | null;
+  awayTeam: TournamentFixtureTeam | null;
   courtId: string | null;
   scheduledAt: string | null;
   status: FixtureMatchStatus;
+  scoreHome: number | null;
+  scoreAway: number | null;
+}
+
+export interface TournamentPlayer {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: 'GOALKEEPER' | 'DEFENDER' | 'MIDFIELDER' | 'FORWARD' | null;
+}
+
+export interface TournamentFixtureTeam {
+  id: string;
+  name: string;
+}
+
+export interface TournamentTeam {
+  id: string;
+  name: string;
+  captainId: string;
+  captain: TournamentPlayer | null;
+  players: TournamentPlayer[];
+  createdAt: string;
 }
 
 export interface TournamentData {
   id: string;
   organizerId: string;
+  organizer: TournamentPlayer | null;
   name: string;
   format: MatchFormat;
   teamCount: number;
@@ -59,6 +85,7 @@ export interface TournamentData {
     address: string | null;
     imageUrl: string | null;
   } | null;
+  teams: TournamentTeam[];
   fixtureMatches: TournamentFixtureMatch[];
 }
 
@@ -125,6 +152,76 @@ export const GET_TOURNAMENTS = /* GraphQL */ `
   }
 `;
 
+export const GET_TOURNAMENT_DETAIL = /* GraphQL */ `
+  query GetTournamentDetail($id: ID!) {
+    tournament(id: $id) {
+      id
+      organizerId
+      organizer {
+        id
+        displayName
+        avatarUrl
+        preferredPosition
+      }
+      name
+      format
+      teamCount
+      playersPerTeam
+      registeredTeamsCount
+      status
+      description
+      startDate
+      endDate
+      createdAt
+      club {
+        id
+        name
+        zone
+        address
+        imageUrl
+      }
+      teams {
+        id
+        name
+        captainId
+        captain {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
+        players {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
+        createdAt
+      }
+      fixtureMatches {
+        id
+        tournamentId
+        round
+        homeTeamId
+        awayTeamId
+        homeTeam {
+          id
+          name
+        }
+        awayTeam {
+          id
+          name
+        }
+        courtId
+        scheduledAt
+        status
+        scoreHome
+        scoreAway
+      }
+    }
+  }
+`;
+
 export const CREATE_TOURNAMENT = /* GraphQL */ `
   mutation CreateTournament($input: CreateTournamentInput!) {
     createTournament(input: $input) {
@@ -134,6 +231,12 @@ export const CREATE_TOURNAMENT = /* GraphQL */ `
       tournament {
         id
         organizerId
+        organizer {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
         name
         format
         teamCount
@@ -157,9 +260,19 @@ export const CREATE_TOURNAMENT = /* GraphQL */ `
           round
           homeTeamId
           awayTeamId
+          homeTeam {
+            id
+            name
+          }
+          awayTeam {
+            id
+            name
+          }
           courtId
           scheduledAt
           status
+          scoreHome
+          scoreAway
         }
       }
     }
@@ -192,11 +305,23 @@ export const REGISTER_TOURNAMENT_TEAM = /* GraphQL */ `
         }
         fixtureMatches {
           id
+          tournamentId
           round
           homeTeamId
           awayTeamId
+          homeTeam {
+            id
+            name
+          }
+          awayTeam {
+            id
+            name
+          }
+          courtId
           scheduledAt
           status
+          scoreHome
+          scoreAway
         }
       }
     }

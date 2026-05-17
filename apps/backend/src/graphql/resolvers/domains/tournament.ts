@@ -48,6 +48,12 @@ const RegisterTournamentTeamSchema = z.object({
 
 const Query: QueryResolvers = {
   tournaments: async () => tournamentService.listRegistrationTournaments({}),
+  tournament: async (_parent, args) => {
+    const parsed = z.string().regex(UUID_REGEX, 'id invÃ¡lido').safeParse(args.id);
+    if (!parsed.success) return null;
+
+    return tournamentService.getTournamentById({}, parsed.data);
+  },
 };
 
 const Mutation: MutationResolvers = {

@@ -639,6 +639,7 @@ export type Query = {
   profile?: Maybe<Profile>;
   slotAuditLog: Array<SlotAuditLog>;
   slotImpactPreview: SlotImpactPreview;
+  tournament?: Maybe<Tournament>;
   tournaments: Array<Tournament>;
 };
 
@@ -710,6 +711,11 @@ export type QuerySlotAuditLogArgs = {
 
 export type QuerySlotImpactPreviewArgs = {
   slotIds: Array<Scalars['ID']['input']>;
+};
+
+
+export type QueryTournamentArgs = {
+  id: Scalars['ID']['input'];
 };
 
 export type RegisterTournamentTeamInput = {
@@ -808,12 +814,14 @@ export type Tournament = {
   format: MatchFormat;
   id: Scalars['ID']['output'];
   name: Scalars['String']['output'];
+  organizer?: Maybe<TournamentPlayer>;
   organizerId: Scalars['ID']['output'];
   playersPerTeam: Scalars['Int']['output'];
   registeredTeamsCount: Scalars['Int']['output'];
   startDate?: Maybe<Scalars['String']['output']>;
   status: TournamentStatus;
   teamCount: Scalars['Int']['output'];
+  teams: Array<TournamentTeam>;
 };
 
 export type TournamentClub = {
@@ -827,14 +835,26 @@ export type TournamentClub = {
 
 export type TournamentFixtureMatch = {
   __typename?: 'TournamentFixtureMatch';
+  awayTeam?: Maybe<TournamentTeam>;
   awayTeamId?: Maybe<Scalars['ID']['output']>;
   courtId?: Maybe<Scalars['ID']['output']>;
+  homeTeam?: Maybe<TournamentTeam>;
   homeTeamId?: Maybe<Scalars['ID']['output']>;
   id: Scalars['ID']['output'];
   round: Scalars['Int']['output'];
   scheduledAt?: Maybe<Scalars['String']['output']>;
+  scoreAway?: Maybe<Scalars['Int']['output']>;
+  scoreHome?: Maybe<Scalars['Int']['output']>;
   status: FixtureMatchStatus;
   tournamentId: Scalars['ID']['output'];
+};
+
+export type TournamentPlayer = {
+  __typename?: 'TournamentPlayer';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  preferredPosition?: Maybe<PlayerPosition>;
 };
 
 export type TournamentScheduleSlotInput = {
@@ -848,6 +868,16 @@ export enum TournamentStatus {
   InProgress = 'IN_PROGRESS',
   Registration = 'REGISTRATION'
 }
+
+export type TournamentTeam = {
+  __typename?: 'TournamentTeam';
+  captain?: Maybe<TournamentPlayer>;
+  captainId: Scalars['ID']['output'];
+  createdAt: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  players: Array<TournamentPlayer>;
+};
 
 export type TournamentTeamRegistrationResult = {
   __typename?: 'TournamentTeamRegistrationResult';
@@ -1057,8 +1087,10 @@ export type ResolversTypes = ResolversObject<{
   Tournament: ResolverTypeWrapper<Tournament>;
   TournamentClub: ResolverTypeWrapper<TournamentClub>;
   TournamentFixtureMatch: ResolverTypeWrapper<TournamentFixtureMatch>;
+  TournamentPlayer: ResolverTypeWrapper<TournamentPlayer>;
   TournamentScheduleSlotInput: TournamentScheduleSlotInput;
   TournamentStatus: TournamentStatus;
+  TournamentTeam: ResolverTypeWrapper<TournamentTeam>;
   TournamentTeamRegistrationResult: ResolverTypeWrapper<TournamentTeamRegistrationResult>;
   UpdateClubSlotInput: UpdateClubSlotInput;
   UpdateCourtPricingInput: UpdateCourtPricingInput;
@@ -1132,7 +1164,9 @@ export type ResolversParentTypes = ResolversObject<{
   Tournament: Tournament;
   TournamentClub: TournamentClub;
   TournamentFixtureMatch: TournamentFixtureMatch;
+  TournamentPlayer: TournamentPlayer;
   TournamentScheduleSlotInput: TournamentScheduleSlotInput;
+  TournamentTeam: TournamentTeam;
   TournamentTeamRegistrationResult: TournamentTeamRegistrationResult;
   UpdateClubSlotInput: UpdateClubSlotInput;
   UpdateCourtPricingInput: UpdateCourtPricingInput;
@@ -1491,6 +1525,7 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   profile?: Resolver<Maybe<ResolversTypes['Profile']>, ParentType, ContextType, RequireFields<QueryProfileArgs, 'id'>>;
   slotAuditLog?: Resolver<Array<ResolversTypes['SlotAuditLog']>, ParentType, ContextType, RequireFields<QuerySlotAuditLogArgs, 'slotId'>>;
   slotImpactPreview?: Resolver<ResolversTypes['SlotImpactPreview'], ParentType, ContextType, RequireFields<QuerySlotImpactPreviewArgs, 'slotIds'>>;
+  tournament?: Resolver<Maybe<ResolversTypes['Tournament']>, ParentType, ContextType, RequireFields<QueryTournamentArgs, 'id'>>;
   tournaments?: Resolver<Array<ResolversTypes['Tournament']>, ParentType, ContextType>;
 }>;
 
@@ -1545,12 +1580,14 @@ export type TournamentResolvers<ContextType = GraphQLContext, ParentType extends
   format?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  organizer?: Resolver<Maybe<ResolversTypes['TournamentPlayer']>, ParentType, ContextType>;
   organizerId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   playersPerTeam?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   registeredTeamsCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   startDate?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   status?: Resolver<ResolversTypes['TournamentStatus'], ParentType, ContextType>;
   teamCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  teams?: Resolver<Array<ResolversTypes['TournamentTeam']>, ParentType, ContextType>;
 }>;
 
 export type TournamentClubResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentClub'] = ResolversParentTypes['TournamentClub']> = ResolversObject<{
@@ -1562,14 +1599,34 @@ export type TournamentClubResolvers<ContextType = GraphQLContext, ParentType ext
 }>;
 
 export type TournamentFixtureMatchResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentFixtureMatch'] = ResolversParentTypes['TournamentFixtureMatch']> = ResolversObject<{
+  awayTeam?: Resolver<Maybe<ResolversTypes['TournamentTeam']>, ParentType, ContextType>;
   awayTeamId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   courtId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  homeTeam?: Resolver<Maybe<ResolversTypes['TournamentTeam']>, ParentType, ContextType>;
   homeTeamId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   round?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   scheduledAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  scoreAway?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  scoreHome?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   status?: Resolver<ResolversTypes['FixtureMatchStatus'], ParentType, ContextType>;
   tournamentId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+}>;
+
+export type TournamentPlayerResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentPlayer'] = ResolversParentTypes['TournamentPlayer']> = ResolversObject<{
+  avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  preferredPosition?: Resolver<Maybe<ResolversTypes['PlayerPosition']>, ParentType, ContextType>;
+}>;
+
+export type TournamentTeamResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentTeam'] = ResolversParentTypes['TournamentTeam']> = ResolversObject<{
+  captain?: Resolver<Maybe<ResolversTypes['TournamentPlayer']>, ParentType, ContextType>;
+  captainId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  players?: Resolver<Array<ResolversTypes['TournamentPlayer']>, ParentType, ContextType>;
 }>;
 
 export type TournamentTeamRegistrationResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentTeamRegistrationResult'] = ResolversParentTypes['TournamentTeamRegistrationResult']> = ResolversObject<{
@@ -1626,6 +1683,8 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Tournament?: TournamentResolvers<ContextType>;
   TournamentClub?: TournamentClubResolvers<ContextType>;
   TournamentFixtureMatch?: TournamentFixtureMatchResolvers<ContextType>;
+  TournamentPlayer?: TournamentPlayerResolvers<ContextType>;
+  TournamentTeam?: TournamentTeamResolvers<ContextType>;
   TournamentTeamRegistrationResult?: TournamentTeamRegistrationResultResolvers<ContextType>;
   VoteSubmissionResult?: VoteSubmissionResultResolvers<ContextType>;
 }>;
