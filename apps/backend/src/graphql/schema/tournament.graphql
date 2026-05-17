@@ -38,14 +38,35 @@ type TournamentFixtureMatch {
   round: Int!
   homeTeamId: ID
   awayTeamId: ID
+  homeTeam: TournamentTeam
+  awayTeam: TournamentTeam
   courtId: ID
   scheduledAt: String
   status: FixtureMatchStatus!
+  scoreHome: Int
+  scoreAway: Int
+}
+
+type TournamentPlayer {
+  id: ID!
+  displayName: String!
+  avatarUrl: String
+  preferredPosition: PlayerPosition
+}
+
+type TournamentTeam {
+  id: ID!
+  name: String!
+  captainId: ID!
+  captain: TournamentPlayer
+  players: [TournamentPlayer!]!
+  createdAt: String!
 }
 
 type Tournament {
   id: ID!
   organizerId: ID!
+  organizer: TournamentPlayer
   name: String!
   format: MatchFormat!
   teamCount: Int!
@@ -57,6 +78,7 @@ type Tournament {
   endDate: String
   createdAt: String!
   club: TournamentClub
+  teams: [TournamentTeam!]!
   fixtureMatches: [TournamentFixtureMatch!]!
 }
 
@@ -96,6 +118,7 @@ input RegisterTournamentTeamInput {
 
 extend type Query {
   tournaments: [Tournament!]!
+  tournament(id: ID!): Tournament
 }
 
 extend type Mutation {

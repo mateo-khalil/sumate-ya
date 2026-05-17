@@ -135,8 +135,10 @@ export function TournamentCard({
             <Trophy className="h-5 w-5" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate font-[Bebas_Neue,sans-serif] text-2xl leading-none tracking-[0.04em] text-foreground">
-              {tournament.name}
+            <h2 className="truncate font-[Bebas_Neue,sans-serif] text-2xl leading-none tracking-[0.04em]">
+              <a href={`/torneos/${tournament.id}`} className="text-foreground hover:text-primary">
+                {tournament.name}
+              </a>
             </h2>
             {tournament.club && (
               <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
@@ -209,6 +211,13 @@ export function TournamentCard({
             {isFull ? 'Completo' : isAuthenticated ? 'Anotar equipo' : 'Iniciar sesión para anotar'}
           </Button>
         )}
+
+        <a
+          href={`/torneos/${tournament.id}`}
+          className="mt-2 block rounded-md border border-border px-3 py-2 text-center text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+        >
+          Ver detalle
+        </a>
 
         {error && <p className="mt-3 text-sm text-destructive" role="alert">{error}</p>}
         {success && <p className="mt-3 text-sm text-success-foreground" role="status">{success}</p>}

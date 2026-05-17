@@ -1,0 +1,383 @@
+---
+/**
+ * /torneos/[id] - Detalle publico de torneo.
+ *
+ * Decision Context:
+ * - SSR: el detalle debe mostrar equipos, fixture y resultados con datos frescos desde
+ *   GraphQL. La pagina es publica y solo el CTA de inscripcion exige sesion.
+ * - La inscripcion queda en una isla React pequeña para reutilizar /api/graphql-auth y
+ *   el cookie HttpOnly sin exponer credenciales en el cliente.
+ */
+export const prerender = false;
+
+import {
+  CalendarDays,
+  CheckCircle,
+  Clock,
+  MapPin,
+  Shield,
+  Trophy,
+  UserRound,
+  Users,
+  Volleyball,
+} from 'lucide-react';
+import Layout from '../../layouts/Layout.astro';
+import { TournamentRegistrationForm } from '../../components/tournaments/TournamentRegistrationForm';
+import { GET_TOURNAMENT_DETAIL, type TournamentData, type TournamentFixtureMatch } from '../../graphql/operations/tournaments';
+import { readAccessToken } from '../../lib/auth';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const id = Astro.params.id ?? Astro.url.pathname.split('/').filter(Boolean).at(-1);
+if (!id || !UUID_REGEX.test(id)) {
+  return Astro.redirect('/torneos');
+}
+
+const user = Astro.locals.user;
+const isAuthenticated = !!user;
+const nombre = user?.displayName || user?.email;
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+const backendUrl =
+  import.meta.env.PRIVATE_BACKEND_URL ||
+  (typeof process !== 'undefined' ? process.env.PRIVATE_BACKEND_URL : undefined) ||
+  'http://localhost:4000';
+
+let tournament: TournamentData | null = null;
+let fetchError: string | null = null;
+
+try {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+  const response = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ query: GET_TOURNAMENT_DETAIL, variables: { id } }),
+  });
+
+  const json = await response.json() as {
+    data?: { tournament: TournamentData | null };
+    errors?: Array<{ message: string }>;
+  };
+
+  if (json.errors?.length) fetchError = json.errors[0].message;
+  else tournament = json.data?.tournament ?? null;
+} catch {
+  fetchError = 'Error de red al cargar el torneo.';
+}
+
+const formatLabels = {
+  FIVE_VS_FIVE: '5v5',
+  SEVEN_VS_SEVEN: '7v7',
+  TEN_VS_TEN: '10v10',
+  ELEVEN_VS_ELEVEN: '11v11',
+};
+
+const statusLabels = {
+  REGISTRATION: 'Inscripcion abierta',
+  IN_PROGRESS: 'En juego',
+  COMPLETED: 'Finalizado',
+  CANCELLED: 'Cancelado',
+};
+
+function formatDate(value: string | null): string {
+  if (!value) return 'A confirmar';
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('es-UY', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return 'Horario a confirmar';
+  return new Date(value).toLocaleString('es-UY', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function initials(name: string): string {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+}
+
+function teamName(match: TournamentFixtureMatch, side: 'home' | 'away'): string {
+  const team = side === 'home' ? match.homeTeam : match.awayTeam;
+  if (team?.name) return team.name;
+  return 'Equipo por definir';
+}
+
+const registeredTeams = tournament ? Math.min(tournament.registeredTeamsCount, tournament.teamCount) : 0;
+const canRegister = Boolean(
+  tournament &&
+    tournament.status === 'REGISTRATION' &&
+    tournament.registeredTeamsCount < tournament.teamCount,
+);
+const progress = tournament?.teamCount ? Math.round((registeredTeams / tournament.teamCount) * 100) : 0;
+const fixtureByRound = new Map<number, TournamentFixtureMatch[]>();
+for (const match of tournament?.fixtureMatches ?? []) {
+  const matches = fixtureByRound.get(match.round) ?? [];
+  matches.push(match);
+  fixtureByRound.set(match.round, matches);
+}
+---
+
+<Layout title={tournament ? `${tournament.name} - Sumate Ya` : 'Torneo - Sumate Ya'}>
+  <div class="app-shell">
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <a class="topbar-brand" href="/partidos">
+          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
+          <span class="topbar-name">SUMATE YA</span>
+        </a>
+
+        <div class="topbar-actions">
+          {isAuthenticated ? (
+            <>
+              <a href="/partidos" class="nav-link">Partidos</a>
+              <a href="/torneos" class="nav-link">Torneos</a>
+              <a href="/torneos/crear" class="btn-crear">Crear torneo</a>
+              {user?.role === 'player' && <a href="/perfil" class="nav-link">Mi Perfil</a>}
+              <span class="user-badge"><span class="user-dot"></span>{nombre}</span>
+              <form method="POST" action="/api/auth/logout">
+                <button type="submit" class="btn-logout">Salir</button>
+              </form>
+            </>
+          ) : (
+            <>
+              <a href="/partidos" class="nav-link">Partidos</a>
+              <a href="/torneos" class="nav-link">Torneos</a>
+              <a href="/login" class="btn-logout">Iniciar Sesion</a>
+            </>
+          )}
+        </div>
+      </div>
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <main class="page-content">
+      {(!tournament || fetchError) && (
+        <section class="not-found">
+          <p class="nf-title">{fetchError ? 'Error al cargar' : 'Torneo no encontrado'}</p>
+          <p class="nf-sub">{fetchError ?? 'Puede que el torneo ya no este disponible.'}</p>
+          <a href="/torneos" class="btn-back">Volver a torneos</a>
+        </section>
+      )}
+
+      {tournament && (
+        <div class="tournament-detail">
+          <a href="/torneos" class="link-back">Volver a torneos</a>
+
+          <section class="hero-panel">
+            <div class="hero-main">
+              <div class="eyebrow"><Trophy size={15} strokeWidth={2} aria-hidden="true" /> TORNEO</div>
+              <h1>{tournament.name}</h1>
+              <p class="hero-description">
+                {tournament.description || 'Torneo abierto para equipos que quieren competir con fixture organizado y resultados visibles.'}
+              </p>
+              <div class="hero-meta">
+                <span><Shield size={15} aria-hidden="true" /> {formatLabels[tournament.format]}</span>
+                <span><MapPin size={15} aria-hidden="true" /> {tournament.club?.name ?? 'Club a confirmar'}</span>
+                <span><UserRound size={15} aria-hidden="true" /> {tournament.organizer?.displayName ?? 'Organizador'}</span>
+              </div>
+            </div>
+
+            <aside class="signup-panel" aria-label="Inscripcion del torneo">
+              <div class="status-pill">{statusLabels[tournament.status]}</div>
+              <div class="capacity-number">{registeredTeams}<span>/{tournament.teamCount}</span></div>
+              <p>equipos inscriptos</p>
+              <div class="capacity-bar" aria-hidden="true"><span style={`width: ${progress}%`}></span></div>
+              <TournamentRegistrationForm
+                client:load
+                tournamentId={tournament.id}
+                isAuthenticated={isAuthenticated}
+                canRegister={canRegister}
+              />
+            </aside>
+          </section>
+
+          <section class="info-grid" aria-label="Datos del torneo">
+            <div class="info-item">
+              <CalendarDays size={18} aria-hidden="true" />
+              <div><span>Fechas</span><strong>{formatDate(tournament.startDate)} - {formatDate(tournament.endDate)}</strong></div>
+            </div>
+            <div class="info-item">
+              <Users size={18} aria-hidden="true" />
+              <div><span>Formato</span><strong>{tournament.playersPerTeam} jugadores por equipo</strong></div>
+            </div>
+            <div class="info-item">
+              <MapPin size={18} aria-hidden="true" />
+              <div><span>Club</span><strong>{tournament.club?.address ?? tournament.club?.zone ?? 'Ubicacion a confirmar'}</strong></div>
+            </div>
+          </section>
+
+          <section class="content-grid">
+            <div class="detail-section">
+              <div class="section-heading">
+                <h2>Equipos inscriptos</h2>
+                <span>{registeredTeams} de {tournament.teamCount}</span>
+              </div>
+
+              {tournament.teams.length === 0 ? (
+                <div class="empty-state">Todavia no hay equipos anotados.</div>
+              ) : (
+                <div class="teams-list">
+                  {tournament.teams.map((team) => (
+                    <article class="team-row">
+                      <div class="team-title">
+                        <div class="team-mark">{initials(team.name) || 'EQ'}</div>
+                        <div>
+                          <h3>{team.name}</h3>
+                          <p>Capitan: {team.captain?.displayName ?? 'Sin datos'}</p>
+                        </div>
+                      </div>
+                      <ul class="players-mini" aria-label={`Jugadores de ${team.name}`}>
+                        {team.players.map((player) => (
+                          <li>
+                            <span class="player-dot">{initials(player.displayName) || 'J'}</span>
+                            {player.displayName}
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div class="detail-section fixture-section">
+              <div class="section-heading">
+                <h2>Fixture</h2>
+                <span>{tournament.fixtureMatches.length} partidos</span>
+              </div>
+
+              {tournament.fixtureMatches.length === 0 ? (
+                <div class="empty-state">El fixture todavia no fue generado.</div>
+              ) : (
+                <div class="rounds-list">
+                  {[...fixtureByRound.entries()].map(([round, matches]) => (
+                    <section class="round-block">
+                      <h3>Fecha {round}</h3>
+                      <div class="matches-stack">
+                        {matches.map((match) => {
+                          const played = match.status === 'COMPLETED';
+                          return (
+                            <article class={`fixture-match ${played ? 'fixture-match--played' : ''}`}>
+                              <div class="fixture-time">
+                                <Clock size={14} aria-hidden="true" />
+                                {formatDateTime(match.scheduledAt)}
+                              </div>
+                              <div class="fixture-line">
+                                <span>{teamName(match, 'home')}</span>
+                                <strong>
+                                  {played && match.scoreHome !== null && match.scoreAway !== null
+                                    ? `${match.scoreHome} - ${match.scoreAway}`
+                                    : 'vs'}
+                                </strong>
+                                <span>{teamName(match, 'away')}</span>
+                              </div>
+                              {played && <div class="played-mark"><CheckCircle size={13} aria-hidden="true" /> Jugado</div>}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+    </main>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 50; background: rgba(7,15,31,0.85); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .topbar-inner { max-width: 1100px; margin: 0 auto; padding: 0 1.25rem; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+  .topbar-brand { display: flex; align-items: center; gap: 0.5rem; text-decoration: none; }
+  .topbar-ball { color: hsl(35 100% 55%); display: inline-flex; }
+  .topbar-name { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; letter-spacing: 0.1em; color: #fff; }
+  .topbar-actions { display: flex; align-items: center; gap: 0.75rem; }
+  .topbar-accent { height: 2px; background: linear-gradient(90deg, hsl(35 100% 48%), hsl(216 85% 45%), transparent); }
+  .nav-link, .btn-crear { font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; text-decoration: none; border-radius: 6px; }
+  .nav-link { color: hsl(215 20% 65%); padding: 0.3rem 0.6rem; }
+  .nav-link:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 92%); }
+  .btn-crear { padding: 0.35rem 0.875rem; background: hsl(35 100% 48%); color: hsl(220 72% 7%); }
+  .btn-logout { background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 0.3rem 0.75rem; color: hsl(215 20% 60%); font-family: 'Barlow', sans-serif; font-size: 0.8125rem; text-decoration: none; cursor: pointer; }
+  .user-badge { display: flex; align-items: center; gap: 0.4rem; border: 1px solid rgba(246,164,0,0.25); color: hsl(35 100% 65%); border-radius: 20px; padding: 0.25rem 0.875rem; font-size: 0.8125rem; font-weight: 600; }
+  .user-dot { width: 6px; height: 6px; border-radius: 50%; background: hsl(35 100% 55%); }
+  .page-content { flex: 1; max-width: 1100px; width: 100%; margin: 0 auto; padding: 2.5rem 1.25rem; }
+  .tournament-detail { display: flex; flex-direction: column; gap: 1.25rem; }
+  .link-back, .btn-back { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: hsl(35 100% 55%); text-decoration: none; width: fit-content; }
+  .hero-panel { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; align-items: stretch; }
+  .hero-main, .signup-panel, .info-item, .detail-section { background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; }
+  .hero-main { padding: 2rem; min-height: 270px; display: flex; flex-direction: column; justify-content: flex-end; background-image: linear-gradient(135deg, rgba(246,164,0,0.14), transparent 42%), linear-gradient(180deg, hsl(220 55% 13%), hsl(220 55% 9%)); }
+  .eyebrow { display: flex; align-items: center; gap: 0.45rem; font-family: 'Barlow Condensed', sans-serif; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.18em; color: hsl(42 100% 62%); margin-bottom: 0.75rem; }
+  h1 { margin: 0; font-family: 'Bebas Neue', sans-serif; font-size: clamp(2.5rem, 9vw, 5.5rem); line-height: 0.9; letter-spacing: 0.03em; color: white; }
+  .hero-description { max-width: 680px; margin: 0.9rem 0 0; color: hsl(215 20% 72%); font-size: 1rem; line-height: 1.55; }
+  .hero-meta { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.25rem; }
+  .hero-meta span { display: inline-flex; align-items: center; gap: 0.4rem; color: hsl(210 20% 90%); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09); border-radius: 999px; padding: 0.4rem 0.7rem; font-size: 0.875rem; }
+  .signup-panel { padding: 1.25rem; display: flex; flex-direction: column; justify-content: center; gap: 0.85rem; }
+  .status-pill { width: fit-content; border: 1px solid rgba(246,164,0,0.35); color: hsl(42 100% 65%); border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+  .capacity-number { font-family: 'Bebas Neue', sans-serif; color: white; font-size: 4rem; line-height: 0.9; }
+  .capacity-number span { color: hsl(215 20% 50%); font-size: 2rem; }
+  .signup-panel p { margin: 0; color: hsl(215 20% 60%); }
+  .capacity-bar { height: 8px; background: hsl(220 45% 18%); border-radius: 999px; overflow: hidden; }
+  .capacity-bar span { display: block; height: 100%; background: hsl(35 100% 50%); border-radius: inherit; }
+  :global(.detail-register-form) { display: grid; gap: 0.65rem; margin-top: 0.35rem; }
+  :global(.detail-team-input) { min-height: 42px; border: 1px solid rgba(255,255,255,0.12); background: hsl(220 55% 8%); color: white; border-radius: 8px; padding: 0 0.8rem; outline: none; }
+  :global(.detail-form-error) { margin: 0; color: hsl(0 72% 70%); font-size: 0.85rem; }
+  :global(.detail-form-message) { margin: 0; color: hsl(142 72% 65%); font-size: 0.85rem; }
+  :global(.detail-login-button), :global(.registration-closed) { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; min-height: 42px; border-radius: 8px; text-decoration: none; font-weight: 700; }
+  :global(.detail-login-button) { background: hsl(35 100% 48%); color: hsl(220 72% 7%); }
+  :global(.registration-closed) { background: rgba(255,255,255,0.06); color: hsl(215 20% 62%); padding: 0 0.75rem; }
+  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .info-item { padding: 1rem; display: flex; align-items: flex-start; gap: 0.85rem; color: hsl(35 100% 55%); }
+  .info-item span { display: block; color: hsl(215 20% 50%); font-size: 0.8rem; margin-bottom: 0.25rem; }
+  .info-item strong { color: hsl(210 20% 90%); font-size: 0.95rem; font-weight: 600; }
+  .content-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 1rem; align-items: start; }
+  .detail-section { padding: 1.25rem; }
+  .section-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 1rem; }
+  .section-heading h2 { margin: 0; font-family: 'Bebas Neue', sans-serif; color: white; font-size: 2rem; letter-spacing: 0.04em; }
+  .section-heading span { color: hsl(215 20% 50%); font-size: 0.85rem; }
+  .teams-list, .rounds-list, .matches-stack { display: flex; flex-direction: column; gap: 0.75rem; }
+  .team-row { border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.035); border-radius: 10px; padding: 0.9rem; }
+  .team-title { display: flex; align-items: center; gap: 0.8rem; }
+  .team-mark, .player-dot { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink: 0; }
+  .team-mark { width: 42px; height: 42px; background: hsl(35 100% 48%); color: hsl(220 72% 7%); font-weight: 800; }
+  .team-title h3 { margin: 0; color: white; font-size: 1rem; }
+  .team-title p { margin: 0.2rem 0 0; color: hsl(215 20% 58%); font-size: 0.86rem; }
+  .players-mini { list-style: none; padding: 0.75rem 0 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .players-mini li { display: inline-flex; align-items: center; gap: 0.4rem; color: hsl(215 20% 75%); font-size: 0.85rem; }
+  .player-dot { width: 24px; height: 24px; background: hsl(220 45% 18%); color: hsl(35 100% 62%); font-size: 0.68rem; font-weight: 800; }
+  .round-block h3 { margin: 0 0 0.55rem; color: hsl(35 100% 62%); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; }
+  .fixture-match { border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.035); border-radius: 10px; padding: 0.85rem; }
+  .fixture-match--played { border-color: rgba(34,197,94,0.28); }
+  .fixture-time, .played-mark { display: flex; align-items: center; gap: 0.4rem; color: hsl(215 20% 55%); font-size: 0.8rem; }
+  .fixture-line { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 0.7rem; margin-top: 0.55rem; color: white; }
+  .fixture-line span { min-width: 0; overflow-wrap: anywhere; }
+  .fixture-line span:last-child { text-align: right; }
+  .fixture-line strong { color: hsl(35 100% 58%); font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.05em; }
+  .played-mark { margin-top: 0.45rem; color: hsl(142 72% 65%); }
+  .empty-state, .not-found { color: hsl(215 20% 55%); border: 1px dashed rgba(255,255,255,0.14); border-radius: 10px; padding: 1.5rem; text-align: center; }
+  .nf-title { font-family: 'Bebas Neue', sans-serif; color: white; font-size: 2rem; margin: 0 0 0.35rem; }
+  .nf-sub { margin: 0 0 1rem; }
+  @media (max-width: 850px) {
+    .hero-panel, .content-grid, .info-grid { grid-template-columns: 1fr; }
+    .topbar-actions .nav-link, .topbar-actions .btn-crear, .user-badge { display: none; }
+    .page-content { padding: 1.25rem 1rem; }
+    .hero-main { padding: 1.35rem; min-height: 230px; }
+  }
+</style>

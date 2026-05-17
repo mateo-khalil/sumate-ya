@@ -22,6 +22,74 @@ query GetTournaments {
   }
 }
 
+query GetTournamentDetail($id: ID!) {
+  tournament(id: $id) {
+    id
+    organizerId
+    organizer {
+      id
+      displayName
+      avatarUrl
+      preferredPosition
+    }
+    name
+    format
+    teamCount
+    playersPerTeam
+    registeredTeamsCount
+    status
+    description
+    startDate
+    endDate
+    createdAt
+    club {
+      id
+      name
+      zone
+      address
+      imageUrl
+    }
+    teams {
+      id
+      name
+      captainId
+      captain {
+        id
+        displayName
+        avatarUrl
+        preferredPosition
+      }
+      players {
+        id
+        displayName
+        avatarUrl
+        preferredPosition
+      }
+      createdAt
+    }
+    fixtureMatches {
+      id
+      tournamentId
+      round
+      homeTeamId
+      awayTeamId
+      homeTeam {
+        id
+        name
+      }
+      awayTeam {
+        id
+        name
+      }
+      courtId
+      scheduledAt
+      status
+      scoreHome
+      scoreAway
+    }
+  }
+}
+
 mutation CreateTournament($input: CreateTournamentInput!) {
   createTournament(input: $input) {
     success
@@ -30,6 +98,12 @@ mutation CreateTournament($input: CreateTournamentInput!) {
     tournament {
       id
       organizerId
+      organizer {
+        id
+        displayName
+        avatarUrl
+        preferredPosition
+      }
       name
       format
       teamCount
@@ -53,9 +127,19 @@ mutation CreateTournament($input: CreateTournamentInput!) {
         round
         homeTeamId
         awayTeamId
+        homeTeam {
+          id
+          name
+        }
+        awayTeam {
+          id
+          name
+        }
         courtId
         scheduledAt
         status
+        scoreHome
+        scoreAway
       }
     }
   }
@@ -86,11 +170,23 @@ mutation RegisterTournamentTeam($input: RegisterTournamentTeamInput!) {
       }
       fixtureMatches {
         id
+        tournamentId
         round
         homeTeamId
         awayTeamId
+        homeTeam {
+          id
+          name
+        }
+        awayTeam {
+          id
+          name
+        }
+        courtId
         scheduledAt
         status
+        scoreHome
+        scoreAway
       }
     }
   }
