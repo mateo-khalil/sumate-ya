@@ -85,12 +85,14 @@ query GetMatchDetail($id: ID!) {
         displayName
         avatarUrl
         preferredPosition
+        division
       }
       teamB {
         id
         displayName
         avatarUrl
         preferredPosition
+        division
       }
       teamACount
       teamBCount

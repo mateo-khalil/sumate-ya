@@ -438,7 +438,7 @@ const PARTICIPANT_COLUMNS = `
   id,
   team,
   "joinedAt",
-  profiles(id, "displayName", "avatarUrl", "preferredPosition")
+  profiles(id, "displayName", "avatarUrl", "preferredPosition", division)
 `;
 
 export interface ParticipantProfileRow {
@@ -446,6 +446,7 @@ export interface ParticipantProfileRow {
   displayName: string;
   avatarUrl: string | null;
   preferredPosition: string | null;
+  division: number;
 }
 
 export interface ParticipantRow {

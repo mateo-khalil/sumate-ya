@@ -378,6 +378,24 @@ export async function updateMatchWithResult(
 }
 
 /**
+ * Recalculate matchesPlayed, matchesWon, and division for every participant in a match.
+ * The SQL function derives stats from confirmed matches, so retries never double-count.
+ */
+export async function refreshCompetitiveStatsForMatch(matchId: string): Promise<void> {
+  const { error } = await supabase.rpc('refresh_profile_competitive_stats_for_match', {
+    p_match_id: matchId,
+  });
+
+  if (error) {
+    console.error(
+      `[matchResultVoteRepository.refreshCompetitiveStatsForMatch] Supabase error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Get all participant userIds for a match.
  * Used for cache invalidation after result confirmation.
  */
@@ -410,5 +428,6 @@ export const matchResultVoteRepository = {
   confirmSubmission,
   rejectOtherSubmissions,
   updateMatchWithResult,
+  refreshCompetitiveStatsForMatch,
   getParticipantIds,
 };

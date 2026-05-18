@@ -39,6 +39,7 @@ const repoMock = vi.hoisted(() => ({
   confirmSubmission: vi.fn(),
   rejectOtherSubmissions: vi.fn(),
   updateMatchWithResult: vi.fn(),
+  refreshCompetitiveStatsForMatch: vi.fn(),
   getParticipantIds: vi.fn(),
 }));
 
@@ -65,6 +66,7 @@ vi.mock('../config/redis.js', () => ({
     MATCH_DETAIL: 'match:',
     MATCHES_OPEN: 'matches:open',
     MATCHES_LIST: 'matches:list',
+    PROFILE_ME: 'profile:me:',
     USER_MATCHES: 'user:matches:',
   },
   CACHE_TTL: {
@@ -132,6 +134,7 @@ beforeEach(() => {
   repoMock.confirmSubmission.mockResolvedValue(undefined);
   repoMock.rejectOtherSubmissions.mockResolvedValue(undefined);
   repoMock.updateMatchWithResult.mockResolvedValue(undefined);
+  repoMock.refreshCompetitiveStatsForMatch.mockResolvedValue(undefined);
   repoMock.getParticipantIds.mockResolvedValue([USER_ID, OTHER_USER_ID]);
   repoMock.getSubmissionsByMatch.mockResolvedValue([]);
   repoMock.getSubmissionById.mockResolvedValue(buildSubmissionRow());
@@ -373,6 +376,7 @@ describe('matchResultVoteService.voteMatchResult', () => {
     expect(repoMock.confirmSubmission).toHaveBeenCalledWith(SUBMISSION_ID);
     expect(repoMock.rejectOtherSubmissions).toHaveBeenCalledWith(MATCH_ID, SUBMISSION_ID);
     expect(repoMock.updateMatchWithResult).toHaveBeenCalledWith(MATCH_ID, 3, 1, 'a');
+    expect(repoMock.refreshCompetitiveStatsForMatch).toHaveBeenCalledWith(MATCH_ID);
     expect(result.statusChanged).toBe(true);
     expect(result.submission.status).toBe(SubmissionStatus.Confirmed);
 
@@ -385,6 +389,10 @@ describe('matchResultVoteService.voteMatchResult', () => {
     // Per-participant history caches cleared
     expect(cacheMock.cacheDeletePattern).toHaveBeenCalledWith(`user:matches:${USER_ID}*`);
     expect(cacheMock.cacheDeletePattern).toHaveBeenCalledWith(`user:matches:${OTHER_USER_ID}*`);
+    expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`profile:me:${USER_ID}`);
+    expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`profile:me:${OTHER_USER_ID}`);
+    expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`profile:public:${USER_ID}`);
+    expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`profile:public:${OTHER_USER_ID}`);
 
     // Submission list cache cleared
     expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`match:submissions:${MATCH_ID}`);

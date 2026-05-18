@@ -14,6 +14,7 @@
 
 import { X, User } from 'lucide-react';
 import type { PrivacySettings, Profile } from '../../graphql/operations/profile';
+import { getDivisionMeta } from '../../lib/division';
 
 interface Props {
   isOpen: boolean;
@@ -42,12 +43,15 @@ function PreviewCard({ profile, settings }: { profile: Profile; settings: Privac
     showStats && profile.matchesPlayed && profile.matchesPlayed > 0
       ? ((profile.matchesWon ?? 0) / profile.matchesPlayed) * 100
       : null;
+  const division = getDivisionMeta(profile.division);
 
   return (
     <article className="preview-card">
       <div className="preview-card-header">
         {showDivision && (
-          <span className="preview-div-badge">DIV {profile.division}</span>
+          <span className={`preview-div-badge ${division.className}`}>
+            D{division.level} {division.name}
+          </span>
         )}
         <span className="preview-role-badge">Jugador</span>
       </div>
@@ -124,14 +128,37 @@ function PreviewCard({ profile, settings }: { profile: Profile; settings: Privac
           border-bottom: 1px solid rgba(255,255,255,0.06);
         }
         .preview-div-badge {
+          --division-accent: hsl(35 100% 65%);
+          --division-bg: rgba(246,164,0,0.12);
+          --division-border: rgba(246,164,0,0.25);
           font-family: 'Bebas Neue', sans-serif;
           font-size: 0.85rem;
           letter-spacing: 0.1em;
-          color: hsl(35 100% 65%);
-          background: rgba(246,164,0,0.12);
-          border: 1px solid rgba(246,164,0,0.25);
+          color: var(--division-accent);
+          background: var(--division-bg);
+          border: 1px solid var(--division-border);
           padding: 0.1rem 0.5rem;
           border-radius: 4px;
+        }
+        .preview-div-badge.division-bronze {
+          --division-accent: hsl(24 78% 64%);
+          --division-bg: hsl(24 78% 45% / 0.13);
+          --division-border: hsl(24 78% 52% / 0.34);
+        }
+        .preview-div-badge.division-silver {
+          --division-accent: hsl(205 18% 82%);
+          --division-bg: hsl(205 18% 64% / 0.12);
+          --division-border: hsl(205 18% 76% / 0.34);
+        }
+        .preview-div-badge.division-gold {
+          --division-accent: hsl(44 100% 62%);
+          --division-bg: hsl(44 100% 50% / 0.13);
+          --division-border: hsl(44 100% 54% / 0.36);
+        }
+        .preview-div-badge.division-diamond {
+          --division-accent: hsl(184 86% 66%);
+          --division-bg: hsl(184 86% 46% / 0.13);
+          --division-border: hsl(184 86% 58% / 0.38);
         }
         .preview-role-badge {
           font-family: 'Barlow Condensed', sans-serif;

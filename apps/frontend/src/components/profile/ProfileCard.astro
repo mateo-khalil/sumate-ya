@@ -16,6 +16,7 @@
  */
 
 import type { Profile } from '../../graphql/operations/profile';
+import DivisionBadge from '../shared/DivisionBadge.astro';
 
 interface Props {
   profile: Profile;
@@ -50,7 +51,7 @@ const avatarSrc = profile.avatarUrl ?? null;
 <article class="profile-card">
   <!-- Header stripe -->
   <div class="card-header">
-    <span class="division-badge">DIV {profile.division}</span>
+    <DivisionBadge division={profile.division} />
     <span class="role-badge">{roleLabel}</span>
   </div>
 
@@ -125,17 +126,6 @@ const avatarSrc = profile.avatarUrl ?? null;
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .division-badge {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 0.9rem;
-    letter-spacing: 0.12em;
-    color: hsl(35 100% 65%);
-    background: rgba(246, 164, 0, 0.12);
-    border: 1px solid rgba(246, 164, 0, 0.25);
-    padding: 0.15rem 0.6rem;
-    border-radius: 4px;
   }
 
   .role-badge {

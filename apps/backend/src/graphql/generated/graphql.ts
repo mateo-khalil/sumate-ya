@@ -822,6 +822,7 @@ export type TeamMember = {
   __typename?: 'TeamMember';
   avatarUrl?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
+  division?: Maybe<Scalars['Int']['output']>;
   id: Scalars['ID']['output'];
   preferredPosition?: Maybe<Scalars['String']['output']>;
 };
@@ -1612,6 +1613,7 @@ export type SlotImpactPreviewResolvers<ContextType = GraphQLContext, ParentType 
 export type TeamMemberResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TeamMember'] = ResolversParentTypes['TeamMember']> = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  division?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   preferredPosition?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;

@@ -21,6 +21,7 @@ export const prerender = false;
 
 import { Volleyball, Lock, ArrowLeft, BarChart3 } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
+import DivisionBadge from '../../components/shared/DivisionBadge.astro';
 import { ACCESS_TOKEN_COOKIE } from '../../lib/auth';
 import {
   GET_PROFILE,
@@ -137,7 +138,7 @@ const winrateDisplay =
             <!-- Card header -->
             <div class="card-header">
               {profile.division != null && (
-                <span class="division-badge">DIV {profile.division}</span>
+                <DivisionBadge division={profile.division} />
               )}
               <span class="role-badge">Jugador</span>
             </div>
@@ -364,16 +365,6 @@ const winrateDisplay =
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .division-badge {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 0.9rem;
-    letter-spacing: 0.12em;
-    color: hsl(35 100% 65%);
-    background: rgba(246,164,0,0.12);
-    border: 1px solid rgba(246,164,0,0.25);
-    padding: 0.15rem 0.6rem;
-    border-radius: 4px;
   }
   .role-badge {
     font-family: 'Barlow Condensed', sans-serif;

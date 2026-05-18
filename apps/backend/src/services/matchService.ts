@@ -382,6 +382,7 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
       displayName: p.profiles.displayName,
       avatarUrl: p.profiles.avatarUrl ?? null,
       preferredPosition: p.profiles.preferredPosition ?? null,
+      division: p.profiles.division,
     }));
 
   const teamB = row.matchParticipants
@@ -391,6 +392,7 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
       displayName: p.profiles.displayName,
       avatarUrl: p.profiles.avatarUrl ?? null,
       preferredPosition: p.profiles.preferredPosition ?? null,
+      division: p.profiles.division,
     }));
 
   const spotsPerTeam = Math.floor(row.capacity / 2);
