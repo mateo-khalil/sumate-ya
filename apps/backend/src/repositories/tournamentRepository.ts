@@ -187,6 +187,12 @@ export interface RegisterTournamentTeamRpcInput {
   name: string;
 }
 
+export interface JoinTournamentRpcInput {
+  tournamentId: string;
+  teamName: string;
+  memberIds: string[];
+}
+
 export interface MatchSlotReservationRow {
   id: string;
   clubSlotId: string | null;
@@ -222,12 +228,21 @@ export interface TournamentTeamMemberRow {
   player: TournamentPlayerRow | null;
 }
 
+export interface TournamentMemberPlayerRow {
+  playerId: string;
+  tournamentTeams: {
+    tournamentId: string;
+  } | null;
+}
+
 function isMissingTournamentRpcError(message: string): boolean {
   return (
     message.includes('Could not find the function public.create_tournament_with_fixture') ||
     message.includes('Could not find the function public.register_tournament_team') ||
+    message.includes('Could not find the function public.join_tournament') ||
     message.includes('function public.create_tournament_with_fixture') ||
-    message.includes('function public.register_tournament_team')
+    message.includes('function public.register_tournament_team') ||
+    message.includes('function public.join_tournament')
   );
 }
 
@@ -386,6 +401,31 @@ export async function registerTournamentTeamRpc(
   return data;
 }
 
+export async function joinTournamentRpc(
+  input: JoinTournamentRpcInput,
+  client: SupabaseClient,
+): Promise<string> {
+  const { data, error } = await client.rpc('join_tournament', {
+    p_tournament_id: input.tournamentId,
+    p_team_name: input.teamName,
+    p_member_ids: input.memberIds,
+  });
+
+  if (error) {
+    console.error('[tournamentRepository.joinTournamentRpc] Supabase error:', error.message);
+    if (isMissingTournamentRpcError(error.message)) {
+      throw new Error('Falta aplicar la migracion SQL de unirse a torneos en Supabase');
+    }
+    throw new Error(error.message);
+  }
+
+  if (!data || typeof data !== 'string') {
+    throw new Error('No se pudo inscribir el equipo en Supabase');
+  }
+
+  return data;
+}
+
 export async function insertFixtureMatches(
   rows: CreateFixtureMatchInput[],
   client: SupabaseClient = supabase,
@@ -486,6 +526,112 @@ export async function getTournamentTeams(
   return (data as unknown as TournamentTeamRow[]) ?? [];
 }
 
+export async function getTournamentMemberPlayerIds(
+  tournamentId: string,
+  client: SupabaseClient = supabase,
+): Promise<string[]> {
+  const { data, error } = await client
+    .from('tournamentTeamMembers')
+    .select('playerId, tournamentTeams!inner("tournamentId")')
+    .eq('tournamentTeams.tournamentId', tournamentId);
+
+  if (error) {
+    console.error('[tournamentRepository.getTournamentMemberPlayerIds] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return ((data as unknown as TournamentMemberPlayerRow[]) ?? []).map((row) => row.playerId);
+}
+
+export async function getTournamentTeamById(
+  teamId: string,
+  client: SupabaseClient = supabase,
+): Promise<TournamentTeamRow | null> {
+  const { data, error } = await client
+    .from('tournamentTeams')
+    .select('id, "tournamentId", name, "captainId", "createdAt"')
+    .eq('id', teamId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    console.error('[tournamentRepository.getTournamentTeamById] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return data as unknown as TournamentTeamRow;
+}
+
+export async function getTournamentTeamMemberIds(
+  teamId: string,
+  client: SupabaseClient = supabase,
+): Promise<string[]> {
+  const { data, error } = await client
+    .from('tournamentTeamMembers')
+    .select('"playerId"')
+    .eq('teamId', teamId);
+
+  if (error) {
+    console.error('[tournamentRepository.getTournamentTeamMemberIds] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return ((data as Array<{ playerId: string }> | null) ?? []).map((row) => row.playerId);
+}
+
+export async function getPlayerProfilesByIds(
+  playerIds: string[],
+  client: SupabaseClient = supabase,
+): Promise<TournamentPlayerRow[]> {
+  if (playerIds.length === 0) return [];
+
+  const { data, error } = await client
+    .from('profiles')
+    .select(TOURNAMENT_PLAYER_COLUMNS)
+    .eq('role', 'player')
+    .in('id', playerIds);
+
+  if (error) {
+    console.error('[tournamentRepository.getPlayerProfilesByIds] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return (data as unknown as TournamentPlayerRow[]) ?? [];
+}
+
+export async function searchEligiblePlayers(
+  tournamentId: string,
+  search: string | null,
+  limit = 12,
+  client: SupabaseClient = supabase,
+): Promise<TournamentPlayerRow[]> {
+  const usedPlayerIds = await getTournamentMemberPlayerIds(tournamentId, client);
+  let query = client
+    .from('profiles')
+    .select(TOURNAMENT_PLAYER_COLUMNS)
+    .eq('role', 'player')
+    .order('displayName', { ascending: true })
+    .limit(limit);
+
+  if (usedPlayerIds.length > 0) {
+    query = query.not('id', 'in', `(${usedPlayerIds.join(',')})`);
+  }
+
+  const term = search?.trim();
+  if (term) {
+    query = query.ilike('displayName', `%${term}%`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('[tournamentRepository.searchEligiblePlayers] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return (data as unknown as TournamentPlayerRow[]) ?? [];
+}
+
 export async function createTournamentTeam(
   tournamentId: string,
   name: string,
@@ -521,6 +667,40 @@ export async function createTournamentTeamMember(
 
   if (error) {
     console.error('[tournamentRepository.createTournamentTeamMember] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+}
+
+export async function createTournamentTeamMembers(
+  teamId: string,
+  playerIds: string[],
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  if (playerIds.length === 0) return;
+
+  const { error } = await client
+    .from('tournamentTeamMembers')
+    .insert(playerIds.map((playerId) => ({ teamId, playerId })));
+
+  if (error) {
+    console.error('[tournamentRepository.createTournamentTeamMembers] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+}
+
+export async function deleteTournamentTeamMember(
+  teamId: string,
+  playerId: string,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('tournamentTeamMembers')
+    .delete()
+    .eq('teamId', teamId)
+    .eq('playerId', playerId);
+
+  if (error) {
+    console.error('[tournamentRepository.deleteTournamentTeamMember] Supabase error:', error.message);
     throw new Error(error.message);
   }
 }
@@ -565,12 +745,20 @@ export const tournamentRepository = {
   createTournament,
   createTournamentWithFixtureRpc,
   registerTournamentTeamRpc,
+  joinTournamentRpc,
   insertFixtureMatches,
   getTournamentById,
   getRegistrationTournaments,
   getTournamentTeams,
+  getTournamentMemberPlayerIds,
+  getTournamentTeamById,
+  getTournamentTeamMemberIds,
+  getPlayerProfilesByIds,
+  searchEligiblePlayers,
   createTournamentTeam,
   createTournamentTeamMember,
+  createTournamentTeamMembers,
+  deleteTournamentTeamMember,
   updateFixtureTeams,
   updateTournamentStatus,
 };

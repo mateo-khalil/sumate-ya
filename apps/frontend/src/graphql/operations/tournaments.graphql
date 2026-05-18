@@ -90,6 +90,15 @@ query GetTournamentDetail($id: ID!) {
   }
 }
 
+query GetTournamentEligiblePlayers($tournamentId: ID!, $search: String) {
+  tournamentEligiblePlayers(tournamentId: $tournamentId, search: $search) {
+    id
+    displayName
+    avatarUrl
+    preferredPosition
+  }
+}
+
 mutation CreateTournament($input: CreateTournamentInput!) {
   createTournament(input: $input) {
     success
@@ -187,6 +196,133 @@ mutation RegisterTournamentTeam($input: RegisterTournamentTeamInput!) {
         status
         scoreHome
         scoreAway
+      }
+    }
+  }
+}
+
+mutation JoinTournament($input: JoinTournamentInput!) {
+  joinTournament(input: $input) {
+    success
+    teamId
+    message
+    tournament {
+      id
+      name
+      format
+      teamCount
+      playersPerTeam
+      registeredTeamsCount
+      status
+      description
+      startDate
+      endDate
+      teams {
+        id
+        name
+        captainId
+        captain {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
+        players {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
+        createdAt
+      }
+      club {
+        id
+        name
+        zone
+        address
+        imageUrl
+      }
+      fixtureMatches {
+        id
+        tournamentId
+        round
+        homeTeamId
+        awayTeamId
+        homeTeam {
+          id
+          name
+        }
+        awayTeam {
+          id
+          name
+        }
+        courtId
+        scheduledAt
+        status
+        scoreHome
+        scoreAway
+      }
+    }
+  }
+}
+
+mutation AddTournamentTeamMember($input: TournamentTeamMemberInput!) {
+  addTournamentTeamMember(input: $input) {
+    success
+    teamId
+    message
+    tournament {
+      id
+      registeredTeamsCount
+      status
+      teams {
+        id
+        name
+        captainId
+        captain {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
+        players {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
+        createdAt
+      }
+    }
+  }
+}
+
+mutation RemoveTournamentTeamMember($input: TournamentTeamMemberInput!) {
+  removeTournamentTeamMember(input: $input) {
+    success
+    teamId
+    message
+    tournament {
+      id
+      registeredTeamsCount
+      status
+      teams {
+        id
+        name
+        captainId
+        captain {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
+        players {
+          id
+          displayName
+          avatarUrl
+          preferredPosition
+        }
+        createdAt
       }
     }
   }

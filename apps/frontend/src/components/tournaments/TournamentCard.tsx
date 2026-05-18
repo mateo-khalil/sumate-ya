@@ -14,7 +14,7 @@ import { Calendar, Loader2, MapPin, Trophy, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  REGISTER_TOURNAMENT_TEAM,
+  JOIN_TOURNAMENT,
   type TournamentListItem,
   type TournamentTeamRegistrationResult,
 } from '@/graphql/operations/tournaments';
@@ -87,13 +87,13 @@ export function TournamentCard({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: REGISTER_TOURNAMENT_TEAM,
-          variables: { input: { tournamentId: tournament.id, name } },
+          query: JOIN_TOURNAMENT,
+          variables: { input: { tournamentId: tournament.id, teamName: name, memberIds: [] } },
         }),
       });
 
       const payload = (await response.json()) as {
-        data?: { registerTournamentTeam?: TournamentTeamRegistrationResult };
+        data?: { joinTournament?: TournamentTeamRegistrationResult };
         errors?: Array<{ message: string }>;
       };
 
@@ -103,7 +103,7 @@ export function TournamentCard({
         throw new Error(graphQLError);
       }
 
-      const result = payload.data?.registerTournamentTeam;
+      const result = payload.data?.joinTournament;
       if (!result) throw new Error('Respuesta inesperada del servidor');
       if (!result.success) {
         const message = result.message ?? 'No se pudo inscribir el equipo';

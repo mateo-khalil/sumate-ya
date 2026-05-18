@@ -116,12 +116,28 @@ input RegisterTournamentTeamInput {
   name: String!
 }
 
+input JoinTournamentInput {
+  tournamentId: ID!
+  teamName: String!
+  memberIds: [ID!] = []
+}
+
+input TournamentTeamMemberInput {
+  tournamentId: ID!
+  teamId: ID!
+  playerId: ID!
+}
+
 extend type Query {
   tournaments: [Tournament!]!
   tournament(id: ID!): Tournament
+  tournamentEligiblePlayers(tournamentId: ID!, search: String): [TournamentPlayer!]!
 }
 
 extend type Mutation {
   createTournament(input: CreateTournamentInput!): CreateTournamentResult!
   registerTournamentTeam(input: RegisterTournamentTeamInput!): TournamentTeamRegistrationResult!
+  joinTournament(input: JoinTournamentInput!): TournamentTeamRegistrationResult!
+  addTournamentTeamMember(input: TournamentTeamMemberInput!): TournamentTeamRegistrationResult!
+  removeTournamentTeamMember(input: TournamentTeamMemberInput!): TournamentTeamRegistrationResult!
 }
