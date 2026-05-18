@@ -308,6 +308,7 @@ export async function voteMatchResult(
       submission.scoreTeamB,
       submission.winningTeam,
     );
+    await matchResultVoteRepository.refreshCompetitiveStatsForMatch(submission.matchId);
 
     console.info(
       `[matchResultVoteService.voteMatchResult] submissionId=${parsed.submissionId} confirmed — match ${submission.matchId} completed`,
@@ -322,9 +323,11 @@ export async function voteMatchResult(
     // Invalidate history cache for all participants
     const participantIds = await matchResultVoteRepository.getParticipantIds(submission.matchId);
     await Promise.all(
-      participantIds.map((uid) =>
+      participantIds.flatMap((uid) => [
         cacheDeletePattern(`${CACHE_PREFIX.USER_MATCHES}${uid}*`),
-      ),
+        cacheDelete(`${CACHE_PREFIX.PROFILE_ME}${uid}`),
+        cacheDelete(`profile:public:${uid}`),
+      ]),
     );
   }
 

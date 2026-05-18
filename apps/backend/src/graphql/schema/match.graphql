@@ -40,6 +40,7 @@ type TeamMember {
   displayName: String!
   avatarUrl: String
   preferredPosition: String
+  division: Int
 }
 
 # Participants split by team with counts and available spots

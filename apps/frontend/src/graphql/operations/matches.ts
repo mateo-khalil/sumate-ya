@@ -91,6 +91,7 @@ export interface TeamMember {
   displayName: string;
   avatarUrl: string | null;
   preferredPosition: string | null;
+  division: number | null;
 }
 
 export interface MatchParticipantsData {
@@ -300,8 +301,8 @@ export const GET_MATCH_DETAIL = /* GraphQL */ `
         imageUrl
       }
       participants {
-        teamA { id displayName avatarUrl preferredPosition }
-        teamB { id displayName avatarUrl preferredPosition }
+        teamA { id displayName avatarUrl preferredPosition division }
+        teamB { id displayName avatarUrl preferredPosition division }
         teamACount
         teamBCount
         totalCount

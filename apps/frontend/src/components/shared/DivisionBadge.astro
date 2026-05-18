@@ -1,0 +1,92 @@
+---
+import { getDivisionMeta } from '../../lib/division';
+
+interface Props {
+  division: number | null | undefined;
+  compact?: boolean;
+}
+
+const { division, compact = false } = Astro.props;
+const meta = getDivisionMeta(division);
+const label = compact ? meta.shortName : meta.name;
+---
+
+<span
+  class:list={['division-badge', meta.className, { 'division-badge--compact': compact }]}
+  title={`División ${meta.name}`}
+>
+  <span class="division-mark">D{meta.level}</span>
+  <span class="division-name">{label}</span>
+</span>
+
+<style>
+  .division-badge {
+    --division-accent: hsl(35 100% 55%);
+    --division-bg: hsl(35 100% 48% / 0.12);
+    --division-border: hsl(35 100% 48% / 0.32);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: fit-content;
+    max-width: 100%;
+    border-radius: 5px;
+    border: 1px solid var(--division-border);
+    background: var(--division-bg);
+    color: var(--division-accent);
+    padding: 0.16rem 0.5rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .division-mark {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+  }
+
+  .division-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .division-badge--compact {
+    gap: 0.25rem;
+    padding-inline: 0.38rem;
+  }
+
+  .division-bronze {
+    --division-accent: hsl(24 78% 64%);
+    --division-bg: hsl(24 78% 45% / 0.13);
+    --division-border: hsl(24 78% 52% / 0.34);
+  }
+
+  .division-silver {
+    --division-accent: hsl(205 18% 82%);
+    --division-bg: hsl(205 18% 64% / 0.12);
+    --division-border: hsl(205 18% 76% / 0.34);
+  }
+
+  .division-gold {
+    --division-accent: hsl(44 100% 62%);
+    --division-bg: hsl(44 100% 50% / 0.13);
+    --division-border: hsl(44 100% 54% / 0.36);
+  }
+
+  .division-diamond {
+    --division-accent: hsl(184 86% 66%);
+    --division-bg: hsl(184 86% 46% / 0.13);
+    --division-border: hsl(184 86% 58% / 0.38);
+  }
+
+  .division-elite {
+    --division-accent: hsl(320 80% 72%);
+    --division-bg: hsl(320 80% 48% / 0.13);
+    --division-border: hsl(320 80% 62% / 0.36);
+  }
+</style>

@@ -20,6 +20,7 @@
  * - Previously fixed bugs: none relevant.
  */
 import { Hand, Shield, Zap, Target } from 'lucide-react';
+import DivisionBadge from '../shared/DivisionBadge.astro';
 
 const POSITION_ICON_COMPONENT: Record<string, typeof Hand> = {
   goalkeeper: Hand, GOALKEEPER: Hand,
@@ -33,6 +34,7 @@ export interface PlayerCardPlayer {
   displayName: string;
   avatarUrl: string | null;
   preferredPosition: string | null;
+  division?: number | null;
 }
 
 interface Props {
@@ -75,6 +77,7 @@ function initial(name: string) {
   <div class="player-info">
     <div class="player-name-row">
       <span class="player-name">{player.displayName}</span>
+      <DivisionBadge division={player.division} compact />
       {isOrganizer && <span class="badge-organizer">Organizador</span>}
     </div>
     {posLabel && (
@@ -125,6 +128,7 @@ function initial(name: string) {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
+    flex: 1;
     min-width: 0;
   }
 
@@ -132,6 +136,11 @@ function initial(name: string) {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .player-name-row :global(.division-badge) {
+    flex-shrink: 0;
   }
 
   .player-name {
