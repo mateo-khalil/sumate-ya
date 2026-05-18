@@ -121,6 +121,18 @@ export interface RegisterTournamentTeamInput {
   name: string;
 }
 
+export interface JoinTournamentInput {
+  tournamentId: string;
+  teamName: string;
+  memberIds: string[];
+}
+
+export interface TournamentTeamMemberInput {
+  tournamentId: string;
+  teamId: string;
+  playerId: string;
+}
+
 export interface TournamentTeamRegistrationResult {
   success: boolean;
   teamId: string | null;
@@ -218,6 +230,17 @@ export const GET_TOURNAMENT_DETAIL = /* GraphQL */ `
         scoreHome
         scoreAway
       }
+    }
+  }
+`;
+
+export const GET_TOURNAMENT_ELIGIBLE_PLAYERS = /* GraphQL */ `
+  query GetTournamentEligiblePlayers($tournamentId: ID!, $search: String) {
+    tournamentEligiblePlayers(tournamentId: $tournamentId, search: $search) {
+      id
+      displayName
+      avatarUrl
+      preferredPosition
     }
   }
 `;
@@ -322,6 +345,139 @@ export const REGISTER_TOURNAMENT_TEAM = /* GraphQL */ `
           status
           scoreHome
           scoreAway
+        }
+      }
+    }
+  }
+`;
+
+export const JOIN_TOURNAMENT = /* GraphQL */ `
+  mutation JoinTournament($input: JoinTournamentInput!) {
+    joinTournament(input: $input) {
+      success
+      teamId
+      message
+      tournament {
+        id
+        name
+        format
+        teamCount
+        playersPerTeam
+        registeredTeamsCount
+        status
+        description
+        startDate
+        endDate
+        teams {
+          id
+          name
+          captainId
+          captain {
+            id
+            displayName
+            avatarUrl
+            preferredPosition
+          }
+          players {
+            id
+            displayName
+            avatarUrl
+            preferredPosition
+          }
+          createdAt
+        }
+        club {
+          id
+          name
+          zone
+          address
+          imageUrl
+        }
+        fixtureMatches {
+          id
+          tournamentId
+          round
+          homeTeamId
+          awayTeamId
+          homeTeam {
+            id
+            name
+          }
+          awayTeam {
+            id
+            name
+          }
+          courtId
+          scheduledAt
+          status
+          scoreHome
+          scoreAway
+        }
+      }
+    }
+  }
+`;
+
+export const ADD_TOURNAMENT_TEAM_MEMBER = /* GraphQL */ `
+  mutation AddTournamentTeamMember($input: TournamentTeamMemberInput!) {
+    addTournamentTeamMember(input: $input) {
+      success
+      teamId
+      message
+      tournament {
+        id
+        registeredTeamsCount
+        status
+        teams {
+          id
+          name
+          captainId
+          captain {
+            id
+            displayName
+            avatarUrl
+            preferredPosition
+          }
+          players {
+            id
+            displayName
+            avatarUrl
+            preferredPosition
+          }
+          createdAt
+        }
+      }
+    }
+  }
+`;
+
+export const REMOVE_TOURNAMENT_TEAM_MEMBER = /* GraphQL */ `
+  mutation RemoveTournamentTeamMember($input: TournamentTeamMemberInput!) {
+    removeTournamentTeamMember(input: $input) {
+      success
+      teamId
+      message
+      tournament {
+        id
+        registeredTeamsCount
+        status
+        teams {
+          id
+          name
+          captainId
+          captain {
+            id
+            displayName
+            avatarUrl
+            preferredPosition
+          }
+          players {
+            id
+            displayName
+            avatarUrl
+            preferredPosition
+          }
+          createdAt
         }
       }
     }

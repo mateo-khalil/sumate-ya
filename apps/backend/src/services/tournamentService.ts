@@ -18,11 +18,13 @@ import {
   TournamentStatus,
   type CreateTournamentInput,
   type CreateTournamentResult,
+  type JoinTournamentInput,
   type RegisterTournamentTeamInput,
   type Tournament,
   type TournamentFixtureMatch,
   type TournamentPlayer,
   type TournamentTeam,
+  type TournamentTeamMemberInput,
   type TournamentTeamRegistrationResult,
 } from '../graphql/generated/graphql.js';
 import {
@@ -334,6 +336,36 @@ async function invalidateTournamentListCaches(): Promise<void> {
   await cacheDeletePattern(`${CACHE_PREFIX.TOURNAMENTS_LIST}:*`);
 }
 
+function uniqueIds(ids: string[]): string[] {
+  return [...new Set(ids.filter(Boolean))];
+}
+
+async function validateJoinRoster(
+  tournament: TournamentRow,
+  captainId: string,
+  memberIds: string[],
+): Promise<string[]> {
+  const playerIds = uniqueIds([captainId, ...memberIds]);
+  if (playerIds.length > tournament.playersPerTeam) {
+    throw new Error(`El equipo no puede superar ${tournament.playersPerTeam} jugadores`);
+  }
+
+  const players = await tournamentRepository.getPlayerProfilesByIds(playerIds);
+  const foundIds = new Set(players.map((player) => player.id));
+  const missing = playerIds.filter((playerId) => !foundIds.has(playerId));
+  if (missing.length > 0) {
+    throw new Error('Uno o mas jugadores no existen o no tienen rol de jugador');
+  }
+
+  const usedPlayerIds = await tournamentRepository.getTournamentMemberPlayerIds(tournament.id);
+  const alreadyInTournament = playerIds.filter((playerId) => usedPlayerIds.includes(playerId));
+  if (alreadyInTournament.length > 0) {
+    throw new Error('Uno o mas jugadores ya estan anotados en otro equipo de este torneo');
+  }
+
+  return playerIds;
+}
+
 // =====================================================
 // Service Functions
 // =====================================================
@@ -359,6 +391,21 @@ export async function getTournamentById(
   );
 
   return tournament ? toTournament(tournament) : null;
+}
+
+export async function searchTournamentEligiblePlayers(
+  _ctx: ServiceContext,
+  tournamentId: string,
+  search?: string | null,
+): Promise<TournamentPlayer[]> {
+  const tournament = await tournamentRepository.getTournamentById(tournamentId);
+  if (!tournament) throw new Error('Torneo no encontrado');
+  if (tournament.status !== 'registration') return [];
+
+  const players = await tournamentRepository.searchEligiblePlayers(tournamentId, search ?? null);
+  return players
+    .map((player) => toTournamentPlayer(player))
+    .filter((player): player is TournamentPlayer => Boolean(player));
 }
 
 export async function createTournament(
@@ -462,11 +509,23 @@ export async function registerTournamentTeam(
   input: RegisterTournamentTeamInput,
   ctx: ServiceContext,
 ): Promise<TournamentTeamRegistrationResult> {
-  if (!ctx.userId) throw new Error('Authentication required');
-  const db = ctx.supabase;
-  if (!db) throw new Error('User-scoped client required for write operations');
+  return joinTournament(
+    {
+      tournamentId: input.tournamentId,
+      teamName: input.name,
+      memberIds: [],
+    },
+    ctx,
+  );
+}
 
-  const teamName = input.name.trim();
+export async function joinTournament(
+  input: JoinTournamentInput,
+  ctx: ServiceContext,
+): Promise<TournamentTeamRegistrationResult> {
+  if (!ctx.userId) throw new Error('Authentication required');
+
+  const teamName = input.teamName.trim();
   if (teamName.length < 2) throw new Error('El nombre del equipo debe tener al menos 2 caracteres');
   if (teamName.length > 80) throw new Error('El nombre del equipo no puede superar 80 caracteres');
 
@@ -484,13 +543,10 @@ export async function registerTournamentTeam(
     throw new Error('Ya existe un equipo con ese nombre en el torneo');
   }
 
-  const teamId = await tournamentRepository.registerTournamentTeamRpc(
-    {
-      tournamentId: input.tournamentId,
-      name: teamName,
-    },
-    db,
-  );
+  const playerIds = await validateJoinRoster(tournament, ctx.userId, input.memberIds ?? []);
+  const team = await tournamentRepository.createTournamentTeam(input.tournamentId, teamName, ctx.userId, supabase);
+  await tournamentRepository.createTournamentTeamMembers(team.id, playerIds, supabase);
+  await generateFixtureIfRegistrationComplete({ userId: ctx.userId, supabase }, input.tournamentId);
 
   const updatedTournament = await tournamentRepository.getTournamentById(input.tournamentId);
   if (!updatedTournament) throw new Error('No se pudo cargar el torneo actualizado');
@@ -498,16 +554,83 @@ export async function registerTournamentTeam(
 
   return {
     success: true,
-    teamId,
+    teamId: team.id,
     message: null,
     tournament: toTournament(updatedTournament),
   };
 }
 
+export async function addTournamentTeamMember(
+  input: TournamentTeamMemberInput,
+  ctx: ServiceContext,
+): Promise<TournamentTeamRegistrationResult> {
+  if (!ctx.userId) throw new Error('Authentication required');
+
+  const [tournament, team] = await Promise.all([
+    tournamentRepository.getTournamentById(input.tournamentId),
+    tournamentRepository.getTournamentTeamById(input.teamId),
+  ]);
+  if (!tournament) throw new Error('Torneo no encontrado');
+  if (!team || team.tournamentId !== input.tournamentId) throw new Error('Equipo no encontrado');
+  if (team.captainId !== ctx.userId) throw new Error('Solo el capitan puede modificar este equipo');
+  if (tournament.status !== 'registration') throw new Error('La inscripcion de este torneo ya esta cerrada');
+
+  const currentMemberIds = await tournamentRepository.getTournamentTeamMemberIds(input.teamId);
+  if (currentMemberIds.includes(input.playerId)) {
+    throw new Error('Ese jugador ya integra el equipo');
+  }
+  if (currentMemberIds.length >= tournament.playersPerTeam) {
+    throw new Error(`El equipo no puede superar ${tournament.playersPerTeam} jugadores`);
+  }
+
+  const [player] = await tournamentRepository.getPlayerProfilesByIds([input.playerId]);
+  if (!player) throw new Error('Jugador no encontrado');
+
+  const usedPlayerIds = await tournamentRepository.getTournamentMemberPlayerIds(input.tournamentId);
+  if (usedPlayerIds.includes(input.playerId)) {
+    throw new Error('Ese jugador ya esta anotado en otro equipo de este torneo');
+  }
+
+  await tournamentRepository.createTournamentTeamMember(input.teamId, input.playerId, supabase);
+  await invalidateTournamentListCaches();
+  const updatedTournament = await tournamentRepository.getTournamentById(input.tournamentId);
+  if (!updatedTournament) throw new Error('No se pudo cargar el torneo actualizado');
+
+  return { success: true, teamId: input.teamId, message: null, tournament: toTournament(updatedTournament) };
+}
+
+export async function removeTournamentTeamMember(
+  input: TournamentTeamMemberInput,
+  ctx: ServiceContext,
+): Promise<TournamentTeamRegistrationResult> {
+  if (!ctx.userId) throw new Error('Authentication required');
+
+  const [tournament, team] = await Promise.all([
+    tournamentRepository.getTournamentById(input.tournamentId),
+    tournamentRepository.getTournamentTeamById(input.teamId),
+  ]);
+  if (!tournament) throw new Error('Torneo no encontrado');
+  if (!team || team.tournamentId !== input.tournamentId) throw new Error('Equipo no encontrado');
+  if (team.captainId !== ctx.userId) throw new Error('Solo el capitan puede modificar este equipo');
+  if (tournament.status !== 'registration') throw new Error('La inscripcion de este torneo ya esta cerrada');
+  if (input.playerId === team.captainId) throw new Error('El capitan no puede quitarse del equipo');
+
+  await tournamentRepository.deleteTournamentTeamMember(input.teamId, input.playerId, supabase);
+  await invalidateTournamentListCaches();
+  const updatedTournament = await tournamentRepository.getTournamentById(input.tournamentId);
+  if (!updatedTournament) throw new Error('No se pudo cargar el torneo actualizado');
+
+  return { success: true, teamId: input.teamId, message: null, tournament: toTournament(updatedTournament) };
+}
+
 export const tournamentService = {
   listRegistrationTournaments,
   getTournamentById,
+  searchTournamentEligiblePlayers,
   createTournament,
   generateFixtureIfRegistrationComplete,
   registerTournamentTeam,
+  joinTournament,
+  addTournamentTeamMember,
+  removeTournamentTeamMember,
 };

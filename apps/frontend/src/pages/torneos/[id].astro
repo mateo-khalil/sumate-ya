@@ -201,6 +201,9 @@ for (const match of tournament?.fixtureMatches ?? []) {
                 tournamentId={tournament.id}
                 isAuthenticated={isAuthenticated}
                 canRegister={canRegister}
+                playersPerTeam={tournament.playersPerTeam}
+                currentUserId={user?.id ?? null}
+                teams={tournament.teams}
               />
             </aside>
           </section>
@@ -340,6 +343,18 @@ for (const match of tournament?.fixtureMatches ?? []) {
   :global(.detail-team-input) { min-height: 42px; border: 1px solid rgba(255,255,255,0.12); background: hsl(220 55% 8%); color: white; border-radius: 8px; padding: 0 0.8rem; outline: none; }
   :global(.detail-form-error) { margin: 0; color: hsl(0 72% 70%); font-size: 0.85rem; }
   :global(.detail-form-message) { margin: 0; color: hsl(142 72% 65%); font-size: 0.85rem; }
+  :global(.team-builder-count), :global(.captain-panel) { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; color: hsl(215 20% 70%); font-size: 0.84rem; }
+  :global(.team-builder-count strong), :global(.captain-panel strong) { color: white; }
+  :global(.captain-panel) { align-items: flex-start; flex-direction: column; background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 0.75rem; }
+  :global(.captain-panel span) { color: hsl(35 100% 65%); font-weight: 700; }
+  :global(.player-search-box) { min-height: 40px; display: flex; align-items: center; gap: 0.55rem; border: 1px solid rgba(255,255,255,0.12); background: hsl(220 55% 8%); color: hsl(215 20% 55%); border-radius: 8px; padding: 0 0.75rem; }
+  :global(.player-search-input) { width: 100%; min-width: 0; color: white; outline: none; font-size: 0.88rem; }
+  :global(.selected-player-list), :global(.player-results-list) { display: grid; gap: 0.45rem; }
+  :global(.selected-player-chip), :global(.player-result-item) { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: hsl(210 20% 90%); padding: 0.45rem 0.65rem; font-size: 0.84rem; cursor: pointer; }
+  :global(.selected-player-chip:hover), :global(.player-result-item:hover) { border-color: rgba(246,164,0,0.35); color: white; }
+  :global(.player-result-avatar) { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: hsl(35 100% 48%); color: hsl(220 72% 7%); font-size: 0.68rem; font-weight: 800; }
+  :global(.player-result-item span:nth-child(2)) { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+  :global(.player-results-note) { color: hsl(215 20% 55%); font-size: 0.82rem; border: 1px dashed rgba(255,255,255,0.12); border-radius: 8px; padding: 0.6rem 0.7rem; }
   :global(.detail-login-button), :global(.registration-closed) { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; min-height: 42px; border-radius: 8px; text-decoration: none; font-weight: 700; }
   :global(.detail-login-button) { background: hsl(35 100% 48%); color: hsl(220 72% 7%); }
   :global(.registration-closed) { background: rgba(255,255,255,0.06); color: hsl(215 20% 62%); padding: 0 0.75rem; }
