@@ -41,6 +41,7 @@ const repoMock = vi.hoisted(() => ({
   updateMatchWithResult: vi.fn(),
   refreshCompetitiveStatsForMatch: vi.fn(),
   getParticipantIds: vi.fn(),
+  confirmMatchResultAtomic: vi.fn(),
 }));
 
 const cacheMock = vi.hoisted(() => ({
@@ -136,6 +137,13 @@ beforeEach(() => {
   repoMock.updateMatchWithResult.mockResolvedValue(undefined);
   repoMock.refreshCompetitiveStatsForMatch.mockResolvedValue(undefined);
   repoMock.getParticipantIds.mockResolvedValue([USER_ID, OTHER_USER_ID]);
+  repoMock.confirmMatchResultAtomic.mockResolvedValue({
+    alreadyConfirmed: false,
+    participantCount: 5,
+    winnersCount: 3,
+    matchId: MATCH_ID,
+    participantIds: [USER_ID, OTHER_USER_ID],
+  });
   repoMock.getSubmissionsByMatch.mockResolvedValue([]);
   repoMock.getSubmissionById.mockResolvedValue(buildSubmissionRow());
 
@@ -338,11 +346,11 @@ describe('matchResultVoteService.voteMatchResult', () => {
       'approve',
       supabaseStub,
     );
-    expect(repoMock.confirmSubmission).not.toHaveBeenCalled();
-    expect(repoMock.rejectOtherSubmissions).not.toHaveBeenCalled();
-    expect(repoMock.updateMatchWithResult).not.toHaveBeenCalled();
+    expect(repoMock.confirmMatchResultAtomic).not.toHaveBeenCalled();
     expect(result.statusChanged).toBe(false);
     expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`match:submissions:${MATCH_ID}`);
+    // Match-level caches must NOT be invalidated when there is no confirmation.
+    expect(cacheMock.cacheDelete).not.toHaveBeenCalledWith(`match:participants:${MATCH_ID}`);
   });
 
   it('does NOT confirm at the boundary where approveCount == participants/2 (strict majority required)', async () => {
@@ -355,11 +363,11 @@ describe('matchResultVoteService.voteMatchResult', () => {
       baseCtx(),
     );
 
-    expect(repoMock.confirmSubmission).not.toHaveBeenCalled();
+    expect(repoMock.confirmMatchResultAtomic).not.toHaveBeenCalled();
     expect(result.statusChanged).toBe(false);
   });
 
-  it('confirms the submission when approveCount crosses the strict majority threshold', async () => {
+  it('confirms the submission atomically when approveCount crosses the strict majority threshold', async () => {
     repoMock.countApproveVotes.mockResolvedValueOnce(3); // 3/5 → > 2.5
     repoMock.countMatchParticipants.mockResolvedValueOnce(5);
 
@@ -368,15 +376,28 @@ describe('matchResultVoteService.voteMatchResult', () => {
       .mockResolvedValueOnce(buildSubmissionRow({ submissionStatus: 'pending' })) // initial load
       .mockResolvedValueOnce(confirmed); // post-vote reload
 
+    repoMock.confirmMatchResultAtomic.mockResolvedValueOnce({
+      alreadyConfirmed: false,
+      participantCount: 5,
+      winnersCount: 3,
+      matchId: MATCH_ID,
+      participantIds: [USER_ID, OTHER_USER_ID],
+    });
+
     const result = await matchResultVoteService.voteMatchResult(
       { submissionId: SUBMISSION_ID, vote: VoteValue.Approve },
       baseCtx(),
     );
 
-    expect(repoMock.confirmSubmission).toHaveBeenCalledWith(SUBMISSION_ID);
-    expect(repoMock.rejectOtherSubmissions).toHaveBeenCalledWith(MATCH_ID, SUBMISSION_ID);
-    expect(repoMock.updateMatchWithResult).toHaveBeenCalledWith(MATCH_ID, 3, 1, 'a');
+    // Single atomic RPC call replaces the old 4-step cascade.
+    expect(repoMock.confirmMatchResultAtomic).toHaveBeenCalledWith(SUBMISSION_ID, supabaseStub);
+    expect(repoMock.confirmSubmission).not.toHaveBeenCalled();
+    expect(repoMock.rejectOtherSubmissions).not.toHaveBeenCalled();
+    expect(repoMock.updateMatchWithResult).not.toHaveBeenCalled();
+    expect(repoMock.getParticipantIds).not.toHaveBeenCalled();
+    // Competitive ranking still refreshes after the RPC (separate concern from stats).
     expect(repoMock.refreshCompetitiveStatsForMatch).toHaveBeenCalledWith(MATCH_ID);
+
     expect(result.statusChanged).toBe(true);
     expect(result.submission.status).toBe(SubmissionStatus.Confirmed);
 
@@ -386,7 +407,7 @@ describe('matchResultVoteService.voteMatchResult', () => {
     expect(cacheMock.cacheDelete).toHaveBeenCalledWith('matches:open');
     expect(cacheMock.cacheDeletePattern).toHaveBeenCalledWith('matches:list:*');
 
-    // Per-participant history caches cleared
+    // Per-participant history caches cleared using the IDs returned by the RPC
     expect(cacheMock.cacheDeletePattern).toHaveBeenCalledWith(`user:matches:${USER_ID}*`);
     expect(cacheMock.cacheDeletePattern).toHaveBeenCalledWith(`user:matches:${OTHER_USER_ID}*`);
     expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`profile:me:${USER_ID}`);
@@ -396,6 +417,106 @@ describe('matchResultVoteService.voteMatchResult', () => {
 
     // Submission list cache cleared
     expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`match:submissions:${MATCH_ID}`);
+  });
+
+  it('handles a draw confirmation (winnersCount=0) and still invalidates caches', async () => {
+    repoMock.countApproveVotes.mockResolvedValueOnce(3);
+    repoMock.countMatchParticipants.mockResolvedValueOnce(5);
+
+    repoMock.getSubmissionById
+      .mockResolvedValueOnce(
+        buildSubmissionRow({
+          submissionStatus: 'pending',
+          scoreTeamA: 2,
+          scoreTeamB: 2,
+          winningTeam: 'draw',
+        }),
+      )
+      .mockResolvedValueOnce(
+        buildSubmissionRow({
+          submissionStatus: 'confirmed',
+          scoreTeamA: 2,
+          scoreTeamB: 2,
+          winningTeam: 'draw',
+        }),
+      );
+
+    repoMock.confirmMatchResultAtomic.mockResolvedValueOnce({
+      alreadyConfirmed: false,
+      participantCount: 5,
+      winnersCount: 0,
+      matchId: MATCH_ID,
+      participantIds: [USER_ID, OTHER_USER_ID],
+    });
+
+    const result = await matchResultVoteService.voteMatchResult(
+      { submissionId: SUBMISSION_ID, vote: VoteValue.Approve },
+      baseCtx(),
+    );
+
+    expect(repoMock.confirmMatchResultAtomic).toHaveBeenCalledWith(SUBMISSION_ID, supabaseStub);
+    expect(result.statusChanged).toBe(true);
+    expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`match:participants:${MATCH_ID}`);
+    expect(cacheMock.cacheDeletePattern).toHaveBeenCalledWith(`user:matches:${USER_ID}*`);
+    expect(cacheMock.cacheDeletePattern).toHaveBeenCalledWith(`user:matches:${OTHER_USER_ID}*`);
+  });
+
+  it('is idempotent when the RPC reports alreadyConfirmed (race with sibling final vote)', async () => {
+    repoMock.countApproveVotes.mockResolvedValueOnce(3);
+    repoMock.countMatchParticipants.mockResolvedValueOnce(5);
+
+    repoMock.getSubmissionById
+      .mockResolvedValueOnce(buildSubmissionRow({ submissionStatus: 'pending' }))
+      .mockResolvedValueOnce(buildSubmissionRow({ submissionStatus: 'confirmed' }));
+
+    repoMock.confirmMatchResultAtomic.mockResolvedValueOnce({
+      alreadyConfirmed: true,
+      participantCount: 0,
+      winnersCount: 0,
+      matchId: MATCH_ID,
+      participantIds: [],
+    });
+
+    const result = await matchResultVoteService.voteMatchResult(
+      { submissionId: SUBMISSION_ID, vote: VoteValue.Approve },
+      baseCtx(),
+    );
+
+    expect(repoMock.confirmMatchResultAtomic).toHaveBeenCalledWith(SUBMISSION_ID, supabaseStub);
+    expect(result.statusChanged).toBe(false);
+
+    // The first caller already invalidated match-level caches; skip them here.
+    expect(cacheMock.cacheDelete).not.toHaveBeenCalledWith(`match:participants:${MATCH_ID}`);
+    expect(cacheMock.cacheDelete).not.toHaveBeenCalledWith(`match:${MATCH_ID}`);
+    expect(cacheMock.cacheDelete).not.toHaveBeenCalledWith('matches:open');
+    expect(cacheMock.cacheDeletePattern).not.toHaveBeenCalledWith('matches:list:*');
+    expect(cacheMock.cacheDeletePattern).not.toHaveBeenCalledWith(`user:matches:${USER_ID}*`);
+
+    // Submission-list cache still cleared so the new vote shows up.
+    expect(cacheMock.cacheDelete).toHaveBeenCalledWith(`match:submissions:${MATCH_ID}`);
+  });
+
+  it('propagates an RPC failure and does not invalidate match caches', async () => {
+    repoMock.countApproveVotes.mockResolvedValueOnce(3);
+    repoMock.countMatchParticipants.mockResolvedValueOnce(5);
+
+    repoMock.confirmMatchResultAtomic.mockRejectedValueOnce(
+      new Error('No hay mayoría suficiente para confirmar'),
+    );
+
+    await expect(
+      matchResultVoteService.voteMatchResult(
+        { submissionId: SUBMISSION_ID, vote: VoteValue.Approve },
+        baseCtx(),
+      ),
+    ).rejects.toThrow('No hay mayoría suficiente para confirmar');
+
+    expect(cacheMock.cacheDelete).not.toHaveBeenCalledWith(`match:participants:${MATCH_ID}`);
+    expect(cacheMock.cacheDelete).not.toHaveBeenCalledWith(`match:${MATCH_ID}`);
+    expect(cacheMock.cacheDelete).not.toHaveBeenCalledWith('matches:open');
+    expect(cacheMock.cacheDeletePattern).not.toHaveBeenCalledWith('matches:list:*');
+    expect(cacheMock.cacheDeletePattern).not.toHaveBeenCalledWith(`user:matches:${USER_ID}*`);
+    expect(cacheMock.cacheDelete).not.toHaveBeenCalledWith(`match:submissions:${MATCH_ID}`);
   });
 
   it('does not confirm when the cast vote is REJECT, even if approveCount happens to be high', async () => {
@@ -413,7 +534,7 @@ describe('matchResultVoteService.voteMatchResult', () => {
       'reject',
       supabaseStub,
     );
-    expect(repoMock.confirmSubmission).not.toHaveBeenCalled();
+    expect(repoMock.confirmMatchResultAtomic).not.toHaveBeenCalled();
     expect(result.statusChanged).toBe(false);
   });
 
