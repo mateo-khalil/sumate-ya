@@ -81,6 +81,12 @@ export interface RegisterPlayerInput {
   password: string;
 }
 
+export interface ChangePasswordInput {
+  accessToken: string;
+  currentPassword: string;
+  newPassword: string;
+}
+
 interface UserProfile {
   role: AuthUserRole;
   displayName: string;
@@ -198,6 +204,46 @@ export const authService = {
 
     if (error) {
       console.warn('[authService.logout] signOut error:', error.message);
+    }
+  },
+
+  /**
+   * Change the authenticated user's password.
+   *
+   * Decision Context:
+   * - Supabase Auth owns password storage; profiles is never touched.
+   * - updateUser({ password }) only needs a valid session, but the product flow asks for
+   *   current password. We verify it with signInWithPassword before updating.
+   * - Uses the existing access token for getUser/updateUser so the mutation is scoped to
+   *   the caller's session.
+   */
+  async changePassword(input: ChangePasswordInput): Promise<void> {
+    const userClient = createUserClient(input.accessToken);
+    const {
+      data: { user },
+      error: userError,
+    } = await userClient.auth.getUser();
+
+    if (userError || !user?.email) {
+      throw new Error('Invalid or expired token');
+    }
+
+    const anonClient = createAnonClient();
+    const { error: verifyError } = await anonClient.auth.signInWithPassword({
+      email: user.email,
+      password: input.currentPassword,
+    });
+
+    if (verifyError) {
+      throw new Error('Current password is incorrect');
+    }
+
+    const { error: updateError } = await userClient.auth.updateUser({
+      password: input.newPassword,
+    });
+
+    if (updateError) {
+      throw new Error(updateError.message || 'Password update failed');
     }
   },
 
