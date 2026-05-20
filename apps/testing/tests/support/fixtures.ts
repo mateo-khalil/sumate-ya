@@ -1,5 +1,6 @@
 import { test as base } from '@playwright/test';
 import { CreateMatchPage } from './page-objects/CreateMatchPage';
+import { CreateTournamentPage } from './page-objects/CreateTournamentPage';
 import { HomePage } from './page-objects/HomePage';
 import { LoginPage } from './page-objects/LoginPage';
 import { MatchDetailPage } from './page-objects/MatchDetailPage';
@@ -38,6 +39,7 @@ type Fixtures = {
   matchesMapPage: MatchesMapPage;
   matchDetailPage: MatchDetailPage;
   createMatchPage: CreateMatchPage;
+  createTournamentPage: CreateTournamentPage;
   profilePage: ProfilePage;
   settingsPage: SettingsPage;
 };
@@ -66,6 +68,9 @@ export const test = base.extend<Fixtures>({
   },
   createMatchPage: async ({ page }, use) => {
     await use(new CreateMatchPage(page));
+  },
+  createTournamentPage: async ({ page }, use) => {
+    await use(new CreateTournamentPage(page));
   },
   profilePage: async ({ page }, use) => {
     await use(new ProfilePage(page));

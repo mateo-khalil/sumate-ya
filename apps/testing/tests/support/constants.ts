@@ -28,6 +28,17 @@ export const ACCESS_TOKEN_COOKIE = 'sumateya-access-token';
 export const REFRESH_TOKEN_COOKIE = 'sumateya-refresh-token';
 
 /**
+ * Route for the authenticated GraphQL proxy used by mutations that require an
+ * active session (createTournament, createMatch via SSR proxy, etc.).
+ * Separate from GRAPHQL_PROXY_ROUTE (/api/graphql) so slot-mock handlers can
+ * skip /api/graphql-auth requests without risking route conflicts.
+ */
+export const GRAPHQL_AUTH_ROUTE = '**/api/graphql-auth**';
+
+export const TORNEOS_URL = `${FRONTEND_URL}/torneos`;
+export const TORNEOS_CREAR_URL = `${FRONTEND_URL}/torneos/crear`;
+
+/**
  * Match IDs guaranteed by `apps/testing/scripts/seed.ts` (Playwright globalSetup).
  * Importing these from a single place keeps tests in sync if the seed evolves.
  */

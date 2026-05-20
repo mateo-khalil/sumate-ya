@@ -119,8 +119,9 @@ test.describe('Crear Partido (/partidos/crear)', () => {
   });
 
   test('redirige a login cuando el jugador no esta autenticado', async ({ browser }) => {
-    // Este caso necesita un contexto fresco (sin storage state). Creamos uno ad-hoc.
-    const anonContext = await browser.newContext();
+    // Explicitly pass empty storage state: with channel:'chrome', browser.newContext()
+    // without arguments can inherit cookies from the browser-level profile store.
+    const anonContext = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const anonPage = await anonContext.newPage();
     try {
       await anonPage.goto(CREATE_MATCH_URL);
