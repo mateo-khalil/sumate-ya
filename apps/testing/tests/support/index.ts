@@ -15,6 +15,7 @@ export * from './auth';
 export * from './graphql';
 export * from './network';
 export * from './builders';
+export * from './divisions';
 export { CreateMatchPage } from './page-objects/CreateMatchPage';
 export { CreateTournamentPage } from './page-objects/CreateTournamentPage';
 export { HomePage } from './page-objects/HomePage';
