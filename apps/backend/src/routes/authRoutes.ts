@@ -18,6 +18,7 @@ router.post('/login', authController.login);
 router.get('/session', authController.session);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
+router.post('/change-password', authController.changePassword);
 router.post('/register-club', authController.register);
 router.post('/register-player', authController.registerPlayer);
 

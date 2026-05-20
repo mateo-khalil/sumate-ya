@@ -75,6 +75,21 @@ const RegisterPlayerSchema = z
     path: ['confirmPassword'],
   });
 
+const ChangePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'IngresÃ¡ tu contraseÃ±a actual'),
+    newPassword: z.string().min(8, 'La nueva contraseÃ±a debe tener al menos 8 caracteres'),
+    confirmPassword: z.string().min(1, 'ConfirmÃ¡ tu nueva contraseÃ±a'),
+  })
+  .refine((d) => d.newPassword === d.confirmPassword, {
+    message: 'Las contraseÃ±as no coinciden',
+    path: ['confirmPassword'],
+  })
+  .refine((d) => d.currentPassword !== d.newPassword, {
+    message: 'La nueva contraseÃ±a debe ser distinta a la actual',
+    path: ['newPassword'],
+  });
+
 export const authController = {
   async login(req: Request, res: Response): Promise<void> {
     const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
@@ -164,6 +179,63 @@ export const authController = {
     }
 
     res.status(204).send();
+  },
+
+  async changePassword(req: Request, res: Response): Promise<void> {
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+    if (!accessToken) {
+      res.status(401).json({ message: 'Missing or malformed token.' });
+      return;
+    }
+
+    const parsed = ChangePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const errors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0];
+        if (typeof field === 'string' && !errors[field]) {
+          errors[field] = issue.message;
+        }
+      }
+      res.status(400).json({ message: 'Datos invÃ¡lidos', errors });
+      return;
+    }
+
+    try {
+      await authService.changePassword({
+        accessToken,
+        currentPassword: parsed.data.currentPassword,
+        newPassword: parsed.data.newPassword,
+      });
+      res.status(200).json({ message: 'ContraseÃ±a actualizada correctamente' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Password update failed';
+
+      if (message === 'Invalid or expired token') {
+        res.status(401).json({ message: 'SesiÃ³n invÃ¡lida. IniciÃ¡ sesiÃ³n nuevamente.' });
+        return;
+      }
+
+      if (message === 'Current password is incorrect') {
+        res.status(400).json({
+          message: 'Datos invÃ¡lidos',
+          errors: { currentPassword: 'La contraseÃ±a actual no es correcta' },
+        });
+        return;
+      }
+
+      if (message.toLowerCase().includes('password')) {
+        res.status(400).json({
+          message: 'Datos invÃ¡lidos',
+          errors: { newPassword: 'La nueva contraseÃ±a no cumple los requisitos mÃ­nimos' },
+        });
+        return;
+      }
+
+      res.status(400).json({ message: 'No pudimos actualizar la contraseÃ±a. IntentÃ¡ de nuevo.' });
+    }
   },
 
   async register(req: Request, res: Response): Promise<void> {

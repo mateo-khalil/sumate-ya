@@ -10,15 +10,15 @@
  * - Graceful degradation: if either fetch fails we render the form with safe defaults
  *   (all public) and show an inline notice. The user can still interact with the form.
  * - Nav reuses the same topbar pattern from /perfil for visual consistency.
- * - Currently only the Privacidad section is implemented. Cuenta and Notificaciones
- *   are placeholder tabs — marked TODO for future sprints.
+ * - Privacidad and Seguridad are implemented. Notificaciones remains a placeholder tab.
  * - Previously fixed bugs: none relevant.
  */
 export const prerender = false;
 
-import { Volleyball, Lock, User, Bell } from 'lucide-react';
+import { Volleyball, Lock, ShieldCheck, Bell } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
 import PrivacySettingsContainer from '@/components/settings/PrivacySettingsContainer';
+import ChangePasswordForm from '@/components/settings/ChangePasswordForm';
 import { ACCESS_TOKEN_COOKIE } from '../lib/auth';
 import {
   GET_MY_SETTINGS,
@@ -143,11 +143,10 @@ if (accessToken) {
             <Lock size={16} strokeWidth={2} aria-hidden="true" />
             Privacidad
           </a>
-          <span class="settings-nav-item settings-nav-item--disabled" aria-disabled="true">
-            <User size={16} strokeWidth={2} aria-hidden="true" />
-            Cuenta
-            <span class="coming-soon">Próximamente</span>
-          </span>
+          <a href="#seguridad" class="settings-nav-item">
+            <ShieldCheck size={16} strokeWidth={2} aria-hidden="true" />
+            Seguridad
+          </a>
           <span class="settings-nav-item settings-nav-item--disabled" aria-disabled="true">
             <Bell size={16} strokeWidth={2} aria-hidden="true" />
             Notificaciones
@@ -172,6 +171,24 @@ if (accessToken) {
               client:load
               initialSettings={settings}
               profile={profile}
+              accessToken={accessToken}
+              backendUrl={backendUrl}
+            />
+          </section>
+
+          <section id="seguridad" class="settings-section">
+            <div class="settings-section-header">
+              <ShieldCheck size={18} strokeWidth={2} aria-hidden="true" className="settings-section-icon" />
+              <div>
+                <h2 class="settings-section-title">Seguridad</h2>
+                <p class="settings-section-sub">
+                  Actualizá tu contraseña usando tu sesión activa
+                </p>
+              </div>
+            </div>
+
+            <ChangePasswordForm
+              client:load
               accessToken={accessToken}
               backendUrl={backendUrl}
             />
@@ -395,6 +412,12 @@ if (accessToken) {
   }
 
   /* ---- Section ---- */
+  .settings-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
   .settings-section-header {
     display: flex;
     align-items: flex-start;
