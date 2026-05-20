@@ -9,6 +9,7 @@
     "pretest:headed": "bash ../../scripts/kill-dev-ports.sh",
     "test:headed": "playwright test --headed",
     "test:e2e:21": "playwright test tests/crear-torneo.spec.ts",
+    "test:e2e:41": "playwright test tests/division-ranking.spec.ts",
     "seed": "ts-node scripts/seed.ts"
   },
   "keywords": [],

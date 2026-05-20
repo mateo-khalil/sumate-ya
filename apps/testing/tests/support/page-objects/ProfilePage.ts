@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { FRONTEND_URL } from '../constants';
+import { DIVISION_CSS_CLASS, DIVISION_NAME, type DivisionLevel } from '../divisions';
 
 /**
  * Page Object for /perfil — both the profile card and the avatar-upload modal.
@@ -13,6 +14,8 @@ import { FRONTEND_URL } from '../constants';
  *   wrapper before clicking, otherwise the button is invisible to Playwright.
  * - The 1×1 PNG below is the canonical valid image for upload tests — keeping
  *   it on the PO avoids spec-level magic strings.
+ * - divisionBadge: scoped to `.profile-card` so it won't pick up badges from
+ *   participant lists on the same page.
  * - Previously fixed bugs: none relevant.
  */
 
@@ -25,6 +28,7 @@ export class ProfilePage {
   readonly page: Page;
   readonly heading: Locator;
   readonly card: Locator;
+  readonly divisionBadge: Locator;
   readonly historySection: Locator;
   readonly avatarModal: Locator;
   readonly fileInput: Locator;
@@ -35,11 +39,34 @@ export class ProfilePage {
     this.page = page;
     this.heading = page.getByRole('heading', { name: /mi perfil/i });
     this.card = page.locator('.profile-card');
+    this.divisionBadge = this.card.locator('.division-badge');
     this.historySection = page.locator('.history-section');
     this.avatarModal = page.locator('#avatar-upload-modal');
     this.fileInput = page.locator('input[type="file"]');
     this.submitAvatarButton = page.getByRole('button', { name: /subir foto/i });
     this.closeAvatarButton = page.locator('#close-modal-btn');
+  }
+
+  async expectDivisionBadgeLevel(level: DivisionLevel): Promise<void> {
+    await expect(
+      this.divisionBadge,
+      `División badge debe ser visible (nivel ${level} – ${DIVISION_NAME[level]})`,
+    ).toBeVisible();
+    await expect(
+      this.divisionBadge,
+      `División badge debe tener clase CSS '${DIVISION_CSS_CLASS[level]}'`,
+    ).toHaveClass(new RegExp(DIVISION_CSS_CLASS[level]));
+    await expect(
+      this.divisionBadge,
+      `División badge debe tener title="División ${DIVISION_NAME[level]}"`,
+    ).toHaveAttribute('title', `División ${DIVISION_NAME[level]}`);
+  }
+
+  async expectNoDivisionBadge(): Promise<void> {
+    await expect(
+      this.divisionBadge,
+      'No debería haber badge de división visible',
+    ).toHaveCount(0);
   }
 
   async goto(): Promise<void> {

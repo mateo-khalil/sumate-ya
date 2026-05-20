@@ -66,4 +66,23 @@ export class MatchDetailPage {
     await this.leaveButton.click();
     await expect(this.confirmDialog).toBeVisible();
   }
+
+  /** Returns the .player-card element that contains the given player display name. */
+  playerCard(displayName: string): Locator {
+    return this.page.locator('.player-card').filter({ hasText: displayName }).first();
+  }
+
+  /**
+   * Returns the .division-badge inside the player-card matching displayName.
+   * In PlayerCard.astro the badge is rendered in compact mode, so it also
+   * carries the class `division-badge--compact`.
+   */
+  playerDivisionBadge(displayName: string): Locator {
+    return this.playerCard(displayName).locator('.division-badge');
+  }
+
+  /** All .division-badge elements visible inside any .player-card on the page. */
+  get allPlayerDivisionBadges(): Locator {
+    return this.page.locator('.player-card .division-badge');
+  }
 }
