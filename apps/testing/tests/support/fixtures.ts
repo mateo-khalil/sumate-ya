@@ -10,6 +10,8 @@ import { ProfilePage } from './page-objects/ProfilePage';
 import { RegisterClubPage } from './page-objects/RegisterClubPage';
 import { RegisterPlayerPage } from './page-objects/RegisterPlayerPage';
 import { SettingsPage } from './page-objects/SettingsPage';
+import { TournamentDetailPage } from './page-objects/TournamentDetailPage';
+import { SEED_TOURNAMENTS } from './constants';
 
 /**
  * Custom Playwright test fixture.
@@ -42,6 +44,10 @@ type Fixtures = {
   createTournamentPage: CreateTournamentPage;
   profilePage: ProfilePage;
   settingsPage: SettingsPage;
+  /** Open-registration tournament (no teams). For inscription tests (US #39). */
+  tournamentOpenPage: TournamentDetailPage;
+  /** Tournament with Mateo's team pre-registered. For captain-panel tests (US #39). */
+  tournamentCaptainPage: TournamentDetailPage;
 };
 
 export const test = base.extend<Fixtures>({
@@ -77,6 +83,12 @@ export const test = base.extend<Fixtures>({
   },
   settingsPage: async ({ page }, use) => {
     await use(new SettingsPage(page));
+  },
+  tournamentOpenPage: async ({ page }, use) => {
+    await use(new TournamentDetailPage(page, SEED_TOURNAMENTS.open));
+  },
+  tournamentCaptainPage: async ({ page }, use) => {
+    await use(new TournamentDetailPage(page, SEED_TOURNAMENTS.withCaptainMateo));
   },
 });
 

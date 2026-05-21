@@ -98,3 +98,181 @@ export function buildMockSlot(overrides: MockSlotOverrides = {}): MockSlot {
     court: { ...DEFAULT_MOCK_SLOT.court, ...(court ?? {}) },
   };
 }
+
+/* ── Tournament mock builders (US #39) ───────────────────────────────────── */
+
+/**
+ * Tournament mock builders for joinTournament / addMember / removeMember
+ * mutation responses.
+ *
+ * Decision Context:
+ * - The TournamentRegistrationForm calls /api/graphql-auth for all mutations.
+ *   Mocking this route lets tests exercise UI error/success flows without
+ *   writing real data to the DB.
+ * - `buildMockTournamentTeam` mirrors the TournamentTeam type returned by the
+ *   backend. Spread overrides for the fields that matter to the specific test.
+ * - `buildJoinTournamentResponse` wraps the result in the `joinTournament`
+ *   data envelope expected by the component.
+ * - `buildMemberMutationResponse` covers both addTournamentTeamMember and
+ *   removeTournamentTeamMember — same result shape.
+ * - Previously fixed bugs: none relevant.
+ */
+
+export type MockTournamentPlayer = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: string | null;
+};
+
+export type MockTournamentTeam = {
+  id: string;
+  name: string;
+  captainId: string;
+  captain: MockTournamentPlayer | null;
+  players: MockTournamentPlayer[];
+  createdAt: string;
+};
+
+export type MockTournamentTeamRegistrationResult = {
+  success: boolean;
+  teamId: string | null;
+  message: string | null;
+  tournament: null;
+};
+
+export function buildMockTournamentPlayer(
+  overrides: Partial<MockTournamentPlayer> = {},
+): MockTournamentPlayer {
+  return {
+    id: 'player-e2e-default',
+    displayName: 'Jugador Test',
+    avatarUrl: null,
+    preferredPosition: null,
+    ...overrides,
+  };
+}
+
+export function buildMockTournamentTeam(
+  overrides: Partial<MockTournamentTeam> = {},
+): MockTournamentTeam {
+  const captain = buildMockTournamentPlayer({
+    id: 'captain-e2e-1',
+    displayName: 'Capitan Test',
+  });
+  return {
+    id: 'team-e2e-1',
+    name: 'Equipo E2E',
+    captainId: captain.id,
+    captain,
+    players: [captain],
+    createdAt: '2027-07-01T12:00:00Z',
+    ...overrides,
+  };
+}
+
+/** Successful joinTournament response body. */
+export function buildJoinTournamentResponse(
+  overrides: Partial<MockTournamentTeamRegistrationResult> = {},
+): { data: { joinTournament: MockTournamentTeamRegistrationResult } } {
+  return {
+    data: {
+      joinTournament: {
+        success: true,
+        teamId: 'team-e2e-new',
+        message: null,
+        tournament: null,
+        ...overrides,
+      },
+    },
+  };
+}
+
+/** Failed joinTournament response body (success=false, no GraphQL-level error). */
+export function buildJoinTournamentFailure(message: string): {
+  data: { joinTournament: MockTournamentTeamRegistrationResult };
+} {
+  return {
+    data: {
+      joinTournament: {
+        success: false,
+        teamId: null,
+        message,
+        tournament: null,
+      },
+    },
+  };
+}
+
+/** Successful addTournamentTeamMember response body. */
+export function buildAddMemberResponse(
+  overrides: Partial<MockTournamentTeamRegistrationResult> = {},
+): { data: { addTournamentTeamMember: MockTournamentTeamRegistrationResult } } {
+  return {
+    data: {
+      addTournamentTeamMember: {
+        success: true,
+        teamId: 'team-e2e-1',
+        message: null,
+        tournament: null,
+        ...overrides,
+      },
+    },
+  };
+}
+
+/** Failed addTournamentTeamMember response body. */
+export function buildAddMemberFailure(message: string): {
+  data: { addTournamentTeamMember: MockTournamentTeamRegistrationResult };
+} {
+  return {
+    data: {
+      addTournamentTeamMember: {
+        success: false,
+        teamId: null,
+        message,
+        tournament: null,
+      },
+    },
+  };
+}
+
+/** Successful removeTournamentTeamMember response body. */
+export function buildRemoveMemberResponse(
+  overrides: Partial<MockTournamentTeamRegistrationResult> = {},
+): { data: { removeTournamentTeamMember: MockTournamentTeamRegistrationResult } } {
+  return {
+    data: {
+      removeTournamentTeamMember: {
+        success: true,
+        teamId: 'team-e2e-1',
+        message: null,
+        tournament: null,
+        ...overrides,
+      },
+    },
+  };
+}
+
+/** Failed removeTournamentTeamMember response body. */
+export function buildRemoveMemberFailure(message: string): {
+  data: { removeTournamentTeamMember: MockTournamentTeamRegistrationResult };
+} {
+  return {
+    data: {
+      removeTournamentTeamMember: {
+        success: false,
+        teamId: null,
+        message,
+        tournament: null,
+      },
+    },
+  };
+}
+
+/** Mock eligible players response (tournamentEligiblePlayers query). */
+export function buildEligiblePlayersResponse(
+  players: MockTournamentPlayer[] = [],
+): { data: { tournamentEligiblePlayers: MockTournamentPlayer[] } } {
+  return { data: { tournamentEligiblePlayers: players } };
+}

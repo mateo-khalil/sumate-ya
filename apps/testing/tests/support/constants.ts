@@ -38,6 +38,11 @@ export const GRAPHQL_AUTH_ROUTE = '**/api/graphql-auth**';
 export const TORNEOS_URL = `${FRONTEND_URL}/torneos`;
 export const TORNEOS_CREAR_URL = `${FRONTEND_URL}/torneos/crear`;
 
+/** Returns the detail URL for a given tournament ID. */
+export function torneoDetailUrl(id: string): string {
+  return `${FRONTEND_URL}/torneos/${id}`;
+}
+
 /**
  * Match IDs guaranteed by `apps/testing/scripts/seed.ts` (Playwright globalSetup).
  * Importing these from a single place keeps tests in sync if the seed evolves.
@@ -47,4 +52,26 @@ export const SEED_MATCHES = {
   full: 'e1000000-0000-0000-0000-000000000001',
   /** OPEN match with 0 participants. */
   open: 'e1000000-0000-0000-0000-000000000002',
+} as const;
+
+/**
+ * Tournament IDs guaranteed by `apps/testing/scripts/seed.ts` — US #39.
+ *
+ * Decision Context:
+ * - Two seeded tournaments with stable UUIDs so specs can navigate to real
+ *   /torneos/[id] pages. The SSR fetch is server-side and cannot be intercepted
+ *   with page.route(), so real DB rows are required.
+ * - `open`: status=REGISTRATION, no teams — inscription form is visible.
+ * - `withCaptainLucas`: status=REGISTRATION, Lucas's team pre-registered —
+ *   captain management panel is visible when authenticated as playerLucas.
+ */
+export const SEED_TOURNAMENTS = {
+  /** Open registration, zero teams. Inscription form visible. */
+  open: 'c0000000-0000-0000-0000-000000000001',
+  /**
+   * Mateo's team pre-registered. Captain panel visible when authenticated as
+   * playerMateo. Previously named withCaptainLucas — renamed after lucas@test.com
+   * was found not to exist in the dev DB (see seed.ts Decision Context).
+   */
+  withCaptainMateo: 'c0000000-0000-0000-0000-000000000002',
 } as const;
