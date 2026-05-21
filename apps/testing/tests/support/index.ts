@@ -31,3 +31,4 @@ export {
   type PlayerRegisterValues,
 } from './page-objects/RegisterPlayerPage';
 export { RegisterClubPage } from './page-objects/RegisterClubPage';
+export { TournamentDetailPage } from './page-objects/TournamentDetailPage';

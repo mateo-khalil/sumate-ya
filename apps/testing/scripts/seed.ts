@@ -301,15 +301,245 @@ async function ensureTestUserNotInOpenMatch(client: SupabaseClient): Promise<voi
   }
 }
 
+/**
+ * Tournament seeds — US #39 (unirse a torneo).
+ *
+ * Decision Context:
+ * - Two tournaments with stable UUIDs are seeded so specs can navigate to real
+ *   URLs on /torneos/[id] — the SSR fetch is server-side and cannot be mocked
+ *   with page.route(), so real data is required.
+ * - T1 (SEED_TOURNAMENTS.open): always has status=REGISTRATION and zero teams.
+ *   Used by inscription tests that navigate to the page and see the join form.
+ * - T2 (SEED_TOURNAMENTS.withCaptainLucas): status=REGISTRATION with Lucas's
+ *   team pre-registered. Used by captain-panel tests that need captainId to
+ *   match the authenticated user so TournamentRegistrationForm shows the
+ *   management UI instead of the registration form.
+ * - Lucas's user ID is looked up dynamically by email using the admin auth API
+ *   so the seed does not hardcode a UUID that could change between environments.
+ * - Tournament FK to club: we reuse the first available club (same pattern as
+ *   the match seeds above).
+ * - Idempotency: each operation uses upsert / ON CONFLICT DO NOTHING semantics.
+ *   Tournaments are inserted only if the ID does not already exist; teams are
+ *   deleted and re-inserted on each seed run to guarantee a clean captain state.
+ * - Previously fixed bugs: none relevant.
+ */
+
+const SEED_TOURNAMENT_OPEN_ID = 'c0000000-0000-0000-0000-000000000001';
+const SEED_TOURNAMENT_WITH_CAPTAIN_ID = 'c0000000-0000-0000-0000-000000000002';
+
+/**
+ * Captain UUID for the pre-registered team in T2.
+ *
+ * Decision Context:
+ * - We reuse TEST_USER_ID (playerMateo) instead of a new test account.
+ *   Reason: two new accounts (playerLucas / playerMichel) caused auth.setup.ts
+ *   to run 5 parallel logins, which saturated the dev server and made the club-
+ *   admin login exceed actionTimeout: 15s. Going back to 3 auth setups (Mateo,
+ *   Ricardo, clubAdmin) keeps the setup phase within the server's capacity.
+ * - lucas@test.com was also rejected by the DB with "Email o contraseña
+ *   incorrectos" — the account does not exist in the dev environment.
+ * - TEST_USER_ID is hardcoded (Mateo's UUID is stable and known), so no
+ *   signInWithPassword or auth.admin.listUsers() call is needed at all.
+ * - Previously fixed bugs:
+ *   1. auth.admin.listUsers() threw "Database error finding users" — replaced
+ *      with signInWithPassword approach, then removed entirely in favour of the
+ *      known UUID.
+ *   2. lucas@test.com / Test1234! returned "Email o contraseña incorrectos" in
+ *      auth.setup.ts — the account does not exist in this dev DB.
+ */
+const CAPTAIN_USER_ID = TEST_USER_ID; // playerMateo (mateoduran2010@gmail.com)
+
+async function ensureTournamentExists(
+  client: SupabaseClient,
+  id: string,
+  clubId: string,
+  clubOwnerId: string,
+  opts: { description: string },
+): Promise<void> {
+  const { data: existing, error: selectError } = await client
+    .from('tournaments')
+    .select('id, status')
+    .eq('id', id)
+    .maybeSingle();
+  if (selectError) {
+    throw new Error(`[seed] Error consultando tournament ${id}: ${selectError.message}`);
+  }
+
+  if (!existing) {
+    const startDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const { error: insertError } = await client.from('tournaments').insert({
+      id,
+      organizerId: clubOwnerId,
+      clubId,
+      name: `Torneo E2E Seed ${id.slice(-4)}`,
+      format: '7v7',
+      teamCount: 4,
+      playersPerTeam: 7,
+      status: 'registration',
+      description: opts.description,
+      startDate,
+      endDate,
+    });
+    if (insertError) {
+      throw new Error(
+        `[seed] No se pudo crear tournament ${id}: ${insertError.message}`,
+      );
+    }
+  } else if (existing.status !== 'registration') {
+    // Reset to registration so tests can see the join form
+    const { error: updateError } = await client
+      .from('tournaments')
+      .update({ status: 'registration' })
+      .eq('id', id);
+    if (updateError) {
+      throw new Error(
+        `[seed] No se pudo resetear status del tournament ${id}: ${updateError.message}`,
+      );
+    }
+  }
+}
+
+async function ensureCaptainTeamExists(
+  client: SupabaseClient,
+  tournamentId: string,
+  captainId: string,
+): Promise<void> {
+  /*
+   * Decision Context:
+   * - FK constraint: tournamentTeamMembers.teamId → tournamentTeams.id (no cascade).
+   *   Deleting directly from tournamentTeams fails silently when member rows exist.
+   *   Fix: look up the captain's existing team ID first, delete its members, then
+   *   delete the team row. Without this, the team persists across runs, the seed
+   *   loses idempotency and subsequent insert errors out on duplicate captainId.
+   * - Previously fixed bugs: delete without pre-clearing members caused FK violation
+   *   that Supabase JS surfaced as a silent no-op (no rows deleted), leaving stale
+   *   team data in T2 across runs.
+   */
+  const { data: existingTeam } = await client
+    .from('tournamentTeams')
+    .select('id')
+    .eq('tournamentId', tournamentId)
+    .eq('captainId', captainId)
+    .maybeSingle();
+
+  if (existingTeam) {
+    await client
+      .from('tournamentTeamMembers')
+      .delete()
+      .eq('teamId', existingTeam.id);
+
+    await client
+      .from('tournamentTeams')
+      .delete()
+      .eq('id', existingTeam.id);
+  }
+
+  const { error: insertError } = await client.from('tournamentTeams').insert({
+    tournamentId,
+    name: 'Equipo Capitan E2E',
+    captainId,
+  });
+  if (insertError) {
+    throw new Error(
+      `[seed] No se pudo crear el equipo del capitan en tournament ${tournamentId}: ${insertError.message}`,
+    );
+  }
+
+  // Also ensure the captain appears in tournamentTeamMembers
+  const { data: team, error: teamSelectError } = await client
+    .from('tournamentTeams')
+    .select('id')
+    .eq('tournamentId', tournamentId)
+    .eq('captainId', captainId)
+    .maybeSingle();
+  if (teamSelectError || !team) {
+    throw new Error('[seed] No se pudo recuperar el equipo recien creado.');
+  }
+
+  const { error: memberError } = await client.from('tournamentTeamMembers').insert({
+    teamId: team.id,
+    playerId: captainId,
+  });
+  if (memberError && !memberError.message.includes('duplicate')) {
+    throw new Error(
+      `[seed] No se pudo agregar al capitan como miembro: ${memberError.message}`,
+    );
+  }
+}
+
+async function seedTournaments(client: SupabaseClient): Promise<void> {
+  const { data: club, error: clubError } = await client
+    .from('clubs')
+    .select('id, ownerId')
+    .order('createdAt', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (clubError || !club) {
+    // eslint-disable-next-line no-console
+    console.warn('[seed] No hay clubes — saltando seed de torneos.');
+    return;
+  }
+
+  // T1: open registration, no teams — for inscription tests
+  await ensureTournamentExists(client, SEED_TOURNAMENT_OPEN_ID, club.id, club.ownerId, {
+    description: 'Torneo T1 seed E2E — inscripcion abierta sin equipos.',
+  });
+
+  /*
+   * Clear T1 so inscription tests always see the registration form.
+   * Delete members BEFORE teams: tournamentTeamMembers.teamId has a FK constraint
+   * to tournamentTeams.id (no ON DELETE CASCADE). Deleting teams first causes a FK
+   * violation that Supabase JS silently ignores (0 rows deleted), leaving stale
+   * team data that causes subsequent tests to show the captain panel instead of the
+   * registration form. Fix: look up T1 team IDs, delete their members, then teams.
+   * Previously fixed bugs: stale T1 data caused "inscribir equipo con nombre
+   * duplicado" to time out on teamNameInput.fill() because waitForFormHydrated()
+   * resolved seeing the captain panel (not the submit button).
+   */
+  const { data: t1Teams } = await client
+    .from('tournamentTeams')
+    .select('id')
+    .eq('tournamentId', SEED_TOURNAMENT_OPEN_ID);
+
+  if (t1Teams && t1Teams.length > 0) {
+    await client
+      .from('tournamentTeamMembers')
+      .delete()
+      .in('teamId', t1Teams.map((t: { id: string }) => t.id));
+  }
+
+  await client
+    .from('tournamentTeams')
+    .delete()
+    .eq('tournamentId', SEED_TOURNAMENT_OPEN_ID);
+
+  // T2: open registration with Lucas's team — for captain panel tests
+  await ensureTournamentExists(
+    client,
+    SEED_TOURNAMENT_WITH_CAPTAIN_ID,
+    club.id,
+    club.ownerId,
+    { description: 'Torneo T2 seed E2E — con equipo del capitan Lucas.' },
+  );
+
+  await ensureCaptainTeamExists(client, SEED_TOURNAMENT_WITH_CAPTAIN_ID, CAPTAIN_USER_ID);
+}
+
 async function seed(): Promise<void> {
   const client = buildAdminClient();
   await ensureMatchExists(client);
   await ensureMatchFullWithTestUser(client);
   await ensureOpenMatchExists(client);
   await ensureTestUserNotInOpenMatch(client);
+  await seedTournaments(client);
   // eslint-disable-next-line no-console
   console.log(
-    '[seed] Fixtures listas: E1 lleno con usuario inscripto, E2 abierto sin usuario.',
+    '[seed] Fixtures listas: E1 lleno, E2 abierto, T1 torneo abierto, T2 torneo con capitan.',
   );
 }
 
