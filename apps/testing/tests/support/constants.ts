@@ -37,6 +37,7 @@ export const GRAPHQL_AUTH_ROUTE = '**/api/graphql-auth**';
 
 export const TORNEOS_URL = `${FRONTEND_URL}/torneos`;
 export const TORNEOS_CREAR_URL = `${FRONTEND_URL}/torneos/crear`;
+export const CLUB_DASHBOARD_URL = `${FRONTEND_URL}/panel-club/dashboard`;
 
 /** Returns the detail URL for a given tournament ID. */
 export function torneoDetailUrl(id: string): string {
@@ -74,4 +75,19 @@ export const SEED_TOURNAMENTS = {
    * was found not to exist in the dev DB (see seed.ts Decision Context).
    */
   withCaptainMateo: 'c0000000-0000-0000-0000-000000000002',
+} as const;
+
+/**
+ * Club dashboard fixtures guaranteed by `apps/testing/scripts/seed.ts`.
+ *
+ * The dashboard is SSR, so these tests use real DB rows instead of Playwright
+ * route mocks for the first load.
+ */
+export const SEED_CLUB_DASHBOARD = {
+  clubName: 'Club Dashboard E2E',
+  courtName: 'Cancha Dashboard 1',
+  freeSlotTime: '10:00',
+  matchSlotTime: '11:00',
+  blockedSlotTime: '12:00',
+  blockedReason: 'Mantenimiento E2E',
 } as const;
