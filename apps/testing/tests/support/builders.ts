@@ -99,6 +99,128 @@ export function buildMockSlot(overrides: MockSlotOverrides = {}): MockSlot {
   };
 }
 
+/* ── Club match wizard builders (Crear Partido desde Club) ───────────────── */
+
+/**
+ * ClubMatchSlotOccurrence mock builder for the AvailableSlotsForClubMatch query.
+ *
+ * Decision Context:
+ * - The wizard's Step 1 (AvailableSlotsPicker) renders a weekly CalendarGrid for
+ *   the CURRENT week (Mon–Sun of today) and only paints cells in the 07:00–23:00
+ *   range. A cell is CLICKABLE only when the occurrence is: not `hasMatch`, the
+ *   day is not in the past, and `now < slotStart + 15min` (grace period). So a
+ *   mocked slot must land on a future date+time inside the visible week or the
+ *   test can't select it.
+ * - `buildClubSlotOccurrence` defaults are computed at call time relative to the
+ *   real clock so the spec is not date-fragile: it picks a date in the current
+ *   week that is strictly in the future (tomorrow if today is Mon–Sat, else a
+ *   safe future hour today) at a fixed 19:00 slot well inside DISPLAY_HOURS.
+ * - The picker fetches with `includeNonBookable: true` and ignores the date range
+ *   echo — it maps occurrences into the grid purely by their `date`+`startTime`.
+ *   We don't need to match the requested filters, only return occurrences whose
+ *   `date` falls in the rendered week.
+ * - The accessible cell label the grid emits is
+ *   `${courtName} ${startTime.slice(0,5)}–${endTime.slice(0,5)} el ${date}` — the
+ *   Page Object locates the clickable cell by that label, so courtName/startTime
+ *   here must stay in sync with what the PO expects.
+ * - Previously fixed bugs: none relevant (new feature).
+ */
+
+export type MockClubSlotOccurrence = {
+  slotId: string;
+  courtId: string;
+  courtName: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  priceArs: number | null;
+  date: string;
+  scheduledAt: string;
+  hasMatch: boolean;
+  allowOnlineBooking: boolean;
+};
+
+const JS_DOW = [
+  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+] as const;
+
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Pick a date inside the current Mon–Sun week that is strictly in the future
+ * (so its 19:00 slot is always within the 15-min grace window and clickable).
+ * Tomorrow normally; if tomorrow falls outside this week (today is Sunday),
+ * fall back to today (the 19:00 slot will still be future for any run before 19:15).
+ */
+function defaultFutureOccurrenceDate(now: Date): Date {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  // Sunday (getDay()===0) is the last day of the Mon–Sun week, so tomorrow would
+  // spill into next week and not be rendered. Use today instead in that case.
+  if (now.getDay() === 0) return now;
+  return tomorrow;
+}
+
+export function buildClubSlotOccurrence(
+  overrides: Partial<MockClubSlotOccurrence> = {},
+): MockClubSlotOccurrence {
+  const now = new Date();
+  const occDate = overrides.date
+    ? new Date(`${overrides.date}T00:00:00`)
+    : defaultFutureOccurrenceDate(now);
+  const date = overrides.date ?? isoDate(occDate);
+  return {
+    slotId: 'slot-club-e2e-1',
+    courtId: 'court-club-e2e-1',
+    courtName: 'Cancha Club E2E',
+    dayOfWeek: JS_DOW[occDate.getDay()],
+    startTime: '19:00:00',
+    endTime: '20:00:00',
+    duration: 60,
+    priceArs: 5000,
+    date,
+    scheduledAt: `${date}T19:00:00.000Z`,
+    hasMatch: false,
+    allowOnlineBooking: true,
+    ...overrides,
+  };
+}
+
+/** Wrap occurrences in the AvailableSlotsForClubMatch data envelope. */
+export function buildAvailableSlotsResponse(
+  occurrences: MockClubSlotOccurrence[],
+): { data: { availableSlotsForClubMatch: MockClubSlotOccurrence[] } } {
+  return { data: { availableSlotsForClubMatch: occurrences } };
+}
+
+/** Successful createClubMatch response body. */
+export function buildCreateClubMatchResponse(
+  overrides: Partial<{ success: boolean; matchId: string | null; message: string | null }> = {},
+): { data: { createClubMatch: { success: boolean; matchId: string | null; message: string | null } } } {
+  return {
+    data: {
+      createClubMatch: {
+        success: true,
+        matchId: 'd1000000-0000-0000-0000-0000000000aa',
+        message: null,
+        ...overrides,
+      },
+    },
+  };
+}
+
+/** Failed createClubMatch response body (success=false, no GraphQL-level error). */
+export function buildCreateClubMatchFailure(message: string): {
+  data: { createClubMatch: { success: boolean; matchId: string | null; message: string | null } };
+} {
+  return {
+    data: { createClubMatch: { success: false, matchId: null, message } },
+  };
+}
+
 /* ── Tournament mock builders (US #39) ───────────────────────────────────── */
 
 /**
