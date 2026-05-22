@@ -64,6 +64,22 @@ const OPEN_MATCH_FORMAT = '5v5';
 const OPEN_MATCH_DURATION_MIN = 60;
 const OPEN_MATCH_DAYS_AHEAD = 14;
 
+const CLUB_DASHBOARD_FIXTURE = {
+  clubId: 'b2000000-0000-0000-0000-000000000001',
+  courtId: 'c2000000-0000-0000-0000-000000000001',
+  freeSlotId: 'd2000000-0000-0000-0000-000000000001',
+  matchSlotId: 'd2000000-0000-0000-0000-000000000002',
+  blockedSlotId: 'd2000000-0000-0000-0000-000000000003',
+  matchId: 'e2000000-0000-0000-0000-000000000001',
+  clubName: 'Club Dashboard E2E',
+  courtName: 'Cancha Dashboard 1',
+} as const;
+
+const DASHBOARD_SLOT_DAY = 'saturday';
+const DASHBOARD_FREE_TIME = '10:00';
+const DASHBOARD_MATCH_TIME = '11:00';
+const DASHBOARD_BLOCKED_TIME = '12:00';
+
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() === '') {
@@ -80,6 +96,57 @@ function buildAdminClient(): SupabaseClient {
   return createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+function buildUserClient(accessToken: string): SupabaseClient {
+  const url = requiredEnv('SUPABASE_URL');
+  const anonKey = requiredEnv('SUPABASE_ANON_KEY');
+  return createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  });
+}
+
+function addDaysUTC(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function currentWeekSaturday(): Date {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sunday
+  const monday = addDaysUTC(now, -((day + 6) % 7));
+  return addDaysUTC(monday, 5);
+}
+
+function scheduledAtForDashboardMatch(): string {
+  const saturday = currentWeekSaturday();
+  return new Date(Date.UTC(
+    saturday.getUTCFullYear(),
+    saturday.getUTCMonth(),
+    saturday.getUTCDate(),
+    14,
+    0,
+    0,
+  )).toISOString();
+}
+
+async function signInTestClubAdmin(): Promise<{ ownerId: string; accessToken: string }> {
+  const email = process.env.TEST_CLUB_EMAIL ?? 'frantestsumateya@gmail.com';
+  const password = process.env.TEST_CLUB_PASSWORD ?? 'aaaa1234';
+  const authClient = createClient(requiredEnv('SUPABASE_URL'), requiredEnv('SUPABASE_ANON_KEY'), {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+
+  if (error || !data.user || !data.session) {
+    throw new Error(
+      `[seed] No se pudo autenticar el club_admin de testing (${email}): ${error?.message ?? 'sin usuario/sesion'}`,
+    );
+  }
+
+  return { ownerId: data.user.id, accessToken: data.session.access_token };
 }
 
 async function ensureMatchExists(client: SupabaseClient): Promise<void> {
@@ -298,6 +365,269 @@ async function ensureTestUserNotInOpenMatch(client: SupabaseClient): Promise<voi
     throw new Error(
       `[seed] No se pudo limpiar la inscripcion del usuario de prueba en E2: ${error.message}`,
     );
+  }
+}
+
+async function ensureClubAdminProfile(client: SupabaseClient, ownerId: string): Promise<void> {
+  const { data: profile, error: selectError } = await client
+    .from('profiles')
+    .select('id, role')
+    .eq('id', ownerId)
+    .maybeSingle();
+  if (selectError) {
+    throw new Error(`[seed] Error consultando perfil club_admin: ${selectError.message}`);
+  }
+
+  if (!profile) {
+    const { error: insertError } = await client.from('profiles').insert({
+      id: ownerId,
+      displayName: 'Admin Club E2E',
+      role: 'club_admin',
+      division: 1,
+      matchesPlayed: 0,
+      matchesWon: 0,
+    });
+    if (insertError) {
+      throw new Error(`[seed] No se pudo crear perfil club_admin: ${insertError.message}`);
+    }
+    return;
+  }
+
+  if (profile.role !== 'club_admin') {
+    const { error: updateError } = await client
+      .from('profiles')
+      .update({ role: 'club_admin' })
+      .eq('id', ownerId);
+    if (updateError) {
+      throw new Error(`[seed] No se pudo ajustar rol club_admin: ${updateError.message}`);
+    }
+  }
+}
+
+async function ensureDashboardClub(client: SupabaseClient, ownerId: string): Promise<string> {
+  const { data: existing, error: selectError } = await client
+    .from('clubs')
+    .select('id')
+    .eq('ownerId', ownerId)
+    .order('createdAt', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (selectError) {
+    throw new Error(`[seed] Error consultando club del admin E2E: ${selectError.message}`);
+  }
+
+  const payload = {
+    ownerId,
+    name: CLUB_DASHBOARD_FIXTURE.clubName,
+    address: 'Av. Dashboard 1234',
+    zone: 'E2E',
+    lat: -34.9011,
+    lng: -56.1645,
+    phone: '+598 99 123 456',
+    description: 'Club seed para tests E2E de dashboard.',
+  };
+
+  if (existing) {
+    const { error: updateError } = await client
+      .from('clubs')
+      .update(payload)
+      .eq('id', existing.id);
+    if (updateError) {
+      throw new Error(`[seed] No se pudo ajustar club dashboard: ${updateError.message}`);
+    }
+    return existing.id as string;
+  }
+
+  const { error: insertError } = await client
+    .from('clubs')
+    .insert({ id: CLUB_DASHBOARD_FIXTURE.clubId, ...payload });
+  if (insertError) {
+    throw new Error(`[seed] No se pudo crear club dashboard: ${insertError.message}`);
+  }
+
+  return CLUB_DASHBOARD_FIXTURE.clubId;
+}
+
+async function ensureDashboardCourt(client: SupabaseClient, clubId: string): Promise<string> {
+  const { data: existing, error: selectError } = await client
+    .from('courts')
+    .select('id')
+    .eq('clubId', clubId)
+    .eq('name', CLUB_DASHBOARD_FIXTURE.courtName)
+    .maybeSingle();
+  if (selectError) {
+    throw new Error(`[seed] Error consultando cancha dashboard: ${selectError.message}`);
+  }
+
+  const payload = {
+    clubId,
+    name: CLUB_DASHBOARD_FIXTURE.courtName,
+    surface: 'synthetic',
+    isIndoor: false,
+    maxFormat: '5v5',
+  };
+
+  if (existing) {
+    const { error: updateError } = await client
+      .from('courts')
+      .update(payload)
+      .eq('id', existing.id);
+    if (updateError) {
+      throw new Error(`[seed] No se pudo ajustar cancha dashboard: ${updateError.message}`);
+    }
+    return existing.id as string;
+  }
+
+  // Some shared cloud DBs already provision a court for the club_admin account
+  // but do not allow direct court INSERT through the testing key. Reuse that
+  // court so the dashboard seed can stay idempotent without needing schema
+  // admin privileges.
+  const { data: reusable, error: reusableError } = await client
+    .from('courts')
+    .select('id')
+    .eq('clubId', clubId)
+    .order('createdAt', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (reusableError) {
+    throw new Error(`[seed] Error buscando cancha reutilizable dashboard: ${reusableError.message}`);
+  }
+  if (reusable) {
+    return reusable.id as string;
+  }
+
+  const { error: insertError } = await client
+    .from('courts')
+    .insert({ id: CLUB_DASHBOARD_FIXTURE.courtId, ...payload });
+  if (insertError) {
+    throw new Error(`[seed] No se pudo crear cancha dashboard: ${insertError.message}`);
+  }
+
+  return CLUB_DASHBOARD_FIXTURE.courtId;
+}
+
+async function ensureDashboardSlot(
+  client: SupabaseClient,
+  input: {
+    id: string;
+    clubId: string;
+    courtId: string;
+    startTime: string;
+    isBlocked: boolean;
+    blockReason: string | null;
+    blockType: string | null;
+    priceArs: number;
+  },
+): Promise<string> {
+  const { data: existing, error: selectError } = await client
+    .from('clubSlots')
+    .select('id')
+    .eq('courtId', input.courtId)
+    .eq('dayOfWeek', DASHBOARD_SLOT_DAY)
+    .eq('startTime', input.startTime)
+    .maybeSingle();
+  if (selectError) {
+    throw new Error(`[seed] Error consultando slot dashboard: ${selectError.message}`);
+  }
+
+  const payload = {
+    clubId: input.clubId,
+    courtId: input.courtId,
+    dayOfWeek: DASHBOARD_SLOT_DAY,
+    startTime: input.startTime,
+    endTime: `${String(Number(input.startTime.slice(0, 2)) + 1).padStart(2, '0')}:00`,
+    duration: 60,
+    priceArs: input.priceArs,
+    isBlocked: input.isBlocked,
+    blockReason: input.blockReason,
+    blockType: input.blockType,
+    isActive: true,
+    allowOnlineBooking: true,
+  };
+
+  if (existing) {
+    const { error: updateError } = await client
+      .from('clubSlots')
+      .update(payload)
+      .eq('id', existing.id);
+    if (updateError) {
+      throw new Error(`[seed] No se pudo ajustar slot dashboard: ${updateError.message}`);
+    }
+    return existing.id as string;
+  }
+
+  const { error: insertError } = await client
+    .from('clubSlots')
+    .insert({ id: input.id, ...payload });
+  if (insertError) {
+    throw new Error(`[seed] No se pudo crear slot dashboard: ${insertError.message}`);
+  }
+
+  return input.id;
+}
+
+async function seedClubDashboard(client: SupabaseClient): Promise<void> {
+  const { ownerId, accessToken } = await signInTestClubAdmin();
+  const clubAdminClient = buildUserClient(accessToken);
+  await ensureClubAdminProfile(client, ownerId);
+  const clubId = await ensureDashboardClub(client, ownerId);
+  const courtId = await ensureDashboardCourt(client, clubId);
+
+  await ensureDashboardSlot(client, {
+    id: CLUB_DASHBOARD_FIXTURE.freeSlotId,
+    clubId,
+    courtId,
+    startTime: DASHBOARD_FREE_TIME,
+    isBlocked: false,
+    blockReason: null,
+    blockType: null,
+    priceArs: 24000,
+  });
+
+  const matchSlotId = await ensureDashboardSlot(client, {
+    id: CLUB_DASHBOARD_FIXTURE.matchSlotId,
+    clubId,
+    courtId,
+    startTime: DASHBOARD_MATCH_TIME,
+    isBlocked: false,
+    blockReason: null,
+    blockType: null,
+    priceArs: 30000,
+  });
+
+  await ensureDashboardSlot(client, {
+    id: CLUB_DASHBOARD_FIXTURE.blockedSlotId,
+    clubId,
+    courtId,
+    startTime: DASHBOARD_BLOCKED_TIME,
+    isBlocked: true,
+    blockReason: 'Mantenimiento E2E',
+    blockType: 'maintenance',
+    priceArs: 26000,
+  });
+
+  const { error: matchError } = await clubAdminClient.from('matches').upsert(
+    {
+      id: CLUB_DASHBOARD_FIXTURE.matchId,
+      organizerId: ownerId,
+      clubId,
+      courtId,
+      clubSlotId: matchSlotId,
+      format: '5v5',
+      capacity: 10,
+      scheduledAt: scheduledAtForDashboardMatch(),
+      durationMin: 60,
+      status: 'open',
+      description: 'Partido dashboard E2E',
+      resultStatus: 'pending',
+      winningTeam: null,
+      scoreTeamA: null,
+      scoreTeamB: null,
+    },
+    { onConflict: 'id' },
+  );
+  if (matchError) {
+    throw new Error(`[seed] No se pudo crear/actualizar partido dashboard: ${matchError.message}`);
   }
 }
 
@@ -536,10 +866,11 @@ async function seed(): Promise<void> {
   await ensureMatchFullWithTestUser(client);
   await ensureOpenMatchExists(client);
   await ensureTestUserNotInOpenMatch(client);
+  await seedClubDashboard(client);
   await seedTournaments(client);
   // eslint-disable-next-line no-console
   console.log(
-    '[seed] Fixtures listas: E1 lleno, E2 abierto, T1 torneo abierto, T2 torneo con capitan.',
+    '[seed] Fixtures listas: E1 lleno, E2 abierto, dashboard club, T1 torneo abierto, T2 torneo con capitan.',
   );
 }
 

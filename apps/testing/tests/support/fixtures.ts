@@ -1,6 +1,7 @@
 import { test as base } from '@playwright/test';
 import { CreateMatchPage } from './page-objects/CreateMatchPage';
 import { CreateTournamentPage } from './page-objects/CreateTournamentPage';
+import { ClubDashboardPage } from './page-objects/ClubDashboardPage';
 import { HomePage } from './page-objects/HomePage';
 import { LoginPage } from './page-objects/LoginPage';
 import { MatchDetailPage } from './page-objects/MatchDetailPage';
@@ -42,6 +43,7 @@ type Fixtures = {
   matchDetailPage: MatchDetailPage;
   createMatchPage: CreateMatchPage;
   createTournamentPage: CreateTournamentPage;
+  clubDashboardPage: ClubDashboardPage;
   profilePage: ProfilePage;
   settingsPage: SettingsPage;
   /** Open-registration tournament (no teams). For inscription tests (US #39). */
@@ -77,6 +79,9 @@ export const test = base.extend<Fixtures>({
   },
   createTournamentPage: async ({ page }, use) => {
     await use(new CreateTournamentPage(page));
+  },
+  clubDashboardPage: async ({ page }, use) => {
+    await use(new ClubDashboardPage(page));
   },
   profilePage: async ({ page }, use) => {
     await use(new ProfilePage(page));
