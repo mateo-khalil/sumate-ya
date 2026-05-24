@@ -38,6 +38,22 @@ export const GRAPHQL_AUTH_ROUTE = '**/api/graphql-auth**';
 export const TORNEOS_URL = `${FRONTEND_URL}/torneos`;
 export const TORNEOS_CREAR_URL = `${FRONTEND_URL}/torneos/crear`;
 export const CLUB_DASHBOARD_URL = `${FRONTEND_URL}/panel-club/dashboard`;
+export const AJUSTES_URL = `${FRONTEND_URL}/ajustes`;
+
+/**
+ * Route patterns for the backend REST auth endpoints exercised by the
+ * /ajustes Seguridad section (US #40 - cambiar contraseña).
+ *
+ * Decision Context:
+ * - The ChangePasswordForm React island posts to `${backendUrl}/api/auth/change-password`
+ *   directly from the browser. The fetch is interceptable with page.route() when we
+ *   want to assert UI behaviour (toast, inline error, loading state) without mutating
+ *   the seeded user's real password in Supabase.
+ * - AUTH_CHANGE_PASSWORD_URL is the absolute URL used by API request tests that hit
+ *   the backend directly (no browser) — same shape as BACKEND_GRAPHQL_URL above.
+ */
+export const AUTH_CHANGE_PASSWORD_ROUTE = '**/api/auth/change-password';
+export const AUTH_CHANGE_PASSWORD_URL = 'http://localhost:4000/api/auth/change-password';
 
 /** Returns the detail URL for a given tournament ID. */
 export function torneoDetailUrl(id: string): string {
