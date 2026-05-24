@@ -50,6 +50,8 @@ type Fixtures = {
   tournamentOpenPage: TournamentDetailPage;
   /** Tournament with Mateo's team pre-registered. For captain-panel tests (US #39). */
   tournamentCaptainPage: TournamentDetailPage;
+  /** In-progress tournament with 2 teams + 2 fixture matches. For detail-view tests (US #35). */
+  tournamentWithFixturePage: TournamentDetailPage;
 };
 
 export const test = base.extend<Fixtures>({
@@ -94,6 +96,9 @@ export const test = base.extend<Fixtures>({
   },
   tournamentCaptainPage: async ({ page }, use) => {
     await use(new TournamentDetailPage(page, SEED_TOURNAMENTS.withCaptainMateo));
+  },
+  tournamentWithFixturePage: async ({ page }, use) => {
+    await use(new TournamentDetailPage(page, SEED_TOURNAMENTS.withFixture));
   },
 });
 

@@ -56,15 +56,17 @@ export const SEED_MATCHES = {
 } as const;
 
 /**
- * Tournament IDs guaranteed by `apps/testing/scripts/seed.ts` — US #39.
+ * Tournament IDs guaranteed by `apps/testing/scripts/seed.ts` — US #39 / US #35.
  *
  * Decision Context:
- * - Two seeded tournaments with stable UUIDs so specs can navigate to real
+ * - Three seeded tournaments with stable UUIDs so specs can navigate to real
  *   /torneos/[id] pages. The SSR fetch is server-side and cannot be intercepted
  *   with page.route(), so real DB rows are required.
  * - `open`: status=REGISTRATION, no teams — inscription form is visible.
- * - `withCaptainLucas`: status=REGISTRATION, Lucas's team pre-registered —
- *   captain management panel is visible when authenticated as playerLucas.
+ * - `withCaptainMateo`: status=REGISTRATION, Mateo's team pre-registered —
+ *   captain management panel is visible when authenticated as playerMateo.
+ * - `withFixture`: status=IN_PROGRESS, 2 teams, 1 completed fixtureMatch with
+ *   scores and 1 scheduled fixtureMatch. Used by US #35 fixture display tests.
  */
 export const SEED_TOURNAMENTS = {
   /** Open registration, zero teams. Inscription form visible. */
@@ -75,7 +77,18 @@ export const SEED_TOURNAMENTS = {
    * was found not to exist in the dev DB (see seed.ts Decision Context).
    */
   withCaptainMateo: 'c0000000-0000-0000-0000-000000000002',
+  /**
+   * In-progress tournament with 2 teams and 2 fixture matches (1 COMPLETED
+   * with scores, 1 SCHEDULED). Used by US #35 fixture-display tests.
+   */
+  withFixture: 'c0000000-0000-0000-0000-000000000003',
 } as const;
+
+/**
+ * A well-formed UUID that is guaranteed NOT to exist as a tournament in the DB.
+ * Used by US #35 "Torneo no encontrado" tests.
+ */
+export const NON_EXISTENT_TOURNAMENT_ID = 'c0000000-0000-0000-ffff-000000000000';
 
 /**
  * Club dashboard fixtures guaranteed by `apps/testing/scripts/seed.ts`.
