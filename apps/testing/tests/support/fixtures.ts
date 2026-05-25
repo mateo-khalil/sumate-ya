@@ -6,6 +6,7 @@ import { ClubDashboardPage } from './page-objects/ClubDashboardPage';
 import { HomePage } from './page-objects/HomePage';
 import { LoginPage } from './page-objects/LoginPage';
 import { MatchDetailPage } from './page-objects/MatchDetailPage';
+import { MatchResultsSectionPage } from './page-objects/MatchResultsSectionPage';
 import { MatchesListPage } from './page-objects/MatchesListPage';
 import { MatchesMapPage } from './page-objects/MatchesMapPage';
 import { ProfilePage } from './page-objects/ProfilePage';
@@ -43,6 +44,8 @@ type Fixtures = {
   matchesPage: MatchesListPage;
   matchesMapPage: MatchesMapPage;
   matchDetailPage: MatchDetailPage;
+  /** Result-voting section of /partidos/[id]. US #54 — confirmar resultado y stats. */
+  matchResultsSectionPage: MatchResultsSectionPage;
   createMatchPage: CreateMatchPage;
   createTournamentPage: CreateTournamentPage;
   clubDashboardPage: ClubDashboardPage;
@@ -80,6 +83,9 @@ export const test = base.extend<Fixtures>({
   },
   matchDetailPage: async ({ page }, use) => {
     await use(new MatchDetailPage(page));
+  },
+  matchResultsSectionPage: async ({ page }, use) => {
+    await use(new MatchResultsSectionPage(page));
   },
   createMatchPage: async ({ page }, use) => {
     await use(new CreateMatchPage(page));
