@@ -34,3 +34,4 @@ export {
 } from './page-objects/RegisterPlayerPage';
 export { RegisterClubPage } from './page-objects/RegisterClubPage';
 export { TournamentDetailPage } from './page-objects/TournamentDetailPage';
+export { TournamentsListPage } from './page-objects/TournamentsListPage';

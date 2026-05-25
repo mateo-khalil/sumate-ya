@@ -13,6 +13,7 @@ import { RegisterClubPage } from './page-objects/RegisterClubPage';
 import { RegisterPlayerPage } from './page-objects/RegisterPlayerPage';
 import { SettingsPage } from './page-objects/SettingsPage';
 import { TournamentDetailPage } from './page-objects/TournamentDetailPage';
+import { TournamentsListPage } from './page-objects/TournamentsListPage';
 import { SEED_TOURNAMENTS } from './constants';
 
 /**
@@ -48,6 +49,8 @@ type Fixtures = {
   profilePage: ProfilePage;
   settingsPage: SettingsPage;
   changePasswordPage: ChangePasswordPage;
+  /** Tournament listing page (/torneos). For list + card interaction tests (US #33). */
+  tournamentsPage: TournamentsListPage;
   /** Open-registration tournament (no teams). For inscription tests (US #39). */
   tournamentOpenPage: TournamentDetailPage;
   /** Tournament with Mateo's team pre-registered. For captain-panel tests (US #39). */
@@ -95,6 +98,9 @@ export const test = base.extend<Fixtures>({
   },
   changePasswordPage: async ({ page }, use) => {
     await use(new ChangePasswordPage(page));
+  },
+  tournamentsPage: async ({ page }, use) => {
+    await use(new TournamentsListPage(page));
   },
   tournamentOpenPage: async ({ page }, use) => {
     await use(new TournamentDetailPage(page, SEED_TOURNAMENTS.open));

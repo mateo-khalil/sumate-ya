@@ -270,6 +270,69 @@ export function buildRemoveMemberFailure(message: string): {
   };
 }
 
+/* ── Tournament list mock builders (US #33) ─────────────────────────────── */
+
+/**
+ * Mock builder for TournamentListItem — used by listado-torneos.spec.ts.
+ *
+ * Decision Context:
+ * - Mirrors the TournamentListItem type from the frontend GraphQL operations.
+ *   The client-side keepRegistrationOnly() filter checks status === 'REGISTRATION',
+ *   so the default status is 'REGISTRATION' to avoid unexpected empty-state renders.
+ * - startDate uses a future date so date-display tests stay valid over time.
+ * - teamCount/registeredTeamsCount defaults produce a 50% full tournament (4/8),
+ *   showing a non-trivial progress bar without triggering the "Completo" state.
+ * - Previously fixed bugs: none relevant.
+ */
+export type TournamentStatus = 'REGISTRATION' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export type MockTournamentClub = {
+  id: string;
+  name: string;
+  zone: string | null;
+  address: string | null;
+  imageUrl: string | null;
+};
+
+export type MockTournamentListItem = {
+  id: string;
+  name: string;
+  format: MatchFormat;
+  teamCount: number;
+  playersPerTeam: number;
+  registeredTeamsCount: number;
+  status: TournamentStatus;
+  description: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  club: MockTournamentClub | null;
+};
+
+export function buildTournament(
+  overrides: Partial<MockTournamentListItem> = {},
+): MockTournamentListItem {
+  return {
+    id: 'aaaaaaaa-0000-0000-0000-000000000001',
+    name: 'Copa de Prueba',
+    format: 'FIVE_VS_FIVE',
+    teamCount: 8,
+    playersPerTeam: 5,
+    registeredTeamsCount: 4,
+    status: 'REGISTRATION',
+    description: null,
+    startDate: '2027-09-15',
+    endDate: null,
+    club: {
+      id: 'club-test-1',
+      name: 'Club Test',
+      zone: 'Centro',
+      address: 'Calle Test 123',
+      imageUrl: null,
+    },
+    ...overrides,
+  };
+}
+
 /** Mock eligible players response (tournamentEligiblePlayers query). */
 export function buildEligiblePlayersResponse(
   players: MockTournamentPlayer[] = [],
