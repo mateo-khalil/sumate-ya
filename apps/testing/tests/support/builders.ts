@@ -339,3 +339,89 @@ export function buildEligiblePlayersResponse(
 ): { data: { tournamentEligiblePlayers: MockTournamentPlayer[] } } {
   return { data: { tournamentEligiblePlayers: players } };
 }
+
+/* ── Match-result-submission mock builders (US #54) ─────────────────────── */
+
+/**
+ * Mock builders for the result-voting GraphQL operations exercised by
+ * MatchResultsSection.tsx (GetMatchResultSubmissions / VoteMatchResult).
+ *
+ * Decision Context:
+ * - Mirrors the SubmissionFields fragment in match-results.graphql so the
+ *   mocked responses match the shape the React island consumes. Drift here
+ *   would let a real schema change pass tests silently.
+ * - `buildMockSubmission` defaults to a PENDING 3-1 (team A wins) submission
+ *   with one approve vote so specs that exercise the "majority crosses"
+ *   threshold only need to override `approveCount` + add the threshold vote.
+ * - `buildMockVoter` keeps voter shape (id/displayName/avatarUrl) consistent
+ *   between the SubmissionFields fragment and the nested VoteFields one.
+ * - Previously fixed bugs: none relevant (new builders).
+ */
+
+export type MockWinnerTeam = 'A' | 'B' | 'DRAW';
+export type MockSubmissionStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED';
+export type MockVoteValue = 'APPROVE' | 'REJECT';
+
+export interface MockVoter {
+  __typename?: 'PlayerProfile';
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface MockMatchResultVote {
+  __typename?: 'MatchResultVote';
+  id: string;
+  voter: MockVoter;
+  vote: MockVoteValue;
+  createdAt: string;
+}
+
+export interface MockMatchResultSubmission {
+  __typename?: 'MatchResultSubmission';
+  id: string;
+  matchId: string;
+  submitter: MockVoter;
+  scoreA: number;
+  scoreB: number;
+  winnerTeam: MockWinnerTeam;
+  status: MockSubmissionStatus;
+  approveCount: number;
+  rejectCount: number;
+  hasUserVoted: boolean;
+  userVote: MockVoteValue | null;
+  createdAt: string;
+  votes: MockMatchResultVote[];
+}
+
+export function buildMockVoter(overrides: Partial<MockVoter> = {}): MockVoter {
+  return {
+    __typename: 'PlayerProfile',
+    id: 'voter-default',
+    displayName: 'Jugador Default',
+    avatarUrl: null,
+    ...overrides,
+  };
+}
+
+export function buildMockSubmission(
+  overrides: Partial<MockMatchResultSubmission> = {},
+): MockMatchResultSubmission {
+  return {
+    __typename: 'MatchResultSubmission',
+    id: 'submission-default-1',
+    matchId: 'match-default',
+    submitter: buildMockVoter({ id: 'submitter-default', displayName: 'Proponente' }),
+    scoreA: 3,
+    scoreB: 1,
+    winnerTeam: 'A',
+    status: 'PENDING',
+    approveCount: 1,
+    rejectCount: 0,
+    hasUserVoted: false,
+    userVote: null,
+    createdAt: '2026-05-04T20:00:00Z',
+    votes: [],
+    ...overrides,
+  };
+}
