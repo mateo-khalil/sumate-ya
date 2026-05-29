@@ -1,13 +1,22 @@
 @import "tailwindcss";
 
-/* =====================================================
-   FIFA Design System — Sumate Ya
-   Dark-first stadium aesthetic:
-   - Background: deep navy #070f1f
-   - Primary accent: FIFA orange hsl(35 100% 48%)
-   - Secondary accent: FIFA blue hsl(216 85% 45%)
-   - Typography: Bebas Neue (display) + Barlow (body)
-   ===================================================== */
+/*
+ * Design System — Sumate Ya (v2 — mejora_Front)
+ *
+ * Decision Context:
+ * - Dark-first: sin clase en <html> = tema oscuro (comportamiento actual, sin rotura).
+ *   html.light agrega el tema claro como opt-in; todas las utilities de Tailwind que
+ *   usan variables CSS (bg-background, text-foreground, etc.) se adaptan automáticamente.
+ * - Variante Tailwind v4: @variant light registra el prefijo light: para casos donde
+ *   un componente necesite un override específico de tema claro.
+ * - Inter reemplaza Barlow como fuente body principal. Barlow queda como fallback para
+ *   mantener compatibilidad con los componentes existentes que la referencian inline.
+ * - Animaciones globales: fadeUp / slideUp / fadeIn disponibles en toda la app.
+ * - Previously fixed bugs: none relevant.
+ */
+
+/* Variante Tailwind v4 para estilos específicos de tema claro */
+@variant light (&:where(.light, .light *));
 
 @theme {
   /* --- Background & surface --- */
@@ -68,7 +77,43 @@
 
   /* --- Typography utilities --- */
   --font-display: 'Bebas Neue', sans-serif;
+  --font-sans: 'Inter', 'Barlow', system-ui, sans-serif;
   --font-condensed: 'Barlow Condensed', system-ui, sans-serif;
+}
+
+/* =====================================================
+   Tema claro — variables CSS que sobreescriben @theme
+   Aplica cuando <html class="light"> está activo.
+   Los colores FIFA primarios (naranja, azul) se mantienen
+   idénticos para preservar la identidad de marca.
+   ===================================================== */
+
+html.light {
+  --color-background: hsl(210 20% 97%);
+  --color-foreground: hsl(220 72% 10%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(220 72% 10%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(220 72% 10%);
+  --color-primary: hsl(35 100% 44%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(216 85% 45%);
+  --color-secondary-foreground: hsl(0 0% 100%);
+  --color-muted: hsl(210 40% 94%);
+  --color-muted-foreground: hsl(215 16% 42%);
+  --color-accent: hsl(216 85% 50%);
+  --color-accent-foreground: hsl(0 0% 100%);
+  --color-destructive: hsl(0 72% 51%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-border: hsl(220 13% 88%);
+  --color-input: hsl(220 13% 95%);
+  --color-ring: hsl(35 100% 44%);
+  --color-pitch: hsl(210 20% 97%);
+  --color-fifa-orange: hsl(35 100% 44%);
+  --color-surface-glass: rgba(255, 255, 255, 0.72);
+  --color-surface-glass-hover: rgba(255, 255, 255, 0.88);
+  --color-surface-border: rgba(0, 0, 0, 0.06);
+  --color-success-surface: hsl(142 30% 96%);
 }
 
 /* =====================================================
@@ -77,11 +122,20 @@
 
 body {
   @apply bg-background text-foreground;
-  font-family: 'Barlow', 'Barlow Condensed', system-ui, sans-serif;
+  font-family: 'Inter', 'Barlow', system-ui, sans-serif;
   background-image:
     radial-gradient(ellipse 80% 50% at 50% -10%, hsl(216 85% 20% / 0.4), transparent),
     radial-gradient(ellipse 60% 40% at 80% 110%, hsl(216 85% 15% / 0.2), transparent);
   min-height: 100vh;
+  /* Transición suave al cambiar de tema */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Fondo del tema claro: gradiente suave azul/naranja sobre blanco */
+html.light body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, hsl(216 85% 60% / 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 110%, hsl(35 100% 65% / 0.08), transparent);
 }
 
 /* Pitch grid overlay for stadium feel */
@@ -97,11 +151,41 @@ body::before {
   z-index: 0;
 }
 
+/* Grid sobre fondo claro: líneas muy sutiles en oscuro */
+html.light body::before {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px);
+}
+
 /* Stack content above the grid */
 body > * {
   position: relative;
   z-index: 1;
 }
+
+/* =====================================================
+   Animaciones globales — disponibles en toda la app
+   ===================================================== */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(32px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-up  { animation: fadeUp  0.5s ease both; }
+.animate-slide-up { animation: slideUp 0.6s ease both; }
+.animate-fade-in  { animation: fadeIn  0.4s ease both; }
 
 /* =====================================================
    Club Slot Management — shared component styles
@@ -716,4 +800,645 @@ body > * {
   .modal-body { padding: 1rem; }
   .modal-header { padding: 1rem 1rem 0.75rem; }
   .modal-error { margin: 0 1rem; }
+}
+
+/* =====================================================
+   Fase 6 — Topbar / Navbar: adaptación tema claro
+   Usa selectores html.light .clase con especificidad
+   (0,2,1) > scoped (0,2,0) de Astro para ganar el cascade.
+   ===================================================== */
+
+.topbar {
+  /* transición suave al cambiar de tema */
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+html.light .topbar {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+html.light .topbar-name { color: hsl(220 72% 8%); }
+html.light .topbar-ball { color: hsl(35 100% 44%); }
+
+html.light .nav-link { color: hsl(215 20% 36%); }
+html.light .nav-link:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: hsl(215 20% 12%);
+}
+
+html.light .user-badge {
+  background: rgba(246, 164, 0, 0.1);
+  border-color: rgba(246, 164, 0, 0.25);
+  color: hsl(35 100% 44%);
+}
+html.light .user-dot { background: hsl(35 100% 44%); box-shadow: none; }
+
+html.light .btn-logout {
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.12);
+  color: hsl(215 20% 44%);
+}
+html.light .btn-logout:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.22);
+  color: hsl(215 20% 16%);
+}
+
+html.light .btn-torneo {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 20% 36%);
+}
+html.light .btn-torneo:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: hsl(215 20% 12%);
+}
+
+/* ── Section headers: tema claro ─────────────────────── */
+html.light .section-title { color: hsl(220 72% 8%); }
+html.light .section-sub   { color: hsl(215 20% 42%); }
+html.light .section-label { color: hsl(35 100% 40%); }
+html.light .section-header { border-bottom-color: rgba(0, 0, 0, 0.07); }
+
+/* ── Sidebar: tema claro ──────────────────────────────── */
+html.light .sidebar-label { color: hsl(215 20% 52%); }
+html.light .sidebar-link  { color: hsl(215 20% 36%); }
+html.light .sidebar-link:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: hsl(215 20% 12%);
+}
+html.light .sidebar-link--active {
+  background: rgba(246, 164, 0, 0.08);
+  border-color: rgba(246, 164, 0, 0.15);
+}
+html.light .sidebar-link--highlight { color: hsl(35 100% 42%); }
+
+/* =====================================================
+   Fase 7 — Polish final: inputs, banners, tabs
+   ===================================================== */
+
+/* ── Inputs: focus naranja consistente ───────────────── */
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: hsl(35 100% 48%);
+  box-shadow: 0 0 0 3px hsl(35 100% 48% / 0.18);
+  outline: none;
+}
+
+html.light .field input {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: hsl(220 72% 10%);
+}
+html.light .field input::placeholder { color: hsl(215 20% 55%); }
+html.light .field input:focus {
+  background: white;
+  border-color: hsl(35 100% 44%);
+  box-shadow: 0 0 0 3px hsl(35 100% 44% / 0.15);
+}
+html.light .field label { color: hsl(215 20% 45%); }
+
+/* ── Login card: light mode ───────────────────────────── */
+html.light .login-card {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(246, 164, 0, 0.06),
+    0 24px 64px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+html.light .brand-name  { color: hsl(220 72% 8%); }
+html.light .login-subtitle { color: hsl(215 20% 50%); }
+html.light .register-link  { color: hsl(215 20% 50%); }
+
+/* ── Banners: light mode ──────────────────────────────── */
+html.light .banner--error {
+  background: hsl(0 80% 96%);
+  border-color: hsl(0 72% 75%);
+  color: hsl(0 72% 40%);
+}
+html.light .banner--success {
+  background: hsl(142 60% 95%);
+  border-color: hsl(142 50% 70%);
+  color: hsl(142 72% 28%);
+}
+
+/* ── Topbar accent line ───────────────────────────────── */
+html.light .topbar-accent {
+  background: linear-gradient(90deg, hsl(35 100% 44%), hsl(216 85% 50%), transparent);
+}
+
+/* ── Topbar role pill (panel de club) ────────────────── */
+html.light .topbar-role-pill {
+  background: rgba(246, 164, 0, 0.1);
+  border-color: rgba(246, 164, 0, 0.25);
+  color: hsl(35 100% 40%);
+}
+
+/* =====================================================
+   Overrides exhaustivos — texto blanco hardcodeado
+   en modo claro. Aplican a todos los componentes
+   que usan color: #fff / #ffffff en su CSS propio.
+   ===================================================== */
+
+/* ── Modal (global + panel-club) ─────────────────────── */
+html.light .modal-title   { color: hsl(220 72% 8%); }
+html.light .modal-box {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .modal-header  { border-bottom-color: rgba(0, 0, 0, 0.07); }
+html.light .modal-footer  { border-top-color: rgba(0, 0, 0, 0.07); }
+html.light .modal-close   { color: hsl(215 20% 50%); }
+html.light .modal-close:hover { color: hsl(215 20% 20%); background: rgba(0,0,0,0.05); }
+
+/* ── Perfil: history title ────────────────────────────── */
+html.light .history-title { color: hsl(220 72% 8%); }
+
+/* ── Partidos/[id]: not found title ──────────────────── */
+html.light .nf-title      { color: hsl(220 72% 8%); }
+
+/* ── ProfileCard: todos los textos blancos ───────────── */
+html.light .profile-card {
+  background: var(--color-card);
+  border-color: var(--color-border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0,0,0,0.04);
+}
+html.light .player-name     { color: hsl(220 72% 8%); }
+html.light .stat-value      { color: hsl(220 72% 8%); }
+html.light .stat-value.winrate { color: hsl(35 100% 40%); }
+html.light .stat-label      { color: hsl(215 20% 46%); }
+html.light .role-badge      { color: hsl(215 20% 50%); }
+html.light .avatar-img      { background: hsl(210 20% 94%); }
+html.light .avatar-placeholder {
+  background: hsl(210 20% 94%);
+  color: hsl(215 20% 55%);
+}
+html.light .stats-grid       { border-top-color: rgba(0, 0, 0, 0.06); }
+html.light .stat-divider {
+  border-left-color:  rgba(0, 0, 0, 0.06);
+  border-right-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Slot manager — panel-club ────────────────────────── */
+html.light .toolbar {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .slots-count         { color: hsl(215 20% 50%); }
+html.light .slot-table          { color: hsl(215 20% 22%); }
+html.light .slot-table th {
+  color: hsl(215 20% 42%);
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+html.light .slot-table td       { border-bottom-color: rgba(0, 0, 0, 0.04); }
+html.light .col-court           { color: hsl(216 85% 45%); }
+html.light .form-input, html.light .form-select, html.light .form-textarea {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: hsl(220 72% 8%);
+}
+html.light .form-input:focus, html.light .form-select:focus, html.light .form-textarea:focus {
+  border-color: hsl(35 100% 44%);
+}
+html.light .form-label          { color: hsl(215 20% 45%); }
+html.light .block-current-state {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.07);
+  color: hsl(215 20% 42%);
+}
+html.light .impact-label        { color: hsl(215 20% 45%); }
+html.light .impact-value        { color: hsl(220 72% 8%); }
+html.light .state-card {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .state-text          { color: hsl(215 20% 50%); }
+html.light .empty-text          { color: hsl(215 20% 50%); }
+html.light .info-label          { color: hsl(215 20% 42%); }
+html.light .info-value          { color: hsl(220 72% 10%); }
+html.light .match-title         { color: hsl(215 20% 25%); }
+html.light .match-meta          { color: hsl(215 20% 50%); }
+html.light .warning-banner {
+  background: rgba(246, 164, 0, 0.06);
+  border-color: rgba(246, 164, 0, 0.2);
+}
+html.light .confirm-check       { color: hsl(215 20% 25%); }
+
+/* ── Calendar (panel-club horarios) ──────────────────── */
+html.light .cal-wrap            { border-color: rgba(0, 0, 0, 0.08); }
+html.light .cal-header-row {
+  background: hsl(210 20% 96%);
+  border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+html.light .cal-day-head        { color: hsl(215 20% 42%); border-left-color: rgba(0,0,0,0.06); }
+html.light .cal-row             { border-bottom-color: rgba(0, 0, 0, 0.04); }
+html.light .cal-time {
+  color: hsl(215 20% 48%);
+  border-right-color: rgba(0, 0, 0, 0.07);
+}
+html.light .cal-cell            { border-left-color: rgba(0, 0, 0, 0.04); }
+html.light .cal-nav {
+  background: hsl(210 20% 96%);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+html.light .cal-nav-btn {
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 20% 45%);
+}
+html.light .cal-nav-btn:hover   { background: rgba(0,0,0,0.05); color: hsl(215 20% 18%); }
+html.light .cal-week-label      { color: hsl(215 20% 40%); }
+html.light .cal-today-btn {
+  background: rgba(246, 164, 0, 0.08);
+  border-color: rgba(246, 164, 0, 0.3);
+  color: hsl(35 100% 40%);
+}
+html.light .cal-day-name        { color: hsl(215 20% 42%); }
+html.light .cal-day-num         { color: hsl(215 20% 50%); }
+html.light .cal-legend {
+  background: hsl(210 20% 95%);
+  border-top-color: rgba(0, 0, 0, 0.06);
+}
+html.light .cal-legend-item     { color: hsl(215 20% 50%); }
+html.light .tab-bar             { border-bottom-color: rgba(0, 0, 0, 0.07); }
+html.light .tab-btn             { color: hsl(215 20% 48%); }
+html.light .tab-btn:hover       { color: hsl(215 20% 18%); }
+html.light .tab-btn--active {
+  color: hsl(35 100% 40%);
+  border-bottom-color: hsl(35 100% 40%);
+}
+
+/* ── Pricing panel ────────────────────────────────────── */
+html.light .pricing-panel {
+  border-color: rgba(0, 0, 0, 0.07);
+  background: var(--color-card);
+}
+html.light .pricing-section {
+  border-right-color:  rgba(0, 0, 0, 0.06);
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+html.light .pricing-input {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(220 72% 8%);
+}
+html.light .pricing-input:focus { border-color: hsl(35 100% 44%); }
+html.light .pricing-label       { color: hsl(215 20% 45%); }
+html.light .pricing-hint        { color: hsl(215 20% 52%); }
+html.light .pricing-actions {
+  border-top-color: rgba(0, 0, 0, 0.06);
+  background: hsl(210 20% 96%);
+}
+html.light .price-preview       { color: hsl(215 20% 25%); }
+html.light .price-preview th {
+  color: hsl(215 20% 42%);
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+html.light .price-preview td    { border-bottom-color: rgba(0, 0, 0, 0.04); }
+html.light .day-btn {
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 20% 45%);
+}
+html.light .day-btn:hover       { background: rgba(0,0,0,0.04); color: hsl(215 20% 18%); }
+
+/* ── View toggle (lista/mapa) ─────────────────────────── */
+html.light .view-toggle         { border-color: rgba(0, 0, 0, 0.1); }
+html.light .view-btn            { color: hsl(215 20% 48%); }
+html.light .view-btn:hover      { background: rgba(0,0,0,0.04); color: hsl(215 20% 18%); }
+html.light .view-btn + .view-btn { border-left-color: rgba(0,0,0,0.08); }
+
+/* ── Settings page (ajustes) ──────────────────────────── */
+html.light .settings-nav-item  { color: hsl(215 20% 40%); border-color: transparent; }
+html.light .settings-nav-item:hover { background: rgba(0,0,0,0.05); color: hsl(215 20% 14%); }
+html.light .settings-section-title { color: hsl(220 72% 8%); }
+html.light .settings-section-sub   { color: hsl(215 20% 46%); }
+html.light .fetch-notice {
+  background: hsl(42 100% 96%);
+  border-color: rgba(246, 164, 0, 0.3);
+  color: hsl(35 80% 35%);
+}
+
+/* =====================================================
+   React components con <style> en JSX — todos usan
+   css classes (no inline styles) → pueden ser
+   sobreescritos con html.light .clase (spec 0,2,1)
+   que gana a la regla inyectada (0,1,0).
+   ===================================================== */
+
+/* ── ClubMatchWizard.tsx (crear-partido calendar) ─────── */
+html.light .wizard-card {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .step-circle {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 20% 38%);
+}
+/* step connector line */
+html.light .step:not(:last-child)::after { background: rgba(0, 0, 0, 0.1); }
+html.light .step-label   { color: hsl(215 20% 40%); }
+html.light .step-title   { color: hsl(220 72% 8%); }
+html.light .step-hint    { color: hsl(215 20% 45%); }
+html.light .success-title { color: hsl(220 72% 8%); }
+html.light .success-sub   { color: hsl(215 20% 45%); }
+html.light .slot-summary {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .summary-row  { color: hsl(215 20% 38%); }
+html.light .field-label  { color: hsl(215 20% 42%); }
+html.light .field-hint   { color: hsl(215 20% 50%); }
+html.light .format-btn {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 20% 35%);
+}
+html.light .format-btn:hover:not(.selected):not(.disabled) { background: rgba(0, 0, 0, 0.06); }
+html.light .format-cap   { color: hsl(215 20% 45%); }
+html.light .cap-btn {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 20% 28%);
+}
+html.light .cap-btn:hover { background: rgba(0, 0, 0, 0.09); }
+html.light .cap-input {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(220 72% 8%);
+}
+html.light .cap-icon     { color: hsl(215 20% 45%); }
+html.light .desc-input {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(220 72% 8%);
+}
+html.light .desc-input:focus { border-color: hsl(35 100% 44%); }
+html.light .char-count   { color: hsl(215 20% 46%); }
+html.light .enroll-toggle { color: hsl(215 20% 32%); }
+html.light .confirm-card {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .confirm-row span   { color: hsl(215 20% 45%); }
+html.light .confirm-row strong { color: hsl(220 72% 8%); }
+/* btn-secondary/ghost en el wizard (sobreescribe el global de slot-manager) */
+html.light .btn-secondary {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.11);
+  color: hsl(215 20% 32%);
+}
+html.light .btn-secondary:hover { background: rgba(0, 0, 0, 0.08); }
+html.light .btn-ghost   { color: hsl(215 20% 40%); }
+html.light .btn-ghost:hover { color: hsl(215 20% 12%); }
+
+/* ── CreateTournamentFlow.tsx (torneos/crear cards) ───── */
+html.light .form-surface,
+html.light .success-panel {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .surface-heading { color: hsl(220 72% 8%); }
+html.light .eyebrow         { color: hsl(35 100% 38%); }
+/* .field span es el label — diferente de .field-label del wizard */
+html.light .field > span    { color: hsl(215 20% 42%); }
+html.light .field input, html.light .field select, html.light .field textarea {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(220 72% 8%);
+}
+html.light .field input:focus,
+html.light .field select:focus,
+html.light .field textarea:focus {
+  border-color: hsl(35 100% 44%);
+  background: white;
+}
+html.light .field select option { background: white; color: hsl(220 72% 8%); }
+html.light .format-chip {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 20% 35%);
+}
+html.light .format-chip--active {
+  background: rgba(246, 164, 0, 0.08);
+  border-color: rgba(246, 164, 0, 0.28);
+  color: hsl(35 100% 38%);
+}
+html.light .metric {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .metric strong { color: hsl(220 72% 8%); }
+html.light .metric span   { color: hsl(215 20% 45%); }
+html.light .inline-state  { color: hsl(215 20% 45%); }
+html.light .slot-option {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: hsl(215 20% 28%);
+}
+html.light .slot-option:hover:not(:disabled) {
+  border-color: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.06);
+}
+html.light .slot-option--selected {
+  border-color: rgba(246, 164, 0, 0.45);
+  background: rgba(246, 164, 0, 0.07);
+}
+html.light .slot-time   { color: hsl(220 72% 8%); }
+html.light .slot-court  { color: hsl(215 20% 44%); }
+html.light .slot-format { color: hsl(216 85% 42%); }
+html.light .empty-slot  { color: hsl(215 20% 50%); border-color: rgba(0,0,0,0.08); }
+html.light .selected-slot {
+  background: rgba(246, 164, 0, 0.06);
+  border-color: rgba(246, 164, 0, 0.22);
+  color: hsl(215 20% 28%);
+}
+html.light .round-title  { color: hsl(220 72% 8%); }
+html.light .progress-wrap { background: rgba(0,0,0,0.07); }
+html.light .organizer-pill,
+html.light .count-pill,
+html.light .club-chip {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.1);
+  color: hsl(215 20% 35%);
+}
+html.light .submit-error {
+  background: hsl(0 80% 97%);
+  border-color: rgba(239,68,68,0.25);
+  color: hsl(0 72% 38%);
+}
+
+/* ── PrivacySettingsForm.tsx (ajustes privacidad cards) ── */
+html.light .privacy-form {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .toggle-section {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .toggle-section--disabled { opacity: 0.65; }
+html.light .section-heading  { color: hsl(220 72% 8%); }
+html.light .section-label-row {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+html.light .toggle-row {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+  color: hsl(220 72% 8%);
+}
+html.light .toggle-row:hover { background: rgba(0, 0, 0, 0.02); }
+html.light .toggle-label    { color: hsl(220 72% 8%); }
+html.light .toggle-tooltip  { color: hsl(215 20% 45%); }
+html.light .disabled-badge {
+  background: rgba(0, 0, 0, 0.05);
+  color: hsl(215 20% 50%);
+}
+
+/* ── ChangePasswordForm.tsx (ajustes seguridad card) ──── */
+html.light .password-form {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .field-control {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: hsl(210 20% 97%);
+  color: hsl(220 72% 8%);
+}
+html.light .field-control:focus-within {
+  border-color: hsl(35 100% 44%);
+  background: white;
+}
+html.light .field-control input {
+  color: hsl(220 72% 8%);
+  background: transparent;
+}
+html.light .password-grid .field-label { color: hsl(215 20% 42%); }
+html.light .strength { color: hsl(215 20% 50%); }
+html.light .security-actions { border-top-color: rgba(0,0,0,0.07); }
+
+/* =====================================================
+   Ronda adicional — tarjetas y nav oscuros que
+   persisten en tema claro (detectados en producción).
+   ===================================================== */
+
+/* ── /ajustes — barra nav vertical izquierda ─────────── */
+html.light .settings-nav {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .settings-nav-item {
+  color: hsl(215 20% 36%);
+  border-color: transparent;
+}
+html.light .settings-nav-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: hsl(215 20% 12%);
+}
+html.light .settings-nav-item--active {
+  background: rgba(246, 164, 0, 0.08);
+  border-color: rgba(246, 164, 0, 0.2);
+  color: hsl(35 100% 38%);
+}
+html.light .settings-nav-item--disabled { color: hsl(215 20% 55%); }
+html.light .coming-soon {
+  background: rgba(0, 0, 0, 0.05);
+  color: hsl(215 20% 52%);
+}
+
+/* ── /partidos/crear — wizard container ──────────────── */
+html.light .wizard-container {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+/* CreateMatchFlow.tsx CSS-in-JSX */
+html.light .step-item       { color: hsl(215 20% 42%); }
+html.light .step-num {
+  border-color: currentColor;
+  background: transparent;
+}
+html.light .btn-back {
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.12);
+  color: hsl(215 20% 40%);
+}
+html.light .btn-back:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: hsl(215 20% 12%);
+}
+
+/* ── /partidos/[id] — equipo cards ───────────────────── */
+html.light .team-card {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .team-name   { color: hsl(220 72% 8%); }
+html.light .team-count  { color: hsl(215 20% 46%); }
+html.light .empty-avatar {
+  border-color: rgba(0, 0, 0, 0.18);
+  color: hsl(215 20% 48%);
+}
+html.light .empty-label  { color: hsl(215 20% 48%); }
+html.light .cta-disabled { color: hsl(215 20% 48%); }
+html.light .link-back {
+  color: hsl(215 20% 38%);
+}
+html.light .link-back:hover { color: hsl(215 20% 12%); }
+
+/* Status banners en tema claro */
+html.light .banner--full {
+  background: hsl(215 20% 94%);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 20% 36%);
+}
+html.light .banner--inprogress {
+  background: hsl(216 85% 96%);
+  border-color: hsl(216 85% 75%);
+  color: hsl(216 85% 32%);
+}
+html.light .banner--completed {
+  background: hsl(215 15% 94%);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: hsl(215 15% 36%);
+}
+
+/* ── MatchInfoCard.astro ──────────────────────────────── */
+html.light .info-card {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .match-title    { color: hsl(220 72% 8%); }
+html.light .stat-label     { color: hsl(215 20% 46%); }
+html.light .stat-value     { color: hsl(220 72% 10%); }
+html.light .match-desc     { color: hsl(215 20% 42%); }
+html.light .organizer-avatar {
+  background: hsl(210 20% 93%);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .organizer-name { color: hsl(220 72% 8%); }
+html.light .organizer-pos  { color: hsl(215 20% 46%); }
+
+/* ── ClubLocationCard.astro ───────────────────────────── */
+html.light .location-card {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.07);
+}
+html.light .club-avatar {
+  background: hsl(210 20% 93%);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .club-avatar-initial { color: hsl(215 20% 50%); }
+html.light .club-name    { color: hsl(220 72% 8%); }
+html.light .detail-label { color: hsl(215 20% 46%); }
+html.light .detail-value { color: hsl(220 72% 10%); }
+html.light .map-btn {
+  background: hsl(216 85% 96%);
+  border-color: hsl(216 85% 75%);
+  color: hsl(216 85% 32%);
+}
+html.light .map-btn:hover {
+  background: hsl(216 85% 92%);
+  border-color: hsl(216 85% 65%);
+  color: hsl(216 85% 28%);
 }

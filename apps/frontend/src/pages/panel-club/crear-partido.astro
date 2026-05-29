@@ -20,6 +20,7 @@ import ClubSidebar from '../../components/panel-club/ClubSidebar.astro';
 import ClubMobileNav from '../../components/panel-club/ClubMobileNav.tsx';
 import ClubMatchWizard from '../../components/club/ClubMatchWizard';
 import { readAccessToken } from '../../lib/auth';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const user = Astro.locals.user;
 
@@ -54,6 +55,7 @@ const nombre = user.displayName || user.email;
             <span class="user-dot"></span>
             {nombre}
           </span>
+          <ThemeToggle client:load />
           <form method="POST" action="/api/auth/logout">
             <button type="submit" class="btn-logout">Salir</button>
           </form>

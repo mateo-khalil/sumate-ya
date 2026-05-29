@@ -55,6 +55,7 @@ import MatchResultsSection from '../../components/matches/MatchResultsSection.ts
 import { GET_MATCH_DETAIL } from '../../graphql/operations/matches';
 import type { MatchDetailData } from '../../graphql/operations/matches';
 import { readAccessToken } from '../../lib/auth';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -162,12 +163,16 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
                 <a href="/panel-club" class="btn-panel-club">Panel de Club</a>
               )}
               <a href="/perfil" class="nav-link">Mi Perfil</a>
+              <ThemeToggle client:load />
               <form method="POST" action="/api/auth/logout">
                 <button type="submit" class="btn-logout">Salir</button>
               </form>
             </>
           ) : (
-            <a href="/login" class="btn-logout">Iniciar Sesión</a>
+            <>
+              <ThemeToggle client:load />
+              <a href="/login" class="btn-logout">Iniciar Sesión</a>
+            </>
           )}
         </div>
       </div>

@@ -1,3 +1,22 @@
+/**
+ * Card — componente base con glassmorphism para el design system FIFA.
+ *
+ * Decision Context:
+ * - Por qué glassmorphism: el sistema de diseño apunta a un aesthetic moderno
+ *   estilo earn2trade. bg-card/80 + backdrop-blur-xl da profundidad sin
+ *   necesitar sombras duras; funciona en ambos temas (oscuro y claro) porque
+ *   --color-card adapta vía CSS vars.
+ * - rounded-2xl (vs rounded-xl anterior): mayor redondeo para el aesthetic
+ *   moderno consistente con el sistema de botones.
+ * - border-border/40: borde sutil, no compite con el contenido.
+ * - shadow-xl: elevación visible sin ser pesada. Permite que las cards
+ *   "floten" sobre el fondo con gradiente.
+ * - transition-all: permite animaciones de hover custom vía className (el
+ *   hover de traducción lo agrega el consumidor si lo necesita, no es
+ *   obligatorio en la base para no interferir con cards en scroll containers).
+ * - Previously fixed bugs: none relevant.
+ */
+
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
@@ -8,7 +27,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'rounded-xl border border-border bg-card text-card-foreground shadow',
+      'rounded-2xl border border-border/40 bg-card/80 text-card-foreground shadow-xl backdrop-blur-xl transition-all duration-300',
       className
     )}
     {...props}

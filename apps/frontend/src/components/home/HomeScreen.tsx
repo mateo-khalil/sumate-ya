@@ -191,7 +191,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           )}
 
           <h1
-            className="font-['Bebas_Neue'] leading-[0.92] tracking-wide text-foreground"
+            className="font-['Bebas_Neue'] leading-[0.92] tracking-wide text-white"
             style={{
               fontSize: 'clamp(4.5rem, 13vw, 11rem)',
               animation: 'fadeUp 0.55s ease both',
@@ -212,7 +212,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </h1>
 
           <p
-            className="mt-6 max-w-lg text-lg leading-relaxed text-muted-foreground"
+            className="mt-6 max-w-lg text-lg leading-relaxed text-white/65"
             style={{ animation: 'fadeUp 0.55s ease both', animationDelay: '180ms' }}
           >
             La plataforma para conectar jugadores de fútbol, armar equipos y
@@ -260,27 +260,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {/* Scoreline-style ticker */}
           <div
-            className="mt-12 hidden items-center gap-6 text-sm text-muted-foreground sm:flex"
+            className="mt-12 hidden items-center gap-6 text-sm text-white/50 sm:flex"
             style={{ animation: 'fadeUp 0.55s ease both', animationDelay: '380ms' }}
           >
             <div className="flex items-center gap-2">
               <Flame className="h-4 w-4 text-primary" />
               <span>
-                <strong className="font-semibold text-foreground">120</strong> partidos esta semana
+                <strong className="font-semibold text-white">120</strong> partidos esta semana
               </span>
             </div>
-            <span className="h-1 w-1 rounded-full bg-border" />
+            <span className="h-1 w-1 rounded-full bg-white/20" />
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-secondary" />
               <span>
-                <strong className="font-semibold text-foreground">500+</strong> jugadores activos
+                <strong className="font-semibold text-white">500+</strong> jugadores activos
               </span>
             </div>
-            <span className="h-1 w-1 rounded-full bg-border" />
+            <span className="h-1 w-1 rounded-full bg-white/20" />
             <div className="flex items-center gap-2">
               <Trophy className="h-4 w-4 text-[hsl(42_100%_55%)]" />
               <span>
-                <strong className="font-semibold text-foreground">30+</strong> clubes
+                <strong className="font-semibold text-white">30+</strong> clubes
               </span>
             </div>
           </div>

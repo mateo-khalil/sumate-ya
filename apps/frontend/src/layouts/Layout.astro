@@ -1,5 +1,21 @@
 ---
+/**
+ * Layout — Raíz del documento para todas las páginas del frontend.
+ *
+ * Decision Context:
+ * - Por qué Inter: reemplaza Barlow como fuente body principal para ganar
+ *   mayor legibilidad (x-height más alto, espaciado mejor calibrado) en
+ *   interfaces densas de datos (dashboards, listas de partidos).
+ *   Barlow se mantiene como fallback y los componentes que lo usan
+ *   explícitamente (SlotManager, CalendarGrid) no se rompen.
+ * - Sistema de temas: el script inline se ejecuta antes del primer paint
+ *   para evitar FOUC. Lee localStorage y prefers-color-scheme para
+ *   decidir si agrega la clase .light al <html>. Oscuro es el default
+ *   (sin clase en el html), claro es opt-in (.light).
+ * - Previously fixed bugs: none relevant.
+ */
 import '@/styles/globals.css';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface Props {
   title?: string;
@@ -20,15 +36,38 @@ const { title = 'Sumate Ya - Encontrá tu partido', description = 'Plataforma pa
 		<meta name="generator" content={Astro.generator} />
 		<title>{title}</title>
 
-		<!-- FIFA Design System fonts: Bebas Neue (display) + Barlow (body) -->
+		<!-- FIFA Design System fonts: Bebas Neue (display) + Inter (body) + Barlow Condensed (UI) -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
-			href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap"
+			href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap"
 			rel="stylesheet"
 		/>
+
+		<!-- Tema: inline antes del primer paint para evitar FOUC.
+		     Oscuro es el default (sin clase), claro es opt-in con .light en <html>. -->
+		<script is:inline>
+			(function () {
+				var stored = localStorage.getItem('sumateyaTheme');
+				if (stored === 'light') {
+					document.documentElement.classList.add('light');
+				} else if (!stored) {
+					// Sin preferencia guardada: respetar prefers-color-scheme del sistema
+					if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+						document.documentElement.classList.add('light');
+					}
+				}
+				// 'dark' explícito o sistema oscuro: sin clase (default oscuro)
+			})();
+		</script>
 	</head>
 	<body class="min-h-screen antialiased">
 		<slot />
+		<!-- ThemeToggle flotante — visible en todas las páginas como fallback universal.
+		     Las páginas que tienen el toggle en su topbar lo muestran ahí también; este
+		     botón garantiza acceso al toggle sin importar la estructura de la página. -->
+		<div style="position:fixed;bottom:1.25rem;right:1.25rem;z-index:9998;">
+			<ThemeToggle client:load />
+		</div>
 	</body>
 </html>
