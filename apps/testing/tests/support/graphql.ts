@@ -148,4 +148,40 @@ export async function mockGraphQLOperation(
   return { payloads };
 }
 
+/**
+ * Mock SEVERAL operations on the SAME route with one handler. Each entry maps a
+ * substring marker (matched against the request `query`) to a response body.
+ * Requests that match no marker are passed through to the real backend.
+ *
+ * Why a single handler instead of stacking `mockGraphQLOperation` twice:
+ * Playwright runs route handlers most-recent-first and `route.continue()`
+ * TERMINATES routing (it does not cascade to earlier handlers). So two separate
+ * `mockGraphQLOperation` registrations on the same route can't both win — the
+ * later one's `continue()` for a non-match sends the request to the network
+ * instead of falling through to the earlier mock. One handler with internal
+ * branching is the only correct way to mock two co-located operations.
+ */
+export async function mockGraphQLOperations(
+  page: Page,
+  route: string | RegExp,
+  handlers: Array<{ marker: string; body: MockBody }>,
+  options: MockOptions = {},
+): Promise<{ payloads: GraphQLRequest[] }> {
+  const payloads: GraphQLRequest[] = [];
+
+  await page.unroute(route).catch(() => undefined);
+  await page.route(route, async (incoming: Route) => {
+    const parsed = readGraphQLRequest(incoming);
+    const match = handlers.find((h) => parsed.query?.includes(h.marker));
+    if (!match) {
+      await incoming.continue();
+      return;
+    }
+    payloads.push(parsed);
+    await fulfillBody(incoming, match.body, options);
+  });
+
+  return { payloads };
+}
+
 export type { GraphQLRequest, MockBody, MockOptions };

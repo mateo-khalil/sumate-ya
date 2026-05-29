@@ -20,6 +20,7 @@ export { ChangePasswordPage } from './page-objects/ChangePasswordPage';
 export { CreateMatchPage } from './page-objects/CreateMatchPage';
 export { CreateTournamentPage } from './page-objects/CreateTournamentPage';
 export { ClubDashboardPage } from './page-objects/ClubDashboardPage';
+export { ClubMatchWizardPage } from './page-objects/ClubMatchWizardPage';
 export { HomePage } from './page-objects/HomePage';
 export { LoginPage } from './page-objects/LoginPage';
 export { MatchDetailPage } from './page-objects/MatchDetailPage';
