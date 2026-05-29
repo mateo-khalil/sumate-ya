@@ -19,6 +19,13 @@
  *     Fix: isPastDay check on the whole date, applied before slot-status classes.
  *   - Today's future hours weren't visible at full color because past-hour opacity was
  *     applied to ALL of today. Fix: only dim hours where isToday && hour < nowHour.
+ *   - `.slot-price` and `.cal-court-label` both lived in the bottom-left corner of the
+ *     cell after the CalendarGrid extraction (the shared label was added without moving
+ *     the existing price), so prices like "$26000" overlapped court names like
+ *     "Cancha 1". Fix: relocate `.slot-price` to the top-left corner with the smaller
+ *     font + green color used by AvailableSlotsPicker's `.pk-price`, and hide it on
+ *     match-status slots (same rule as the Crear Partido picker, since an occupied
+ *     slot isn't bookable so the price has no actionable value there).
  */
 
 import { useState, useMemo } from 'react';
@@ -107,7 +114,7 @@ export function SlotCalendarView({ slots, selectedIds, onToggleSelect, onEdit }:
           onClick={(e) => { e.stopPropagation(); onToggleSelect(primary.id); }}
           onChange={() => {}}
         />
-        {primary.priceArs != null && (
+        {primary.priceArs != null && status !== 'match' && (
           <span className="slot-price">${primary.priceArs}</span>
         )}
         {status === 'blocked' && (
@@ -198,10 +205,16 @@ export function SlotCalendarView({ slots, selectedIds, onToggleSelect, onEdit }:
           position: absolute; top: 3px; right: 3px;
           width: 11px; height: 11px; accent-color: hsl(var(--primary)); cursor: pointer;
         }
+        /* Top-left corner. Previously was bottom-left which overlapped with
+           .cal-court-label (also bottom-left after the shared-grid refactor).
+           Mirrors AvailableSlotsPicker's .pk-price corner + color so both
+           calendars match the epic #110 criterion ("Se ve igual que calendario
+           Crear Partido"). Hidden when status === 'match' (consistent with the
+           Crear Partido picker which hides price for occupied slots). */
         .slot-price {
-          position: absolute; bottom: 2px; left: 4px;
-          font-family: 'Barlow Condensed', sans-serif; font-size: 0.68rem; font-weight: 700;
-          color: hsl(var(--muted-foreground));
+          position: absolute; top: 3px; left: 4px;
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.62rem; font-weight: 700;
+          color: hsl(142 70% 55%);
         }
         .slot-icon {
           position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
