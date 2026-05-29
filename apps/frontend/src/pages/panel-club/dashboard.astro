@@ -18,6 +18,7 @@ export const prerender = false;
 
 import { Volleyball } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import ClubDashboardView from '../../components/club/ClubDashboardView.tsx';
 import { readAccessToken } from '../../lib/auth.js';
 import type { ClubDashboardData } from '../../graphql/operations/club-dashboard.ts';
@@ -99,6 +100,7 @@ const nombre = user.displayName || user.email;
             <span class="user-dot"></span>
             {nombre}
           </span>
+          <ThemeToggle client:load />
           <form method="POST" action="/api/auth/logout">
             <button type="submit" class="btn-logout">Salir</button>
           </form>

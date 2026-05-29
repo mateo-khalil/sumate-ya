@@ -21,6 +21,7 @@ export const prerender = false;
 import { Volleyball } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import CreateMatchFlow from '@/components/matches/create/CreateMatchFlow';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ACCESS_TOKEN_COOKIE } from '../../lib/auth';
 import { GET_CLUBS, type ClubDetail } from '../../graphql/operations/matches';
 
@@ -67,6 +68,7 @@ try {
             <span class="user-dot"></span>
             {displayName}
           </span>
+          <ThemeToggle client:load />
           <form method="POST" action="/api/auth/logout">
             <button type="submit" class="btn-logout">Salir</button>
           </form>

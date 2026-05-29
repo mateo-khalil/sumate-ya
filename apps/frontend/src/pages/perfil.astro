@@ -25,6 +25,7 @@ export const prerender = false;
 
 import { Volleyball, Lock, Settings } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import ProfileCard from '@/components/profile/ProfileCard.astro';
 import AvatarUpload from '@/components/profile/AvatarUpload.tsx';
 import { MatchHistoryList } from '@/components/profile/MatchHistoryList.tsx';
@@ -142,6 +143,7 @@ if (!accessToken) {
             <span class="user-dot"></span>
             {displayName}
           </span>
+          <ThemeToggle client:load />
           <form method="POST" action="/api/auth/logout">
             <button type="submit" class="btn-logout">Salir</button>
           </form>

@@ -17,6 +17,7 @@
 
 import type { Profile } from '../../graphql/operations/profile';
 import DivisionBadge from '../shared/DivisionBadge.astro';
+import { getDivisionMeta } from '../../lib/division';
 
 interface Props {
   profile: Profile;
@@ -46,11 +47,26 @@ const winrateDisplay =
     : '—';
 
 const avatarSrc = profile.avatarUrl ?? null;
+
+// Gradiente del header según división — refuerza visualmente el nivel del jugador
+// sin necesitar un asset extra. Cada división tiene su acento propio siguiendo
+// los colores de DivisionBadge.astro para consistencia.
+const divisionMeta = getDivisionMeta(profile.division);
+const DIVISION_HEADER_GRADIENT: Record<string, string> = {
+  'division-bronze': 'linear-gradient(135deg, hsl(24 78% 16%), hsl(220 72% 13%))',
+  'division-silver': 'linear-gradient(135deg, hsl(205 18% 18%), hsl(220 72% 13%))',
+  'division-gold':   'linear-gradient(135deg, hsl(44 80% 18%), hsl(220 72% 13%))',
+  'division-diamond':'linear-gradient(135deg, hsl(184 86% 16%), hsl(220 72% 13%))',
+  'division-elite':  'linear-gradient(135deg, hsl(320 80% 18%), hsl(220 72% 13%))',
+};
+const headerGradient =
+  DIVISION_HEADER_GRADIENT[divisionMeta.className] ??
+  'linear-gradient(135deg, hsl(216 85% 22%), hsl(220 72% 15%))';
 ---
 
 <article class="profile-card">
-  <!-- Header stripe -->
-  <div class="card-header">
+  <!-- Header stripe con gradiente de división -->
+  <div class="card-header" style={`background: ${headerGradient};`}>
     <DivisionBadge division={profile.division} />
     <span class="role-badge">{roleLabel}</span>
   </div>
@@ -118,10 +134,10 @@ const avatarSrc = profile.avatarUrl ?? null;
   }
 
   /* ---- Header ---- */
+  /* background se setea via style inline para variar por división */
   .card-header {
     width: 100%;
     padding: 0.75rem 1.25rem;
-    background: linear-gradient(135deg, hsl(216 85% 22%), hsl(220 72% 15%));
     display: flex;
     align-items: center;
     justify-content: space-between;

@@ -38,6 +38,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar, MapPin, Users } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { MatchFormat, MatchStatus } from '@/graphql/operations/matches';
 
 export interface Match {
@@ -154,6 +155,17 @@ const STATUS_LABEL: Partial<Record<MatchStatus, string>> = {
 // the user can inspect the roster of a full/finished/cancelled match.
 const NON_JOINABLE_CTA = 'Ver detalle';
 
+// Borde izquierdo coloreado por estado: acento sutil que comunica el estado
+// del partido sin necesitar solo el badge. Compatible con ambos temas via
+// opacidades relativas que adaptan bien sobre fondos claros y oscuros.
+const STATUS_LEFT_BORDER: Partial<Record<MatchStatus | 'OPEN', string>> = {
+  OPEN: 'border-l-2 border-l-green-500/50',
+  FULL: 'border-l-2 border-l-yellow-500/50',
+  IN_PROGRESS: 'border-l-2 border-l-blue-500/50',
+  COMPLETED: 'border-l-2 border-l-slate-400/30',
+  CANCELLED: 'border-l-2 border-l-red-500/30',
+};
+
 export function MatchCard({ match, onJoin, isAuthenticated = false }: MatchCardProps) {
   const filledSlots = match.totalSlots - match.availableSlots;
   const isOpen = match.status === 'OPEN';
@@ -174,9 +186,16 @@ export function MatchCard({ match, onJoin, isAuthenticated = false }: MatchCardP
     window.location.href = `/partidos/${match.id}`;
   };
 
+  const leftBorderClass = effectiveStatus
+    ? (STATUS_LEFT_BORDER[effectiveStatus] ?? STATUS_LEFT_BORDER['OPEN'])
+    : STATUS_LEFT_BORDER['OPEN'];
+
   return (
     <Card
-      className="hover:shadow-lg transition-shadow cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        'hover:shadow-2xl hover:border-border/60 hover:-translate-y-0.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        leftBorderClass,
+      )}
       role="button"
       tabIndex={0}
       onClick={goToDetail}

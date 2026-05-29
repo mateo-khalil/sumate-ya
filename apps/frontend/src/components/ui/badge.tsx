@@ -1,19 +1,33 @@
+/**
+ * Badge — variantes con color tintado (semi-transparente).
+ *
+ * Decision Context:
+ * - Cambio de sólido a tintado: bg-primary (naranja sólido) era demasiado
+ *   agresivo sobre fondos oscuros/claros. El tinted approach
+ *   (bg-primary/10 + border + text-primary) es más sutil y funciona igual
+ *   de bien en ambos temas via CSS variables.
+ * - rounded-full en lugar de rounded-md: más "pill-like", coherente con
+ *   el aesthetic moderno del design system actualizado.
+ * - Previously fixed bugs: none relevant.
+ */
+
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const badgeVariants = cva(
-  'inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+  'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
   {
     variants: {
       variant: {
         default:
-          'border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80',
+          'border-primary/25 bg-primary/10 text-primary',
         secondary:
-          'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
+          'border-secondary/25 bg-secondary/10 text-secondary',
         destructive:
-          'border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80',
-        outline: 'text-foreground',
+          'border-destructive/25 bg-destructive/10 text-destructive',
+        outline:
+          'border-border text-foreground bg-transparent',
       },
     },
     defaultVariants: {
