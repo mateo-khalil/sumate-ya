@@ -392,9 +392,158 @@ export function buildRemoveMemberFailure(message: string): {
   };
 }
 
+/* ── Tournament list mock builders (US #33) ─────────────────────────────── */
+
+/**
+ * Mock builder for TournamentListItem — used by listado-torneos.spec.ts.
+ *
+ * Decision Context:
+ * - Mirrors the TournamentListItem type from the frontend GraphQL operations.
+ *   The client-side keepRegistrationOnly() filter checks status === 'REGISTRATION',
+ *   so the default status is 'REGISTRATION' to avoid unexpected empty-state renders.
+ * - startDate uses a future date so date-display tests stay valid over time.
+ * - teamCount/registeredTeamsCount defaults produce a 50% full tournament (4/8),
+ *   showing a non-trivial progress bar without triggering the "Completo" state.
+ * - Previously fixed bugs: none relevant.
+ */
+export type TournamentStatus = 'REGISTRATION' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export type MockTournamentClub = {
+  id: string;
+  name: string;
+  zone: string | null;
+  address: string | null;
+  imageUrl: string | null;
+};
+
+export type MockTournamentListItem = {
+  id: string;
+  name: string;
+  format: MatchFormat;
+  teamCount: number;
+  playersPerTeam: number;
+  registeredTeamsCount: number;
+  status: TournamentStatus;
+  description: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  club: MockTournamentClub | null;
+};
+
+export function buildTournament(
+  overrides: Partial<MockTournamentListItem> = {},
+): MockTournamentListItem {
+  return {
+    id: 'aaaaaaaa-0000-0000-0000-000000000001',
+    name: 'Copa de Prueba',
+    format: 'FIVE_VS_FIVE',
+    teamCount: 8,
+    playersPerTeam: 5,
+    registeredTeamsCount: 4,
+    status: 'REGISTRATION',
+    description: null,
+    startDate: '2027-09-15',
+    endDate: null,
+    club: {
+      id: 'club-test-1',
+      name: 'Club Test',
+      zone: 'Centro',
+      address: 'Calle Test 123',
+      imageUrl: null,
+    },
+    ...overrides,
+  };
+}
+
 /** Mock eligible players response (tournamentEligiblePlayers query). */
 export function buildEligiblePlayersResponse(
   players: MockTournamentPlayer[] = [],
 ): { data: { tournamentEligiblePlayers: MockTournamentPlayer[] } } {
   return { data: { tournamentEligiblePlayers: players } };
+}
+
+/* ── Match-result-submission mock builders (US #54) ─────────────────────── */
+
+/**
+ * Mock builders for the result-voting GraphQL operations exercised by
+ * MatchResultsSection.tsx (GetMatchResultSubmissions / VoteMatchResult).
+ *
+ * Decision Context:
+ * - Mirrors the SubmissionFields fragment in match-results.graphql so the
+ *   mocked responses match the shape the React island consumes. Drift here
+ *   would let a real schema change pass tests silently.
+ * - `buildMockSubmission` defaults to a PENDING 3-1 (team A wins) submission
+ *   with one approve vote so specs that exercise the "majority crosses"
+ *   threshold only need to override `approveCount` + add the threshold vote.
+ * - `buildMockVoter` keeps voter shape (id/displayName/avatarUrl) consistent
+ *   between the SubmissionFields fragment and the nested VoteFields one.
+ * - Previously fixed bugs: none relevant (new builders).
+ */
+
+export type MockWinnerTeam = 'A' | 'B' | 'DRAW';
+export type MockSubmissionStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED';
+export type MockVoteValue = 'APPROVE' | 'REJECT';
+
+export interface MockVoter {
+  __typename?: 'PlayerProfile';
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface MockMatchResultVote {
+  __typename?: 'MatchResultVote';
+  id: string;
+  voter: MockVoter;
+  vote: MockVoteValue;
+  createdAt: string;
+}
+
+export interface MockMatchResultSubmission {
+  __typename?: 'MatchResultSubmission';
+  id: string;
+  matchId: string;
+  submitter: MockVoter;
+  scoreA: number;
+  scoreB: number;
+  winnerTeam: MockWinnerTeam;
+  status: MockSubmissionStatus;
+  approveCount: number;
+  rejectCount: number;
+  hasUserVoted: boolean;
+  userVote: MockVoteValue | null;
+  createdAt: string;
+  votes: MockMatchResultVote[];
+}
+
+export function buildMockVoter(overrides: Partial<MockVoter> = {}): MockVoter {
+  return {
+    __typename: 'PlayerProfile',
+    id: 'voter-default',
+    displayName: 'Jugador Default',
+    avatarUrl: null,
+    ...overrides,
+  };
+}
+
+export function buildMockSubmission(
+  overrides: Partial<MockMatchResultSubmission> = {},
+): MockMatchResultSubmission {
+  return {
+    __typename: 'MatchResultSubmission',
+    id: 'submission-default-1',
+    matchId: 'match-default',
+    submitter: buildMockVoter({ id: 'submitter-default', displayName: 'Proponente' }),
+    scoreA: 3,
+    scoreB: 1,
+    winnerTeam: 'A',
+    status: 'PENDING',
+    approveCount: 1,
+    rejectCount: 0,
+    hasUserVoted: false,
+    userVote: null,
+    createdAt: '2026-05-04T20:00:00Z',
+    votes: [],
+    ...overrides,
+  };
 }

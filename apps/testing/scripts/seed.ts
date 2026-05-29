@@ -656,6 +656,7 @@ async function seedClubDashboard(client: SupabaseClient): Promise<void> {
 
 const SEED_TOURNAMENT_OPEN_ID = 'c0000000-0000-0000-0000-000000000001';
 const SEED_TOURNAMENT_WITH_CAPTAIN_ID = 'c0000000-0000-0000-0000-000000000002';
+const SEED_TOURNAMENT_WITH_FIXTURE_ID = 'c0000000-0000-0000-0000-000000000003';
 
 /**
  * Captain UUID for the pre-registered team in T2.
@@ -858,6 +859,158 @@ async function seedTournaments(client: SupabaseClient): Promise<void> {
   );
 
   await ensureCaptainTeamExists(client, SEED_TOURNAMENT_WITH_CAPTAIN_ID, CAPTAIN_USER_ID);
+
+  // T3: in_progress tournament with 2 teams + fixture — for US #35 fixture-display tests
+  await ensureFixtureTournament(client, club.id, club.ownerId);
+}
+
+/**
+ * T3 — fixture tournament for US #35 detalle-torneo tests.
+ *
+ * Decision Context:
+ * - US #35 tests need a tournament with fixtureMatches to cover the "fixture display"
+ *   section of /torneos/[id]. T1 and T2 have no fixtureMatches; adding T3 avoids
+ *   changing the expectations of the existing unirse-torneo.spec.ts suite.
+ * - Two teams: "Alfa E2E" (captained by club.ownerId) and "Beta E2E" (captained by
+ *   TEST_USER_ID = Mateo). captainId values differ across environments so we use
+ *   club.ownerId + TEST_USER_ID which are both guaranteed to exist.
+ * - If club.ownerId === TEST_USER_ID (same person owns the first club AND is the test
+ *   player), only Team Alfa is inserted — the seed logs a warning and continues.
+ * - fixtureMatches: 1 COMPLETED (round=1, score 3-1), 1 SCHEDULED (round=2, no score).
+ *   This gives the tests one "played" match with a visible score and one "pending" match.
+ * - status='in_progress': prevents the registration form from showing (no free slots to
+ *   join). The fixture section is always rendered regardless of status.
+ * - Full teardown each run: delete fixtureMatches → members → teams before re-inserting
+ *   so the seed is idempotent and scores stay predictable.
+ * - Previously fixed bugs: none relevant (new seed section).
+ */
+async function ensureFixtureTournament(
+  client: SupabaseClient,
+  clubId: string,
+  clubOwnerId: string,
+): Promise<void> {
+  const id = SEED_TOURNAMENT_WITH_FIXTURE_ID;
+
+  // Upsert the tournament
+  const { data: existing, error: selectError } = await client
+    .from('tournaments')
+    .select('id, status')
+    .eq('id', id)
+    .maybeSingle();
+  if (selectError) throw new Error(`[seed] Error consultando T3: ${selectError.message}`);
+
+  const startDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const endDate = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  if (!existing) {
+    const { error: insertError } = await client.from('tournaments').insert({
+      id,
+      organizerId: clubOwnerId,
+      clubId,
+      name: 'Torneo E2E Con Fixture',
+      format: '7v7',
+      teamCount: 2,
+      playersPerTeam: 7,
+      status: 'in_progress',
+      description: 'Torneo T3 seed E2E — con fixture generado para tests de visualizacion.',
+      startDate,
+      endDate,
+    });
+    if (insertError) throw new Error(`[seed] No se pudo crear T3: ${insertError.message}`);
+  } else if (existing.status !== 'in_progress') {
+    const { error: updateError } = await client
+      .from('tournaments')
+      .update({ status: 'in_progress' })
+      .eq('id', id);
+    if (updateError) throw new Error(`[seed] No se pudo ajustar status T3: ${updateError.message}`);
+  }
+
+  // Teardown existing fixture + teams for idempotency
+  const { data: existingTeams } = await client
+    .from('tournamentTeams')
+    .select('id')
+    .eq('tournamentId', id);
+
+  if (existingTeams && existingTeams.length > 0) {
+    const teamIds = existingTeams.map((t: { id: string }) => t.id);
+    await client.from('tournamentTeamMembers').delete().in('teamId', teamIds);
+  }
+
+  await client.from('fixtureMatches').delete().eq('tournamentId', id);
+  await client.from('tournamentTeams').delete().eq('tournamentId', id);
+
+  // Insert Team A (captained by club owner)
+  const { data: teamA, error: teamAError } = await client
+    .from('tournamentTeams')
+    .insert({ tournamentId: id, name: 'Alfa E2E', captainId: clubOwnerId })
+    .select('id')
+    .single();
+  if (teamAError) throw new Error(`[seed] No se pudo crear Team A en T3: ${teamAError.message}`);
+
+  await client
+    .from('tournamentTeamMembers')
+    .insert({ teamId: teamA.id, playerId: clubOwnerId })
+    .then(({ error }) => {
+      if (error && !error.message.includes('duplicate')) {
+        throw new Error(`[seed] No se pudo agregar miembro Team A T3: ${error.message}`);
+      }
+    });
+
+  // Insert Team B (captained by TEST_USER_ID = Mateo) only if different captain
+  let teamBId: string | null = null;
+  if (clubOwnerId !== TEST_USER_ID) {
+    const { data: teamB, error: teamBError } = await client
+      .from('tournamentTeams')
+      .insert({ tournamentId: id, name: 'Beta E2E', captainId: TEST_USER_ID })
+      .select('id')
+      .single();
+    if (teamBError) {
+      // eslint-disable-next-line no-console
+      console.warn(`[seed] No se pudo crear Team B en T3 (continuando con solo 1 equipo): ${teamBError.message}`);
+    } else {
+      teamBId = teamB.id as string;
+      await client
+        .from('tournamentTeamMembers')
+        .insert({ teamId: teamBId, playerId: TEST_USER_ID })
+        .then(({ error }) => {
+          if (error && !error.message.includes('duplicate')) {
+            // eslint-disable-next-line no-console
+            console.warn(`[seed] No se pudo agregar miembro Team B T3: ${error.message}`);
+          }
+        });
+    }
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn('[seed] T3: club.ownerId === TEST_USER_ID — solo se crea un equipo en el torneo fixture.');
+  }
+
+  // Insert fixture matches
+  const pastTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const futureTime = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { error: fm1Error } = await client.from('fixtureMatches').insert({
+    tournamentId: id,
+    round: 1,
+    homeTeamId: teamA.id,
+    awayTeamId: teamBId,
+    scheduledAt: pastTime,
+    status: 'completed',
+    scoreHome: 3,
+    scoreAway: 1,
+  });
+  if (fm1Error) throw new Error(`[seed] No se pudo crear fixture match COMPLETED T3: ${fm1Error.message}`);
+
+  const { error: fm2Error } = await client.from('fixtureMatches').insert({
+    tournamentId: id,
+    round: 2,
+    homeTeamId: teamA.id,
+    awayTeamId: teamBId,
+    scheduledAt: futureTime,
+    status: 'scheduled',
+    scoreHome: null,
+    scoreAway: null,
+  });
+  if (fm2Error) throw new Error(`[seed] No se pudo crear fixture match SCHEDULED T3: ${fm2Error.message}`);
 }
 
 async function seed(): Promise<void> {
@@ -870,7 +1023,7 @@ async function seed(): Promise<void> {
   await seedTournaments(client);
   // eslint-disable-next-line no-console
   console.log(
-    '[seed] Fixtures listas: E1 lleno, E2 abierto, dashboard club, T1 torneo abierto, T2 torneo con capitan.',
+    '[seed] Fixtures listas: E1 lleno, E2 abierto, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture.',
   );
 }
 

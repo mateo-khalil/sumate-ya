@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, type Route } from '@playwright/test';
-import { GRAPHQL_AUTH_ROUTE, torneoDetailUrl } from '../constants';
+import { FRONTEND_URL, GRAPHQL_AUTH_ROUTE, torneoDetailUrl } from '../constants';
 import {
   buildAddMemberFailure,
   buildAddMemberResponse,
@@ -58,6 +58,17 @@ const HYDRATION_SENTINEL: MockTournamentPlayer = buildMockTournamentPlayer({
  *   class names as a documented fallback.
  * - Previously fixed bugs: none relevant.
  *
+ * US #35 locators (detail view — all SSR-rendered, no hydration wait needed):
+ *   - heroDescription: `.hero-description` paragraph
+ *   - heroMeta: `.hero-meta` spans (format, club, organizer pills)
+ *   - infoGrid: `[aria-label="Datos del torneo"]` section
+ *   - teamsHeading: h2 "Equipos inscriptos"
+ *   - teamCards: `article.team-row` elements
+ *   - emptyTeamsState: `.empty-state` in teams section
+ *   - fixturePlayed: `.fixture-match--played` articles
+ *   - fixturePlayedMark: `.played-mark` elements
+ *   - notFoundMessage: `.nf-title` in not-found state
+ *   - capacityNumber: `.capacity-number`
  * TODO for the frontend team — add these data-testid attributes to
  * TournamentRegistrationForm.tsx and [id].astro to make selectors stable:
  *   - data-testid="tournament-join-form"          → the <form> in registration view
@@ -81,6 +92,28 @@ export class TournamentDetailPage {
   /* ── Tournament heading ── */
   readonly pageHeading: Locator;
   readonly statusPill: Locator;
+
+  /* ── Hero section content (US #35) ── */
+  readonly heroDescription: Locator;
+  readonly heroMeta: Locator;
+
+  /* ── Info grid (US #35) ── */
+  readonly infoGrid: Locator;
+
+  /* ── Teams section (US #35) ── */
+  readonly teamsHeading: Locator;
+  readonly teamCards: Locator;
+  readonly emptyTeamsState: Locator;
+
+  /* ── Capacity panel (US #35) ── */
+  readonly capacityNumber: Locator;
+
+  /* ── Not-found state (US #35) ── */
+  readonly notFoundMessage: Locator;
+
+  /* ── Fixture played state (US #35) ── */
+  readonly fixturePlayed: Locator;
+  readonly fixturePlayedMark: Locator;
 
   /* ── Registration form (anonymous visitor) ── */
   readonly loginCta: Locator;
@@ -110,6 +143,38 @@ export class TournamentDetailPage {
     this.pageHeading = page.getByRole('heading', { level: 1 });
     // TODO: use data-testid="tournament-status-pill" once added
     this.statusPill = page.locator('.status-pill');
+
+    // US #35 — hero content (SSR-rendered, no hydration wait)
+    // TODO: use data-testid="tournament-hero-description" once added
+    this.heroDescription = page.locator('.hero-description');
+    // Each pill in .hero-meta is a <span> with format/club/organizer
+    // TODO: use data-testid="tournament-hero-meta" once added
+    this.heroMeta = page.locator('.hero-meta');
+
+    // US #35 — info grid (Fechas / Formato / Club rows)
+    this.infoGrid = page.locator('[aria-label="Datos del torneo"]');
+
+    // US #35 — teams section
+    this.teamsHeading = page.getByRole('heading', { name: /equipos inscriptos/i, level: 2 });
+    // TODO: use data-testid="tournament-team-card" once added
+    this.teamCards = page.locator('article.team-row');
+    // Empty state inside the teams detail-section (not the fixture one)
+    // TODO: use data-testid="tournament-teams-empty" once added
+    this.emptyTeamsState = page.locator('.detail-section .empty-state').first();
+
+    // US #35 — capacity panel
+    // TODO: use data-testid="tournament-capacity-number" once added (already listed above)
+    this.capacityNumber = page.locator('.capacity-number');
+
+    // US #35 — not-found page
+    // TODO: use data-testid="tournament-not-found" once added
+    this.notFoundMessage = page.locator('.nf-title');
+
+    // US #35 — fixture played elements
+    // TODO: use data-testid="fixture-match-played" once added
+    this.fixturePlayed = page.locator('.fixture-match--played');
+    // TODO: use data-testid="fixture-played-mark" once added
+    this.fixturePlayedMark = page.locator('.played-mark');
 
     // The login CTA link text comes from TournamentRegistrationForm when !isAuthenticated
     this.loginCta = page.getByRole('link', { name: /iniciar sesion para anotar equipo/i });
@@ -147,6 +212,48 @@ export class TournamentDetailPage {
     await this.page.goto(torneoDetailUrl(this.tournamentId));
     // The SSR page renders a <h1> with the tournament name; wait for it.
     await expect(this.pageHeading).toBeVisible({ timeout: 15_000 });
+  }
+
+  /**
+   * Navigates to a well-formed UUID URL that has no matching tournament in the DB.
+   * The Astro page renders a "Torneo no encontrado" state instead of redirecting
+   * because the UUID passes the UUID_REGEX guard but returns null from the backend.
+   */
+  async gotoNonExistent(nonExistentId: string): Promise<void> {
+    await this.page.goto(`${FRONTEND_URL}/torneos/${nonExistentId}`);
+  }
+
+  /**
+   * Returns a locator for a team card article that contains the given team name.
+   * TODO: replace with data-testid="tournament-team-card" once added.
+   */
+  teamCard(name: string): Locator {
+    return this.teamCards.filter({ hasText: name });
+  }
+
+  /**
+   * Returns a locator for the captain paragraph within a team card.
+   * TODO: replace with data-testid="team-captain-name" once added.
+   */
+  teamCaptainText(teamName: string): Locator {
+    return this.teamCard(teamName).locator('p').filter({ hasText: /capitan/i });
+  }
+
+  /**
+   * Returns the player list (`ul.players-mini`) within a specific team card.
+   * TODO: replace with data-testid="team-players-list" once added.
+   */
+  teamPlayerList(teamName: string): Locator {
+    return this.teamCard(teamName).locator('ul.players-mini');
+  }
+
+  /**
+   * Returns the score `<strong>` inside a played fixture match at the given index.
+   * The strong element shows "X - Y" when the match is COMPLETED with scores.
+   * TODO: replace with data-testid="fixture-match-score" once added.
+   */
+  fixtureMatchScore(index = 0): Locator {
+    return this.fixturePlayed.nth(index).locator('.fixture-line strong');
   }
 
   /**

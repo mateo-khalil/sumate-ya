@@ -22,7 +22,12 @@
  * - Bulk create: partial failures are tolerated. If one match fails the rest continue.
  *   The caller receives a per-match result list so they can retry failed ones.
  * - Phase 2 (not here): templates, popular slot heuristics.
- * - Previously fixed bugs: none relevant (new feature).
+ * - Previously fixed bugs:
+ *   - expandSlotsToDateRange used `<= now` so same-day future slots were filtered out before
+ *     reaching the frontend. Fixed: apply the same 15-min grace period as the frontend picker.
+ *   - createClubMatch step 6 compared `scheduledDate = input.scheduledDate + 'T00:00:00Z'` (midnight
+ *     UTC) against now, which always failed for same-day slots. Fixed: use the full slot start
+ *     datetime (`input.scheduledDate + 'T' + slot.startTime`) with the 15-min grace period.
  */
 
 import { cacheDelete, cacheDeletePattern, CACHE_PREFIX, CACHE_TTL, cacheGetOrSet } from '../config/redis.js';
@@ -148,6 +153,10 @@ function expandSlotsToDateRange(
   const end = new Date(endDate + 'T00:00:00Z');
   const now = new Date();
 
+  // 15-minute grace: allow booking up to 15 min after slot start (mirrors frontend isWithinGracePeriod).
+  // A slot is still bookable if now < slotStart + 15 min, i.e. slotStart + 15 min > now.
+  const GRACE_MS = 15 * 60 * 1000;
+
   for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
     const dayStr = ISO_DOW_TO_DB[d.getUTCDay()];
     const dateStr = d.toISOString().slice(0, 10);
@@ -156,8 +165,8 @@ function expandSlotsToDateRange(
       if (slot.dayOfWeek !== dayStr) continue;
 
       const scheduledAt = `${dateStr}T${slot.startTime}`;
-      // Skip past occurrences
-      if (new Date(scheduledAt) <= now) continue;
+      // Skip slots whose grace period has elapsed (slotStart + 15 min <= now)
+      if (new Date(scheduledAt).getTime() + GRACE_MS <= now.getTime()) continue;
 
       result.push({
         slotId: slot.id,
@@ -261,16 +270,23 @@ export const clubMatchService = {
       throw new Error(`La capacidad para ${dbFormat} debe estar entre 2 y ${maxCap} jugadores`);
     }
 
-    // 6. Date validation: future, max 90 days
-    const scheduledDate = new Date(input.scheduledDate + 'T00:00:00Z');
+    // 6. Date/time validation: use full slot start datetime + 15-min grace period.
+    // Previously used input.scheduledDate + 'T00:00:00Z' (midnight UTC) which always
+    // failed for same-day slots because midnight < now. Fix: compare the actual slot
+    // start time against now with the same 15-min grace the frontend shows in the picker.
+    // Previously fixed bugs: same-day slots rejected even when the slot time was future.
+    const GRACE_MS = 15 * 60 * 1000;
+    const slotStartAt = new Date(`${input.scheduledDate}T${slot.startTime}`);
     const now = new Date();
-    if (scheduledDate <= now) throw new Error('La fecha del partido debe ser futura');
-    const maxDate = new Date();
+    if (slotStartAt.getTime() + GRACE_MS <= now.getTime()) {
+      throw new Error('La fecha del partido debe ser futura');
+    }
+    const maxDate = new Date(now);
     maxDate.setDate(maxDate.getDate() + 90);
-    if (scheduledDate > maxDate) throw new Error('La fecha no puede ser más de 90 días en el futuro');
+    if (slotStartAt > maxDate) throw new Error('La fecha no puede ser más de 90 días en el futuro');
 
-    // 7. Day-of-week check
-    const expectedDay = ISO_DOW_TO_DB[scheduledDate.getUTCDay()];
+    // 7. Day-of-week check (use local day from slotStartAt, consistent with how the date was parsed)
+    const expectedDay = ISO_DOW_TO_DB[slotStartAt.getDay()];
     if (slot.dayOfWeek !== expectedDay) {
       throw new Error(`El horario seleccionado es para ${slot.dayOfWeek}, pero la fecha elegida corresponde a ${expectedDay}`);
     }

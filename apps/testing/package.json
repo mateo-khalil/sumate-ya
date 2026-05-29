@@ -10,7 +10,10 @@
     "test:headed": "playwright test --headed",
     "test:e2e:21": "playwright test tests/crear-torneo.spec.ts",
     "test:e2e:39": "playwright test tests/unirse-torneo.spec.ts",
+    "test:e2e:35": "playwright test tests/35-detalle-torneo.spec.ts",
+    "test:e2e:40": "playwright test tests/40-cambiar-contrasena.spec.ts",
     "test:e2e:41": "playwright test tests/division-ranking.spec.ts",
+    "test:e2e:responsive": "playwright test tests/responsive.spec.ts",
     "seed": "ts-node scripts/seed.ts"
   },
   "keywords": [],

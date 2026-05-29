@@ -140,7 +140,30 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts$/,
-      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+      /*
+       * Decision Context:
+       * - Setup logins hit the SSR /login POST handler which then calls the backend
+       *   loginWithBackend(). When several setups run in parallel against a freshly
+       *   booted dev stack, the FIRST login warms Astro's Vite cache and subsequent
+       *   logins can spike past the global actionTimeout: 15_000 cap on click().
+       * - Symptom: TimeoutError on submitButton.click() "waiting for scheduled
+       *   navigations to finish" — the click was performed but the SSR redirect
+       *   to /partidos or /panel-club takes longer than the action budget.
+       * - Fix: bump actionTimeout and navigationTimeout for setup only (chrome
+       *   project keeps the strict 15s/30s caps), and allow retries so a one-off
+       *   slow boot does not block every dependent spec.
+       * - Previously fixed bugs:
+       *     1. clubAdmin setup timed out under 6-worker load → 25 chrome tests
+       *        "did not run" because setup is a hard dependency. Tightened
+       *        timeouts + retries instead of removing the dependency.
+       */
+      retries: 2,
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chrome',
+        actionTimeout: 30_000,
+        navigationTimeout: 60_000,
+      },
     },
     {
       name: 'chrome',
