@@ -1,0 +1,167 @@
+# Equipo permanente — operaciones GraphQL (issue #137)
+
+fragment TeamProfileFields on TeamProfile {
+  id
+  displayName
+  avatarUrl
+  preferredPosition
+}
+
+fragment TeamRosterEntryFields on TeamRosterEntry {
+  id
+  teamId
+  role
+  joinedAt
+  player {
+    ...TeamProfileFields
+  }
+}
+
+fragment TeamFields on Team {
+  id
+  name
+  captainId
+  captain {
+    ...TeamProfileFields
+  }
+  logoUrl
+  format
+  description
+  isActive
+  memberCount
+  members {
+    ...TeamRosterEntryFields
+  }
+  createdAt
+  updatedAt
+}
+
+query MyTeams {
+  myTeams {
+    ...TeamFields
+  }
+}
+
+query GetTeam($id: ID!) {
+  team(id: $id) {
+    ...TeamFields
+  }
+}
+
+query MyPendingInvitations {
+  myPendingInvitations {
+    id
+    status
+    message
+    expiresAt
+    createdAt
+    team {
+      id
+      name
+      format
+      memberCount
+    }
+    invitedPlayer {
+      ...TeamProfileFields
+    }
+    invitedBy {
+      ...TeamProfileFields
+    }
+  }
+}
+
+query TeamAvailabilityMatrix($teamId: ID!) {
+  teamAvailabilityMatrix(teamId: $teamId) {
+    dayOfWeek
+    startTime
+    availableCount
+    availablePlayers {
+      ...TeamProfileFields
+    }
+  }
+}
+
+mutation CreateTeam($input: CreateTeamInput!) {
+  createTeam(input: $input) {
+    success
+    message
+    team {
+      ...TeamFields
+    }
+  }
+}
+
+mutation UpdateTeam($input: UpdateTeamInput!) {
+  updateTeam(input: $input) {
+    success
+    message
+    team {
+      ...TeamFields
+    }
+  }
+}
+
+mutation DeleteTeam($teamId: ID!) {
+  deleteTeam(teamId: $teamId) {
+    success
+    message
+  }
+}
+
+mutation InvitePlayer($input: InvitePlayerInput!) {
+  invitePlayer(input: $input) {
+    success
+    message
+    invitation {
+      id
+      status
+      expiresAt
+    }
+  }
+}
+
+mutation CancelInvitation($invitationId: ID!) {
+  cancelInvitation(invitationId: $invitationId) {
+    success
+    message
+  }
+}
+
+mutation RespondInvitation($input: RespondInvitationInput!) {
+  respondInvitation(input: $input) {
+    success
+    message
+  }
+}
+
+mutation ClaimCaptain($teamId: ID!) {
+  claimCaptain(teamId: $teamId) {
+    success
+    message
+    team {
+      id
+      captainId
+    }
+  }
+}
+
+mutation RemoveMember($teamId: ID!, $playerId: ID!) {
+  removeMember(teamId: $teamId, playerId: $playerId) {
+    success
+    message
+  }
+}
+
+mutation LeaveTeam($teamId: ID!) {
+  leaveTeam(teamId: $teamId) {
+    success
+    message
+  }
+}
+
+mutation SetMyAvailability($input: SetAvailabilityInput!) {
+  setMyAvailability(input: $input) {
+    success
+    message
+  }
+}
