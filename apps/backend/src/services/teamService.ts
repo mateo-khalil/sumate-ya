@@ -18,14 +18,17 @@ import {
   InvitationStatus,
   MatchFormat,
   PlayerPosition,
+  TournamentStatus,
   TeamMemberRole,
   type AvailabilityMatrixCell,
   type CreateTeamInput,
+  type EnrollTeamResult,
   type InvitePlayerInput,
   type PlayerAvailabilitySlot,
   type RespondInvitationInput,
   type SetAvailabilityInput,
   type Team,
+  type TeamEnrollment,
   type TeamInvitation,
   type TeamInvitationResult,
   type TeamMutationResult,
@@ -60,6 +63,18 @@ const DB_TO_FORMAT: Record<string, MatchFormat> = {
   '7v7': MatchFormat.SevenVsSeven,
   '10v10': MatchFormat.TenVsTen,
   '11v11': MatchFormat.ElevenVsEleven,
+};
+
+const DB_TO_TOURNAMENT_STATUS: Record<string, TournamentStatus> = {
+  registration: TournamentStatus.Registration,
+  in_progress: TournamentStatus.InProgress,
+  completed: TournamentStatus.Completed,
+  cancelled: TournamentStatus.Cancelled,
+};
+
+// Mínimo de jugadores necesarios por formato (titulares)
+const FORMAT_MIN_PLAYERS: Record<string, number> = {
+  '5v5': 5, '7v7': 7, '10v10': 10, '11v11': 11,
 };
 
 const DB_TO_POSITION: Record<string, PlayerPosition> = {
@@ -564,6 +579,105 @@ async function listTeamInvitations(teamId: string, ctx: ServiceContext): Promise
   }));
 }
 
+async function getTeamEnrollments(teamId: string, ctx: ServiceContext): Promise<TeamEnrollment[]> {
+  getUserIdOrThrow(ctx);
+  const rows = await teamRepository.getTeamEnrollments(teamId);
+  return rows.map(r => ({
+    id: r.id,
+    teamId,
+    tournamentId: r.tournamentId,
+    tournamentName: r.tournament.name,
+    tournamentStatus: DB_TO_TOURNAMENT_STATUS[r.tournament.status] ?? TournamentStatus.Registration,
+    format: DB_TO_FORMAT[r.tournament.format] ?? MatchFormat.SevenVsSeven,
+    teamCount: r.tournament.teamCount,
+    enrolledAt: r.createdAt,
+  }));
+}
+
+async function enrollTeamInTournament(
+  teamId: string,
+  tournamentId: string,
+  ctx: ServiceContext,
+): Promise<EnrollTeamResult> {
+  /*
+   * Decision Context (F10):
+   * - Inscribe el equipo permanente en un torneo y computa warnings de disponibilidad.
+   * - La inscripción NO se bloquea por baja disponibilidad: el warning es solo informativo.
+   * - La verificación de disponibilidad compara playerAvailability del equipo vs
+   *   scheduledAt de los fixtureMatches del torneo (día de semana + hora).
+   * - Si scheduledAt es null en algunos fixtures (torneo sin fechas asignadas aún),
+   *   esas jornadas se omiten del cálculo de warnings.
+   * - Previously fixed bugs: none relevant.
+   */
+  const userId = getUserIdOrThrow(ctx);
+  const db = ctx.supabase ?? supabase;
+
+  const team = await teamRepository.getTeamWithDetails(teamId);
+  if (!team) throw new Error('Equipo no encontrado');
+  if (!team.isActive) throw new Error('El equipo no está activo');
+  if (team.captainId !== userId) throw new Error('Solo el capitán puede inscribir el equipo a torneos');
+
+  const tournament = await teamRepository.getTournamentBasic(tournamentId);
+  if (!tournament) throw new Error('Torneo no encontrado');
+  if (tournament.status !== 'registration') throw new Error('El torneo no está en período de inscripción');
+
+  const existing = await teamRepository.getEnrollmentByPermanentTeamAndTournament(teamId, tournamentId);
+  if (existing) throw new Error('El equipo ya está inscripto en este torneo');
+
+  // Compute availability warnings (F10)
+  const [fixtures, availability] = await Promise.all([
+    teamRepository.getFixturesByTournament(tournamentId),
+    teamRepository.getAvailabilityByTeam(teamId),
+  ]);
+
+  const minPlayers = FORMAT_MIN_PLAYERS[tournament.format] ?? tournament.playersPerTeam;
+  const memberCount = team.members?.length ?? 0;
+  const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const warnings: string[] = [];
+
+  for (const fixture of fixtures) {
+    if (!fixture.scheduledAt) continue;
+    const date = new Date(fixture.scheduledAt);
+    const dayOfWeek = date.getUTCDay();
+    const hour = date.getUTCHours();
+    const timeStr = `${String(hour).padStart(2, '0')}:00`;
+
+    const availablePlayers = new Set(
+      availability
+        .filter(a =>
+          a.dayOfWeek === dayOfWeek &&
+          a.startTime.slice(0, 5) <= timeStr &&
+          a.endTime.slice(0, 5) > timeStr,
+        )
+        .map(a => a.playerId),
+    );
+
+    if (availablePlayers.size < minPlayers) {
+      warnings.push(
+        `Ronda ${fixture.round} (${DAY_NAMES[dayOfWeek]} ${timeStr}): ` +
+        `solo ${availablePlayers.size} de ${memberCount} jugadores disponibles ` +
+        `(mínimo requerido: ${minPlayers})`,
+      );
+    }
+  }
+
+  await teamRepository.enrollPermanentTeamInTournament(
+    { teamId, tournamentId, name: team.name, captainId: userId },
+    db,
+  );
+
+  await cacheDelete(`${CACHE_PREFIX.USER_TEAMS}${userId}`);
+  console.info(`[teamService.enrollTeamInTournament] teamId=${teamId} enrolled in tournamentId=${tournamentId}, warnings=${warnings.length}`);
+
+  return {
+    success: true,
+    message: warnings.length > 0
+      ? 'Equipo inscripto. Revisá las advertencias de disponibilidad.'
+      : 'Equipo inscripto exitosamente al torneo.',
+    warnings,
+  };
+}
+
 /** Usado por tournamentService para validar F9: solo capitanes pueden crear torneos. */
 export async function isCaptainOfAnyTeam(userId: string): Promise<boolean> {
   const teams = await teamRepository.getTeamsByCaptainId(userId);
@@ -588,4 +702,6 @@ export const teamService = {
   searchPlayers,
   listTeamInvitations,
   getMyTeamAvailability,
+  getTeamEnrollments,
+  enrollTeamInTournament,
 };

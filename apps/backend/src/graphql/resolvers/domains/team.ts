@@ -153,6 +153,18 @@ const Query: QueryResolvers = {
       return [];
     }
   },
+
+  teamEnrollments: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const parsed = UUID.safeParse(args.teamId);
+    if (!parsed.success) return [];
+    try {
+      return await teamService.getTeamEnrollments(parsed.data, { userId: user.id });
+    } catch (error) {
+      console.error(`[teamResolver.teamEnrollments] Failed for teamId=${args.teamId}:`, error);
+      return [];
+    }
+  },
 };
 
 const Mutation: MutationResolvers = {
@@ -314,6 +326,25 @@ const Mutation: MutationResolvers = {
       const message = error instanceof Error ? error.message : 'Error al guardar la disponibilidad';
       console.error(`[teamResolver.setMyAvailability] Failed for userId=${user.id}:`, error);
       return { success: false, message };
+    }
+  },
+
+  enrollTeamInTournament: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const userClient = ctx.accessToken ? createUserClient(ctx.accessToken) : undefined;
+    const teamParsed = UUID.safeParse(args.teamId);
+    const tournParsed = UUID.safeParse(args.tournamentId);
+    if (!teamParsed.success || !tournParsed.success) {
+      return { success: false, message: 'IDs inválidos', warnings: [] };
+    }
+    try {
+      return await teamService.enrollTeamInTournament(
+        teamParsed.data, tournParsed.data, { userId: user.id, supabase: userClient }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al inscribir el equipo';
+      console.error(`[teamResolver.enrollTeamInTournament] Failed for userId=${user.id}:`, error);
+      return { success: false, message, warnings: [] };
     }
   },
 };

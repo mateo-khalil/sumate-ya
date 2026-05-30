@@ -133,6 +133,26 @@ type TeamInvitationResult {
   invitation: TeamInvitation
 }
 
+# Resultado de inscripción de equipo a torneo (F10)
+type EnrollTeamResult {
+  success: Boolean!
+  message: String!
+  # Advertencias de disponibilidad — informativas, no bloquean la inscripción
+  warnings: [String!]!
+}
+
+# Inscripción de un equipo permanente en un torneo
+type TeamEnrollment {
+  id: ID!
+  teamId: ID!
+  tournamentId: ID!
+  tournamentName: String!
+  tournamentStatus: TournamentStatus!
+  format: MatchFormat!
+  teamCount: Int!
+  enrolledAt: String!
+}
+
 extend type Query {
   myTeams: [Team!]!
   team(id: ID!): Team
@@ -144,6 +164,8 @@ extend type Query {
   teamInvitations(teamId: ID!): [TeamInvitation!]!
   # Disponibilidad personal del usuario autenticado para un equipo
   myTeamAvailability(teamId: ID!): [PlayerAvailabilitySlot!]!
+  # Torneos en los que el equipo está inscripto
+  teamEnrollments(teamId: ID!): [TeamEnrollment!]!
 }
 
 extend type Mutation {
@@ -157,4 +179,6 @@ extend type Mutation {
   removeMember(teamId: ID!, playerId: ID!): TeamMutationResult!
   leaveTeam(teamId: ID!): TeamMutationResult!
   setMyAvailability(input: SetAvailabilityInput!): TeamMutationResult!
+  # F10: inscribir equipo permanente a un torneo con check de disponibilidad
+  enrollTeamInTournament(teamId: ID!, tournamentId: ID!): EnrollTeamResult!
 }

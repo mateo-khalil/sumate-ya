@@ -19,6 +19,7 @@ import { TeamInvitationsTab } from './TeamInvitationsTab';
 import { InvitePlayerDialog } from './InvitePlayerDialog';
 import { AvailabilityForm } from './AvailabilityForm';
 import { AvailabilityHeatmap } from './AvailabilityHeatmap';
+import { TeamTournamentsTab } from './TeamTournamentsTab';
 
 interface Props {
   team: TeamData;
@@ -109,7 +110,7 @@ export function TeamDashboard({ team: initialTeam, userId, isCaptain }: Props) {
         )}
 
         {activeTab === 'tournaments' && isCaptain && (
-          <TournamentsPlaceholder />
+          <TeamTournamentsTab teamId={team.id} isCaptain={isCaptain} />
         )}
 
         {activeTab === 'config' && isCaptain && (
@@ -129,16 +130,6 @@ export function TeamDashboard({ team: initialTeam, userId, isCaptain }: Props) {
   );
 }
 
-// ---- placeholder Fase 6 ----
-
-function TournamentsPlaceholder() {
-  return (
-    <div className="placeholder">
-      <Trophy size={40} strokeWidth={1.5} aria-hidden="true" className="placeholder-icon" />
-      <p>La gestión de torneos del equipo estará disponible próximamente.</p>
-    </div>
-  );
-}
 
 // ---- styles via <style jsx> emulation via className + global css ----
 // Usamos clases CSS definidas abajo como string de estilos en scope.

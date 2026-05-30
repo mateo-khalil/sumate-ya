@@ -236,3 +236,38 @@ export const MY_TEAM_AVAILABILITY = /* GraphQL */ `
     myTeamAvailability(teamId: $teamId) { id dayOfWeek startTime endTime isRecurrent }
   }
 `;
+
+export type TournamentStatusValue = 'REGISTRATION' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export interface TeamEnrollmentData {
+  id: string;
+  teamId: string;
+  tournamentId: string;
+  tournamentName: string;
+  tournamentStatus: TournamentStatusValue;
+  format: MatchFormat;
+  teamCount: number;
+  enrolledAt: string;
+}
+
+export interface EnrollTeamResultData {
+  success: boolean;
+  message: string;
+  warnings: string[];
+}
+
+export const TEAM_ENROLLMENTS = /* GraphQL */ `
+  query TeamEnrollments($teamId: ID!) {
+    teamEnrollments(teamId: $teamId) {
+      id teamId tournamentId tournamentName tournamentStatus format teamCount enrolledAt
+    }
+  }
+`;
+
+export const ENROLL_TEAM_IN_TOURNAMENT = /* GraphQL */ `
+  mutation EnrollTeamInTournament($teamId: ID!, $tournamentId: ID!) {
+    enrollTeamInTournament(teamId: $teamId, tournamentId: $tournamentId) {
+      success message warnings
+    }
+  }
+`;

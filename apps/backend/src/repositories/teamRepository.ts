@@ -527,6 +527,110 @@ class TeamRepository {
     return (data ?? []) as PlayerAvailabilityRow[];
   }
 
+  // --- Tournament Enrollment (F10) ---
+
+  async getTournamentBasic(
+    tournamentId: string,
+    db?: SupabaseClient,
+  ): Promise<{ id: string; name: string; status: string; format: string; teamCount: number; playersPerTeam: number } | null> {
+    const client = db ?? supabase;
+    const { data, error } = await client
+      .from('tournaments')
+      .select(`id, name, status, format, "teamCount", "playersPerTeam"`)
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (error) {
+      console.error(`[TeamRepository.getTournamentBasic] Supabase error for tournamentId=${tournamentId}:`, error.message);
+      throw new Error(error.message);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return data as any;
+  }
+
+  async getFixturesByTournament(
+    tournamentId: string,
+    db?: SupabaseClient,
+  ): Promise<{ id: string; round: number; scheduledAt: string | null; status: string }[]> {
+    const client = db ?? supabase;
+    const { data, error } = await client
+      .from('fixtureMatches')
+      .select(`id, round, "scheduledAt", status`)
+      .eq('tournamentId', tournamentId)
+      .order('round', { ascending: true });
+    if (error) {
+      console.error(`[TeamRepository.getFixturesByTournament] Supabase error:`, error.message);
+      throw new Error(error.message);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []) as any[];
+  }
+
+  async getEnrollmentByPermanentTeamAndTournament(
+    teamId: string,
+    tournamentId: string,
+    db?: SupabaseClient,
+  ): Promise<{ id: string } | null> {
+    const client = db ?? supabase;
+    const { data, error } = await client
+      .from('tournamentTeams')
+      .select('id')
+      .eq('permanentTeamId', teamId)
+      .eq('tournamentId', tournamentId)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (error) {
+      console.error('[TeamRepository.getEnrollmentByPermanentTeamAndTournament] Supabase error:', error.message);
+      throw new Error(error.message);
+    }
+    return data as { id: string } | null;
+  }
+
+  async enrollPermanentTeamInTournament(
+    input: { teamId: string; tournamentId: string; name: string; captainId: string },
+    db: SupabaseClient,
+  ): Promise<{ id: string }> {
+    const { data, error } = await db
+      .from('tournamentTeams')
+      .insert({
+        tournamentId: input.tournamentId,
+        name: input.name,
+        captainId: input.captainId,
+        permanentTeamId: input.teamId,
+      })
+      .select('id')
+      .single();
+    if (error) {
+      console.error('[TeamRepository.enrollPermanentTeamInTournament] Supabase error:', error.message);
+      throw new Error(error.message);
+    }
+    return data as { id: string };
+  }
+
+  async getTeamEnrollments(
+    teamId: string,
+    db?: SupabaseClient,
+  ): Promise<{
+    id: string; tournamentId: string; createdAt: string;
+    tournament: { id: string; name: string; status: string; format: string; teamCount: number };
+  }[]> {
+    const client = db ?? supabase;
+    const { data, error } = await client
+      .from('tournamentTeams')
+      .select(`
+        id, "tournamentId", "createdAt",
+        tournament:tournaments!tournamentTeams_tournamentId_fkey(id, name, status, format, "teamCount")
+      `)
+      .eq('permanentTeamId', teamId)
+      .eq('status', 'active')
+      .order('createdAt', { ascending: false });
+    if (error) {
+      console.error(`[TeamRepository.getTeamEnrollments] Supabase error for teamId=${teamId}:`, error.message);
+      throw new Error(error.message);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []) as any[];
+  }
+
   // --- Player Search ---
 
   async searchProfiles(search: string, limit = 10, db?: SupabaseClient): Promise<ProfileRow[]> {
