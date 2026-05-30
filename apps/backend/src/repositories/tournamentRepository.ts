@@ -34,6 +34,8 @@ const TOURNAMENT_CLUB_COLUMNS = `
   name,
   zone,
   address,
+  lat,
+  lng,
   "imageUrl"
 `;
 
@@ -88,6 +90,8 @@ export interface TournamentClubRow {
   name: string;
   zone: string | null;
   address: string | null;
+  lat: number | null;
+  lng: number | null;
   imageUrl: string | null;
 }
 

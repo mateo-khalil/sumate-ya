@@ -12,7 +12,7 @@ export const prerender = false;
 
 import { Trophy, Volleyball } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
-import { TournamentList } from '../../components/tournaments/TournamentList';
+import { TournamentsView } from '../../components/tournaments/TournamentsView';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const user = Astro.locals.user;
@@ -73,7 +73,7 @@ const nombre = user?.displayName || user?.email;
       </header>
 
       <section class="tournaments-section">
-        <TournamentList client:visible isAuthenticated={isAuthenticated} />
+        <TournamentsView client:visible isAuthenticated={isAuthenticated} />
       </section>
     </main>
   </div>

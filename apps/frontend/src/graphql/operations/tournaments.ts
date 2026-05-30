@@ -83,6 +83,8 @@ export interface TournamentData {
     name: string;
     zone: string | null;
     address: string | null;
+    lat: number | null;
+    lng: number | null;
     imageUrl: string | null;
   } | null;
   teams: TournamentTeam[];
@@ -105,6 +107,8 @@ export interface TournamentListItem {
     name: string;
     zone: string | null;
     address: string | null;
+    lat: number | null;
+    lng: number | null;
     imageUrl: string | null;
   } | null;
 }
@@ -158,6 +162,8 @@ export const GET_TOURNAMENTS = /* GraphQL */ `
         name
         zone
         address
+        lat
+        lng
         imageUrl
       }
     }
@@ -190,6 +196,8 @@ export const GET_TOURNAMENT_DETAIL = /* GraphQL */ `
         name
         zone
         address
+        lat
+        lng
         imageUrl
       }
       teams {
@@ -275,6 +283,8 @@ export const CREATE_TOURNAMENT = /* GraphQL */ `
           name
           zone
           address
+          lat
+          lng
           imageUrl
         }
         fixtureMatches {
@@ -324,6 +334,8 @@ export const REGISTER_TOURNAMENT_TEAM = /* GraphQL */ `
           name
           zone
           address
+          lat
+          lng
           imageUrl
         }
         fixtureMatches {
@@ -391,6 +403,8 @@ export const JOIN_TOURNAMENT = /* GraphQL */ `
           name
           zone
           address
+          lat
+          lng
           imageUrl
         }
         fixtureMatches {
