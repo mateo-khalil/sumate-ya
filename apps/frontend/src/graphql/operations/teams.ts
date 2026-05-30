@@ -222,3 +222,17 @@ export const TEAM_INVITATIONS = /* GraphQL */ `
     }
   }
 `;
+
+export interface PlayerAvailabilitySlotData {
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isRecurrent: boolean;
+}
+
+export const MY_TEAM_AVAILABILITY = /* GraphQL */ `
+  query MyTeamAvailability($teamId: ID!) {
+    myTeamAvailability(teamId: $teamId) { id dayOfWeek startTime endTime isRecurrent }
+  }
+`;

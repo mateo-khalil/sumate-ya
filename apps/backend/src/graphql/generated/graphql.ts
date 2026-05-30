@@ -713,6 +713,15 @@ export type MutationVoteMatchResultArgs = {
   input: VoteMatchResultInput;
 };
 
+export type PlayerAvailabilitySlot = {
+  __typename?: 'PlayerAvailabilitySlot';
+  dayOfWeek: Scalars['Int']['output'];
+  endTime: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  isRecurrent: Scalars['Boolean']['output'];
+  startTime: Scalars['String']['output'];
+};
+
 export enum PlayerPosition {
   Defender = 'DEFENDER',
   Forward = 'FORWARD',
@@ -775,6 +784,7 @@ export type Query = {
   myPendingInvitations: Array<TeamInvitation>;
   myProfile: Profile;
   mySettings: PrivacySettings;
+  myTeamAvailability: Array<PlayerAvailabilitySlot>;
   myTeams: Array<Team>;
   profile?: Maybe<Profile>;
   searchPlayers: Array<TeamProfile>;
@@ -839,6 +849,11 @@ export type QueryMatchesArgs = {
 export type QueryMyMatchesArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   pageSize?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryMyTeamAvailabilityArgs = {
+  teamId: Scalars['ID']['input'];
 };
 
 
@@ -1345,6 +1360,7 @@ export type ResolversTypes = ResolversObject<{
   MatchTeam: MatchTeam;
   MatchUserResult: MatchUserResult;
   Mutation: ResolverTypeWrapper<Record<PropertyKey, never>>;
+  PlayerAvailabilitySlot: ResolverTypeWrapper<PlayerAvailabilitySlot>;
   PlayerPosition: PlayerPosition;
   PrivacySettings: ResolverTypeWrapper<PrivacySettings>;
   Profile: ResolverTypeWrapper<Profile>;
@@ -1446,6 +1462,7 @@ export type ResolversParentTypes = ResolversObject<{
   MatchResultSubmission: MatchResultSubmission;
   MatchResultVote: MatchResultVote;
   Mutation: Record<PropertyKey, never>;
+  PlayerAvailabilitySlot: PlayerAvailabilitySlot;
   PrivacySettings: PrivacySettings;
   Profile: Profile;
   ProfileSummary: ProfileSummary;
@@ -1814,6 +1831,14 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   voteMatchResult?: Resolver<ResolversTypes['VoteSubmissionResult'], ParentType, ContextType, RequireFields<MutationVoteMatchResultArgs, 'input'>>;
 }>;
 
+export type PlayerAvailabilitySlotResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['PlayerAvailabilitySlot'] = ResolversParentTypes['PlayerAvailabilitySlot']> = ResolversObject<{
+  dayOfWeek?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  endTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isRecurrent?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  startTime?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
 export type PrivacySettingsResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['PrivacySettings'] = ResolversParentTypes['PrivacySettings']> = ResolversObject<{
   isPublic?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   showDivision?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -1858,6 +1883,7 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   myPendingInvitations?: Resolver<Array<ResolversTypes['TeamInvitation']>, ParentType, ContextType>;
   myProfile?: Resolver<ResolversTypes['Profile'], ParentType, ContextType>;
   mySettings?: Resolver<ResolversTypes['PrivacySettings'], ParentType, ContextType>;
+  myTeamAvailability?: Resolver<Array<ResolversTypes['PlayerAvailabilitySlot']>, ParentType, ContextType, RequireFields<QueryMyTeamAvailabilityArgs, 'teamId'>>;
   myTeams?: Resolver<Array<ResolversTypes['Team']>, ParentType, ContextType>;
   profile?: Resolver<Maybe<ResolversTypes['Profile']>, ParentType, ContextType, RequireFields<QueryProfileArgs, 'id'>>;
   searchPlayers?: Resolver<Array<ResolversTypes['TeamProfile']>, ParentType, ContextType, RequireFields<QuerySearchPlayersArgs, 'search'>>;
@@ -2078,6 +2104,7 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   MatchResultSubmission?: MatchResultSubmissionResolvers<ContextType>;
   MatchResultVote?: MatchResultVoteResolvers<ContextType>;
   Mutation?: MutationResolvers<ContextType>;
+  PlayerAvailabilitySlot?: PlayerAvailabilitySlotResolvers<ContextType>;
   PrivacySettings?: PrivacySettingsResolvers<ContextType>;
   Profile?: ProfileResolvers<ContextType>;
   ProfileSummary?: ProfileSummaryResolvers<ContextType>;

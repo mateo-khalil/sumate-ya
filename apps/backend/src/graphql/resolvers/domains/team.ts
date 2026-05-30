@@ -141,6 +141,18 @@ const Query: QueryResolvers = {
       return [];
     }
   },
+
+  myTeamAvailability: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const parsed = UUID.safeParse(args.teamId);
+    if (!parsed.success) return [];
+    try {
+      return await teamService.getMyTeamAvailability(parsed.data, { userId: user.id });
+    } catch (error) {
+      console.error(`[teamResolver.myTeamAvailability] Failed for teamId=${args.teamId}:`, error);
+      return [];
+    }
+  },
 };
 
 const Mutation: MutationResolvers = {

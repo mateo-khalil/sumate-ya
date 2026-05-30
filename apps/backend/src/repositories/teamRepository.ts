@@ -510,6 +510,23 @@ class TeamRepository {
     return (data ?? []) as any[];
   }
 
+  async getAvailabilityByPlayerAndTeam(playerId: string, teamId: string, db?: SupabaseClient): Promise<PlayerAvailabilityRow[]> {
+    const client = db ?? supabase;
+    const { data, error } = await client
+      .from('playerAvailability')
+      .select(AVAILABILITY_COLUMNS)
+      .eq('playerId', playerId)
+      .eq('teamId', teamId)
+      .order('dayOfWeek', { ascending: true })
+      .order('startTime', { ascending: true });
+
+    if (error) {
+      console.error('[TeamRepository.getAvailabilityByPlayerAndTeam] Supabase error:', error.message);
+      throw new Error(error.message);
+    }
+    return (data ?? []) as PlayerAvailabilityRow[];
+  }
+
   // --- Player Search ---
 
   async searchProfiles(search: string, limit = 10, db?: SupabaseClient): Promise<ProfileRow[]> {

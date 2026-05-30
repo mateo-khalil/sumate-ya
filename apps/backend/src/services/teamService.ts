@@ -22,6 +22,7 @@ import {
   type AvailabilityMatrixCell,
   type CreateTeamInput,
   type InvitePlayerInput,
+  type PlayerAvailabilitySlot,
   type RespondInvitationInput,
   type SetAvailabilityInput,
   type Team,
@@ -516,6 +517,22 @@ async function myPendingInvitations(ctx: ServiceContext): Promise<TeamInvitation
   return rows.map(r => rowToTeamInvitation(r as any));
 }
 
+async function getMyTeamAvailability(teamId: string, ctx: ServiceContext): Promise<PlayerAvailabilitySlot[]> {
+  const userId = getUserIdOrThrow(ctx);
+
+  const member = await teamRepository.getMemberRecord(teamId, userId);
+  if (!member) throw new Error('No sos miembro de este equipo');
+
+  const rows = await teamRepository.getAvailabilityByPlayerAndTeam(userId, teamId);
+  return rows.map(r => ({
+    id: r.id,
+    dayOfWeek: r.dayOfWeek,
+    startTime: r.startTime,
+    endTime: r.endTime,
+    isRecurrent: r.isRecurrent,
+  }));
+}
+
 async function searchPlayers(search: string, ctx: ServiceContext): Promise<TeamProfile[]> {
   getUserIdOrThrow(ctx);
   const trimmed = search.trim();
@@ -570,4 +587,5 @@ export const teamService = {
   myPendingInvitations,
   searchPlayers,
   listTeamInvitations,
+  getMyTeamAvailability,
 };

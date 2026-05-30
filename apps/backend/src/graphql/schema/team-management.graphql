@@ -71,6 +71,15 @@ type AvailabilityMatrixCell {
   availablePlayers: [TeamProfile!]!
 }
 
+# Franja de disponibilidad del jugador autenticado para un equipo
+type PlayerAvailabilitySlot {
+  id: ID!
+  dayOfWeek: Int!
+  startTime: String!
+  endTime: String!
+  isRecurrent: Boolean!
+}
+
 input CreateTeamInput {
   name: String!
   format: MatchFormat!
@@ -133,6 +142,8 @@ extend type Query {
   searchPlayers(search: String!): [TeamProfile!]!
   # Listado de invitaciones enviadas para un equipo (solo capitán)
   teamInvitations(teamId: ID!): [TeamInvitation!]!
+  # Disponibilidad personal del usuario autenticado para un equipo
+  myTeamAvailability(teamId: ID!): [PlayerAvailabilitySlot!]!
 }
 
 extend type Mutation {

@@ -10,13 +10,15 @@
  */
 
 import { useState } from 'react';
-import { Users, Settings, Clock, Trophy, Mail } from 'lucide-react';
+import { Users, Settings, Clock, Trophy, Mail } from 'lucide-react'; // Clock usado en TABS
 import type { LucideIcon } from 'lucide-react';
 import type { TeamData } from '../../graphql/operations/teams';
 import { TeamMembersTab } from './TeamMembersTab';
 import { TeamConfigTab } from './TeamConfigTab';
 import { TeamInvitationsTab } from './TeamInvitationsTab';
 import { InvitePlayerDialog } from './InvitePlayerDialog';
+import { AvailabilityForm } from './AvailabilityForm';
+import { AvailabilityHeatmap } from './AvailabilityHeatmap';
 
 interface Props {
   team: TeamData;
@@ -95,7 +97,15 @@ export function TeamDashboard({ team: initialTeam, userId, isCaptain }: Props) {
         )}
 
         {activeTab === 'availability' && (
-          <AvailabilityPlaceholder teamId={team.id} userId={userId} />
+          <div className="availability-tab">
+            {isCaptain && (
+              <div className="heatmap-section">
+                <AvailabilityHeatmap teamId={team.id} memberCount={team.memberCount} />
+                <hr className="section-divider" />
+              </div>
+            )}
+            <AvailabilityForm teamId={team.id} />
+          </div>
         )}
 
         {activeTab === 'tournaments' && isCaptain && (
@@ -119,17 +129,7 @@ export function TeamDashboard({ team: initialTeam, userId, isCaptain }: Props) {
   );
 }
 
-// ---- placeholders para Fases 4 y 5 ----
-
-function AvailabilityPlaceholder({ teamId, userId }: { teamId: string; userId: string | null }) {
-  void teamId; void userId;
-  return (
-    <div className="placeholder">
-      <Clock size={40} strokeWidth={1.5} aria-hidden="true" className="placeholder-icon" />
-      <p>La configuración de disponibilidad horaria estará disponible próximamente.</p>
-    </div>
-  );
-}
+// ---- placeholder Fase 6 ----
 
 function TournamentsPlaceholder() {
   return (
@@ -163,6 +163,9 @@ const _styles = `
   color: var(--color-muted-foreground);
 }
 .placeholder-icon { margin: 0 auto 1rem; display: block; opacity: 0.35; }
+.availability-tab { display: flex; flex-direction: column; gap: 1.5rem; }
+.heatmap-section { }
+.section-divider { border: none; border-top: 1px solid var(--color-border); margin: 0; }
 `;
 
 // Inject styles once via a style tag trick
