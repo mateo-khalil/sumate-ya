@@ -1,5 +1,11 @@
 /**
  * Tournament Resolver - GraphQL queries and mutations for tournament flows.
+ *
+ * Decision Context:
+ * - leaveTournament: el resolver valida el input con Zod antes de pasar al service.
+ *   El service aplica las 8 validaciones de negocio en orden estricto.
+ *   El user-scoped client se pasa al service para que las escrituras respeten RLS.
+ * Previously fixed bugs: none relevant.
  */
 
 import { z } from 'zod';
@@ -52,8 +58,18 @@ const TournamentTeamMemberSchema = z.object({
   playerId: z.string().regex(UUID_REGEX, 'playerId invalido'),
 });
 
+const LeaveTournamentSchema = z.object({
+  tournamentId: z.string().regex(UUID_REGEX, 'tournamentId invalido'),
+  teamId: z.string().regex(UUID_REGEX, 'teamId invalido'),
+  reason: z.string().trim().max(500, 'El motivo no puede superar 500 caracteres').optional().nullable(),
+});
+
 function invalidTeamResult(message: string) {
   return { success: false, teamId: null, message: `Datos invalidos: ${message}`, tournament: null };
+}
+
+function invalidLeaveResult(message: string) {
+  return { success: false, message: `Datos invalidos: ${message}`, tournamentStatus: null, remainingTeams: null };
 }
 
 const Query: QueryResolvers = {
@@ -170,6 +186,32 @@ const Mutation: MutationResolvers = {
       const message = error instanceof Error ? error.message : 'Error al quitar jugador';
       console.error(`[tournamentResolver.removeTournamentTeamMember] Failed for userId=${user.id}:`, error);
       return { success: false, teamId: null, message, tournament: null };
+    }
+  },
+
+  leaveTournament: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const userClient = ctx.accessToken ? createUserClient(ctx.accessToken) : undefined;
+
+    const parsed = LeaveTournamentSchema.safeParse(args.input);
+    if (!parsed.success) {
+      const message = parsed.error.issues.map((issue) => issue.message).join('; ');
+      return invalidLeaveResult(message);
+    }
+
+    try {
+      return await tournamentService.leaveTournament(
+        {
+          tournamentId: parsed.data.tournamentId,
+          teamId: parsed.data.teamId,
+          reason: parsed.data.reason ?? null,
+        },
+        { userId: user.id, supabase: userClient },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al retirar el equipo del torneo';
+      console.error(`[tournamentResolver.leaveTournament] Failed for userId=${user.id}:`, error);
+      return { success: false, message, tournamentStatus: null, remainingTeams: null };
     }
   },
 };

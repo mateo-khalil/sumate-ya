@@ -9,10 +9,14 @@ import {
   type TournamentPlayer,
   type TournamentTeam,
   type TournamentTeamRegistrationResult,
+  type TournamentStatus,
 } from '@/graphql/operations/tournaments';
+import { LeaveTournamentButton } from './LeaveTournamentButton';
 
 interface TournamentRegistrationFormProps {
   tournamentId: string;
+  tournamentName: string;
+  tournamentStatus: TournamentStatus;
   isAuthenticated: boolean;
   canRegister: boolean;
   playersPerTeam: number;
@@ -71,6 +75,8 @@ async function postTournamentMutation(
 
 export function TournamentRegistrationForm({
   tournamentId,
+  tournamentName,
+  tournamentStatus,
   isAuthenticated,
   canRegister,
   playersPerTeam,
@@ -221,6 +227,7 @@ export function TournamentRegistrationForm({
 
   if (captainTeam) {
     const removablePlayers = captainTeam.players.filter((player) => player.id !== captainTeam.captainId);
+    const canLeave = tournamentStatus === 'REGISTRATION';
 
     return (
       <div className="detail-register-form">
@@ -269,6 +276,16 @@ export function TournamentRegistrationForm({
 
         {error && <p className="detail-form-error" role="alert">{error}</p>}
         {message && <p className="detail-form-message" role="status">{message}</p>}
+
+        {canLeave && (
+          <LeaveTournamentButton
+            tournamentId={tournamentId}
+            teamId={captainTeam.id}
+            teamName={captainTeam.name}
+            tournamentName={tournamentName}
+            hasOnlyTwoTeams={teams.length === 2}
+          />
+        )}
       </div>
     );
   }

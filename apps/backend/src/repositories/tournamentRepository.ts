@@ -6,6 +6,9 @@
  * - Writes accept an optional user-scoped client so RLS can enforce organizer ownership.
  * - Availability checks read from both matches and fixtureMatches because tournament
  *   creation reserves club/court time before the participating teams are known.
+ * - tournamentTeams soft-delete: status column ('active'|'withdrawn') added via migration.
+ *   All queries that list teams should filter by status='active' at the service layer.
+ *   REQUIRES MIGRATION: ALTER TABLE "tournamentTeams" ADD COLUMN status, withdrawnAt, withdrawalReason.
  */
 
 import { supabase, type SupabaseClient } from '../config/supabase.js';
@@ -65,6 +68,9 @@ const TOURNAMENT_TEAM_COLUMNS = `
   "tournamentId",
   name,
   "captainId",
+  status,
+  "withdrawnAt",
+  "withdrawalReason",
   "createdAt"
 `;
 
@@ -214,6 +220,10 @@ export interface TournamentTeamRow {
   tournamentId?: string;
   name: string;
   captainId: string;
+  /** Added by migration: 'active' | 'withdrawn'. Absent on rows from queries without status column. */
+  status?: string;
+  withdrawnAt?: string | null;
+  withdrawalReason?: string | null;
   captain?: TournamentPlayerRow | null;
   members?: TournamentTeamMemberRow[];
   createdAt: string;
@@ -518,7 +528,7 @@ export async function getTournamentTeams(
 ): Promise<TournamentTeamRow[]> {
   const { data, error } = await client
     .from('tournamentTeams')
-    .select('id, "tournamentId", name, "captainId", "createdAt"')
+    .select(TOURNAMENT_TEAM_COLUMNS)
     .eq('tournamentId', tournamentId)
     .order('createdAt', { ascending: true });
 
@@ -553,7 +563,7 @@ export async function getTournamentTeamById(
 ): Promise<TournamentTeamRow | null> {
   const { data, error } = await client
     .from('tournamentTeams')
-    .select('id, "tournamentId", name, "captainId", "createdAt"')
+    .select(TOURNAMENT_TEAM_COLUMNS)
     .eq('id', teamId)
     .single();
 
@@ -649,7 +659,7 @@ export async function createTournamentTeam(
       name,
       captainId,
     })
-    .select('id, "tournamentId", name, "captainId", "createdAt"')
+    .select(TOURNAMENT_TEAM_COLUMNS)
     .single();
 
   if (error) {
@@ -742,6 +752,124 @@ export async function updateTournamentStatus(
   }
 }
 
+// =====================================================
+// Withdrawal / Leave Tournament Functions
+// =====================================================
+
+/**
+ * Soft-delete a team by setting status='withdrawn'.
+ * Uses .eq('status', 'active') guard to handle race conditions gracefully —
+ * if two requests fire simultaneously, the second will update 0 rows.
+ * REQUIRES MIGRATION: tournamentTeams must have status, withdrawnAt, withdrawalReason columns.
+ */
+export async function withdrawTeamById(
+  teamId: string,
+  reason: string | null | undefined,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('tournamentTeams')
+    .update({
+      status: 'withdrawn',
+      withdrawnAt: new Date().toISOString(),
+      withdrawalReason: reason ?? null,
+    })
+    .eq('id', teamId)
+    .eq('status', 'active');
+
+  if (error) {
+    console.error('[tournamentRepository.withdrawTeamById] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+}
+
+/** Hard-delete all members of a team from tournamentTeamMembers. */
+export async function deleteTeamMembersById(
+  teamId: string,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('tournamentTeamMembers')
+    .delete()
+    .eq('teamId', teamId);
+
+  if (error) {
+    console.error('[tournamentRepository.deleteTeamMembersById] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+}
+
+const FIXTURE_TEAM_CHECK_COLUMNS = `id, "tournamentId", round, "homeTeamId", "awayTeamId", status`;
+
+/** Get all fixture matches where this team is home or away (for defense-in-depth checks). */
+export async function getFixtureMatchesByTeam(
+  teamId: string,
+  client: SupabaseClient = supabase,
+): Promise<Pick<FixtureMatchRow, 'id' | 'tournamentId' | 'round' | 'homeTeamId' | 'awayTeamId' | 'status'>[]> {
+  const { data, error } = await client
+    .from('fixtureMatches')
+    .select(FIXTURE_TEAM_CHECK_COLUMNS)
+    .or(`homeTeamId.eq.${teamId},awayTeamId.eq.${teamId}`);
+
+  if (error) {
+    console.error('[tournamentRepository.getFixtureMatchesByTeam] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return (data as unknown as Pick<FixtureMatchRow, 'id' | 'tournamentId' | 'round' | 'homeTeamId' | 'awayTeamId' | 'status'>[]) ?? [];
+}
+
+/**
+ * Null-out team references in fixture matches for non-completed/in-progress fixtures.
+ * Edge case: fixture was generated (registration was briefly complete) before the team withdrew.
+ * Previously fixed bugs: none relevant.
+ */
+export async function clearTeamFromFixtureMatches(
+  teamId: string,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const [{ error: homeError }, { error: awayError }] = await Promise.all([
+    client
+      .from('fixtureMatches')
+      .update({ homeTeamId: null })
+      .eq('homeTeamId', teamId)
+      .not('status', 'in', '(completed,in_progress)'),
+    client
+      .from('fixtureMatches')
+      .update({ awayTeamId: null })
+      .eq('awayTeamId', teamId)
+      .not('status', 'in', '(completed,in_progress)'),
+  ]);
+
+  if (homeError) {
+    console.error('[tournamentRepository.clearTeamFromFixtureMatches] homeTeamId error:', homeError.message);
+    throw new Error(homeError.message);
+  }
+  if (awayError) {
+    console.error('[tournamentRepository.clearTeamFromFixtureMatches] awayTeamId error:', awayError.message);
+    throw new Error(awayError.message);
+  }
+}
+
+/** Count teams with status='active' for a tournament. */
+export async function countActiveTeams(
+  tournamentId: string,
+  client: SupabaseClient = supabase,
+): Promise<number> {
+  const { count, error } = await client
+    .from('tournamentTeams')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournamentId', tournamentId)
+    .eq('status', 'active');
+
+  if (error) {
+    console.error('[tournamentRepository.countActiveTeams] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+
+  return count ?? 0;
+}
+
 export const tournamentRepository = {
   getSlotsByIds,
   getMatchesForSlotDates,
@@ -765,4 +893,9 @@ export const tournamentRepository = {
   deleteTournamentTeamMember,
   updateFixtureTeams,
   updateTournamentStatus,
+  withdrawTeamById,
+  deleteTeamMembersById,
+  getFixtureMatchesByTeam,
+  clearTeamFromFixtureMatches,
+  countActiveTeams,
 };

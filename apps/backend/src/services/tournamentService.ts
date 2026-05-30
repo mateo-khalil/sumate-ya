@@ -19,6 +19,8 @@ import {
   type CreateTournamentInput,
   type CreateTournamentResult,
   type JoinTournamentInput,
+  type LeaveTournamentInput,
+  type LeaveTournamentResult,
   type RegisterTournamentTeamInput,
   type Tournament,
   type TournamentFixtureMatch,
@@ -171,7 +173,15 @@ function toTournament(row: TournamentRow): Tournament {
     if (a.round !== b.round) return a.round - b.round;
     return (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? '');
   });
-  const registeredTeamsCount = row.registeredTeams?.[0]?.count ?? row.tournamentTeams?.length ?? 0;
+
+  // Filter withdrawn teams. When tournamentTeams rows are loaded (detail queries),
+  // derive count from active rows only. Fall back to DB aggregate (list queries).
+  const allTeamRows = row.tournamentTeams ?? [];
+  const activeTeamRows = allTeamRows.filter((t) => !t.status || t.status === 'active');
+  const registeredTeamsCount =
+    allTeamRows.length > 0
+      ? activeTeamRows.length
+      : (row.registeredTeams?.[0]?.count ?? 0);
 
   return {
     id: row.id,
@@ -198,7 +208,7 @@ function toTournament(row: TournamentRow): Tournament {
           imageUrl: row.clubs.imageUrl,
         }
       : null,
-    teams: (row.tournamentTeams ?? []).map(toTournamentTeam),
+    teams: activeTeamRows.map(toTournamentTeam),
     fixtureMatches: fixtureMatches.map(toFixtureMatch),
   };
 }
@@ -625,6 +635,135 @@ export async function removeTournamentTeamMember(
   return { success: true, teamId: input.teamId, message: null, tournament: toTournament(updatedTournament) };
 }
 
+/**
+ * leaveTournament — retirar un equipo de un torneo en inscripción.
+ *
+ * Decision Context:
+ * - Soft delete (status='withdrawn') para preservar historial del equipo en el torneo.
+ * - Los miembros se eliminan (hard delete) porque su inscripción deja de ser válida.
+ * - Si quedan 0 equipos activos, el torneo se cancela automáticamente.
+ * - Si queda 1 equipo, se retorna warning sin cancelar (el organizador decide).
+ * - Las 8 validaciones se aplican en orden estricto para fail-fast con mensajes claros.
+ * - La validación de captainId es la única que autoriza el retiro: ni el organizer del
+ *   torneo ni un miembro del equipo pueden retirar equipos ajenos a su capitanía.
+ * - Validación 8 (fixtures jugados) es defense-in-depth: si el torneo está en
+ *   registration no debería haber fixtures completados, pero se verifica igual.
+ * - Race condition: withdrawTeamById usa .eq('status','active') para que la segunda
+ *   llamada concurrente actualice 0 filas y el service lo detecte via Validación 7.
+ * Previously fixed bugs: none relevant.
+ */
+export async function leaveTournament(
+  input: LeaveTournamentInput,
+  ctx: ServiceContext,
+): Promise<LeaveTournamentResult> {
+  // VALIDACIÓN 1 — Autenticación (requireAuth en resolver, pero se verifica acá también)
+  if (!ctx.userId) throw new Error('Authentication required');
+
+  // VALIDACIÓN 2 — El torneo existe
+  const tournament = await tournamentRepository.getTournamentById(input.tournamentId);
+  if (!tournament) throw new Error('El torneo no existe');
+
+  // VALIDACIÓN 3 — El equipo existe
+  const team = await tournamentRepository.getTournamentTeamById(input.teamId);
+  if (!team) throw new Error('El equipo no existe');
+
+  // VALIDACIÓN 4 — El equipo pertenece a este torneo
+  if (team.tournamentId !== input.tournamentId) {
+    throw new Error('Este equipo no pertenece a este torneo');
+  }
+
+  // VALIDACIÓN 5 — El usuario es el capitán (administrador) del equipo
+  // Ningún otro usuario puede retirar: ni miembro, ni organizer del torneo, ni club_admin
+  if (team.captainId !== ctx.userId) {
+    throw new Error('Solo el capitán (administrador) del equipo puede retirarlo del torneo');
+  }
+
+  // VALIDACIÓN 6 — Estado del torneo permite retiro
+  const statusBlockMessages: Record<string, string> = {
+    in_progress: 'No se puede abandonar un torneo en curso. El torneo ya comenzó y los partidos están programados',
+    completed: 'El torneo ya finalizó',
+    cancelled: 'El torneo fue cancelado',
+  };
+  if (tournament.status !== 'registration') {
+    const msg = statusBlockMessages[tournament.status];
+    throw new Error(msg ?? 'El torneo no está en estado de inscripción');
+  }
+
+  // VALIDACIÓN 7 — El equipo no fue ya retirado (previene race condition + doble retiro)
+  if (team.status === 'withdrawn') {
+    throw new Error('Este equipo ya fue retirado del torneo');
+  }
+
+  // VALIDACIÓN 8 — Defense-in-depth: no hay fixtures jugados del equipo
+  const teamFixtures = await tournamentRepository.getFixtureMatchesByTeam(input.teamId);
+  const hasPlayedFixture = teamFixtures.some(
+    (match) => match.status === 'completed' || match.status === 'in_progress',
+  );
+  if (hasPlayedFixture) {
+    throw new Error('No se puede retirar porque el equipo ya jugó partidos del fixture');
+  }
+
+  // ACCIÓN — Ejecutar retiro (escribir con user-scoped client para respetar RLS)
+  const writeClient = ctx.supabase ?? supabase;
+
+  // 1. Soft delete del equipo (status → withdrawn, guarda timestamp y motivo)
+  await tournamentRepository.withdrawTeamById(input.teamId, input.reason ?? null, writeClient);
+
+  // 2. Hard delete de los miembros (su inscripción queda invalidada)
+  await tournamentRepository.deleteTeamMembersById(input.teamId, writeClient);
+
+  // 3. Limpiar referencias del equipo en fixtures (edge case: fixture fue generado durante registration)
+  if (teamFixtures.length > 0) {
+    await tournamentRepository.clearTeamFromFixtureMatches(input.teamId, supabase);
+  }
+
+  // 4. Calcular equipos activos restantes con service-role client (no user-scoped necesario para lectura)
+  const remainingTeams = await tournamentRepository.countActiveTeams(input.tournamentId, supabase);
+
+  // 5. Invalidar todos los caches del torneo y del listado
+  await invalidateTournamentListCaches();
+
+  console.info(
+    `[tournamentService.leaveTournament] teamId=${input.teamId} retirado de tournamentId=${input.tournamentId} por userId=${ctx.userId}. remainingTeams=${remainingTeams}`,
+  );
+
+  // POST-ACCIÓN — Consecuencias según cantidad de equipos restantes
+
+  // Caso C: 0 equipos → torneo se cancela automáticamente
+  if (remainingTeams === 0) {
+    await tournamentRepository.updateTournamentStatus(input.tournamentId, 'cancelled', supabase);
+    await invalidateTournamentListCaches();
+    console.info(
+      `[tournamentService.leaveTournament] tournamentId=${input.tournamentId} cancelado automáticamente (0 equipos restantes)`,
+    );
+    return {
+      success: true,
+      message: 'El torneo fue cancelado porque no quedan equipos inscriptos',
+      tournamentStatus: 'CANCELLED',
+      remainingTeams: 0,
+    };
+  }
+
+  // Caso B: 1 equipo → warning (el torneo no se cancela pero está en riesgo)
+  if (remainingTeams === 1) {
+    return {
+      success: true,
+      message:
+        'Atención: el torneo tiene solo 1 equipo inscripto. Si no se inscriben más equipos antes de la fecha límite, el torneo podría cancelarse',
+      tournamentStatus: 'REGISTRATION',
+      remainingTeams: 1,
+    };
+  }
+
+  // Caso A: 2+ equipos → torneo sigue normal
+  return {
+    success: true,
+    message: 'Tu equipo fue retirado del torneo exitosamente',
+    tournamentStatus: 'REGISTRATION',
+    remainingTeams,
+  };
+}
+
 export const tournamentService = {
   listRegistrationTournaments,
   getTournamentById,
@@ -635,4 +774,5 @@ export const tournamentService = {
   joinTournament,
   addTournamentTeamMember,
   removeTournamentTeamMember,
+  leaveTournament,
 };
