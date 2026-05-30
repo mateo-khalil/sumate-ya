@@ -129,6 +129,10 @@ extend type Query {
   team(id: ID!): Team
   myPendingInvitations: [TeamInvitation!]!
   teamAvailabilityMatrix(teamId: ID!): [AvailabilityMatrixCell!]!
+  # Búsqueda de jugadores para invitar (mín 2 chars, máx 10 resultados)
+  searchPlayers(search: String!): [TeamProfile!]!
+  # Listado de invitaciones enviadas para un equipo (solo capitán)
+  teamInvitations(teamId: ID!): [TeamInvitation!]!
 }
 
 extend type Mutation {

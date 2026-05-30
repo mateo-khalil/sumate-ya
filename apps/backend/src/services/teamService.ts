@@ -516,6 +516,37 @@ async function myPendingInvitations(ctx: ServiceContext): Promise<TeamInvitation
   return rows.map(r => rowToTeamInvitation(r as any));
 }
 
+async function searchPlayers(search: string, ctx: ServiceContext): Promise<TeamProfile[]> {
+  getUserIdOrThrow(ctx);
+  const trimmed = search.trim();
+  if (trimmed.length < 2) return [];
+  const rows = await teamRepository.searchProfiles(trimmed, 10);
+  return rows.map(rowToTeamProfile);
+}
+
+async function listTeamInvitations(teamId: string, ctx: ServiceContext): Promise<TeamInvitation[]> {
+  const userId = getUserIdOrThrow(ctx);
+
+  const teamRow = await teamRepository.getTeamWithDetails(teamId);
+  if (!teamRow) throw new Error('Equipo no encontrado');
+  if (teamRow.captainId !== userId) throw new Error('Solo el capitán puede ver las invitaciones del equipo');
+
+  const teamGql = rowToTeam(teamRow);
+  const rows = await teamRepository.getInvitationsByTeamId(teamId);
+
+  return rows.map(row => ({
+    id: row.id,
+    team: teamGql,
+    invitedPlayer: rowToTeamProfile(row.invitedPlayer),
+    invitedBy: rowToTeamProfile(row.invitedByProfile),
+    status: DB_TO_INVITATION_STATUS[row.status] ?? InvitationStatus.Pending,
+    message: row.message ?? null,
+    expiresAt: row.expiresAt,
+    respondedAt: row.respondedAt ?? null,
+    createdAt: row.createdAt,
+  }));
+}
+
 /** Usado por tournamentService para validar F9: solo capitanes pueden crear torneos. */
 export async function isCaptainOfAnyTeam(userId: string): Promise<boolean> {
   const teams = await teamRepository.getTeamsByCaptainId(userId);
@@ -537,4 +568,6 @@ export const teamService = {
   setMyAvailability,
   getTeamAvailabilityMatrix,
   myPendingInvitations,
+  searchPlayers,
+  listTeamInvitations,
 };

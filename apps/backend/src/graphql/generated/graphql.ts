@@ -777,10 +777,12 @@ export type Query = {
   mySettings: PrivacySettings;
   myTeams: Array<Team>;
   profile?: Maybe<Profile>;
+  searchPlayers: Array<TeamProfile>;
   slotAuditLog: Array<SlotAuditLog>;
   slotImpactPreview: SlotImpactPreview;
   team?: Maybe<Team>;
   teamAvailabilityMatrix: Array<AvailabilityMatrixCell>;
+  teamInvitations: Array<TeamInvitation>;
   tournament?: Maybe<Tournament>;
   tournamentEligiblePlayers: Array<TournamentPlayer>;
   tournaments: Array<Tournament>;
@@ -845,6 +847,11 @@ export type QueryProfileArgs = {
 };
 
 
+export type QuerySearchPlayersArgs = {
+  search: Scalars['String']['input'];
+};
+
+
 export type QuerySlotAuditLogArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
@@ -863,6 +870,11 @@ export type QueryTeamArgs = {
 
 
 export type QueryTeamAvailabilityMatrixArgs = {
+  teamId: Scalars['ID']['input'];
+};
+
+
+export type QueryTeamInvitationsArgs = {
   teamId: Scalars['ID']['input'];
 };
 
@@ -1848,10 +1860,12 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   mySettings?: Resolver<ResolversTypes['PrivacySettings'], ParentType, ContextType>;
   myTeams?: Resolver<Array<ResolversTypes['Team']>, ParentType, ContextType>;
   profile?: Resolver<Maybe<ResolversTypes['Profile']>, ParentType, ContextType, RequireFields<QueryProfileArgs, 'id'>>;
+  searchPlayers?: Resolver<Array<ResolversTypes['TeamProfile']>, ParentType, ContextType, RequireFields<QuerySearchPlayersArgs, 'search'>>;
   slotAuditLog?: Resolver<Array<ResolversTypes['SlotAuditLog']>, ParentType, ContextType, RequireFields<QuerySlotAuditLogArgs, 'slotId'>>;
   slotImpactPreview?: Resolver<ResolversTypes['SlotImpactPreview'], ParentType, ContextType, RequireFields<QuerySlotImpactPreviewArgs, 'slotIds'>>;
   team?: Resolver<Maybe<ResolversTypes['Team']>, ParentType, ContextType, RequireFields<QueryTeamArgs, 'id'>>;
   teamAvailabilityMatrix?: Resolver<Array<ResolversTypes['AvailabilityMatrixCell']>, ParentType, ContextType, RequireFields<QueryTeamAvailabilityMatrixArgs, 'teamId'>>;
+  teamInvitations?: Resolver<Array<ResolversTypes['TeamInvitation']>, ParentType, ContextType, RequireFields<QueryTeamInvitationsArgs, 'teamId'>>;
   tournament?: Resolver<Maybe<ResolversTypes['Tournament']>, ParentType, ContextType, RequireFields<QueryTournamentArgs, 'id'>>;
   tournamentEligiblePlayers?: Resolver<Array<ResolversTypes['TournamentPlayer']>, ParentType, ContextType, RequireFields<QueryTournamentEligiblePlayersArgs, 'tournamentId'>>;
   tournaments?: Resolver<Array<ResolversTypes['Tournament']>, ParentType, ContextType>;

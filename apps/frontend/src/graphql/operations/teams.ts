@@ -205,3 +205,20 @@ export const SET_MY_AVAILABILITY = /* GraphQL */ `
     setMyAvailability(input: $input) { success message }
   }
 `;
+
+export const SEARCH_PLAYERS = /* GraphQL */ `
+  query SearchPlayers($search: String!) {
+    searchPlayers(search: $search) { ${TEAM_PROFILE_FRAGMENT} }
+  }
+`;
+
+export const TEAM_INVITATIONS = /* GraphQL */ `
+  query TeamInvitations($teamId: ID!) {
+    teamInvitations(teamId: $teamId) {
+      id status message expiresAt respondedAt createdAt
+      invitedPlayer { ${TEAM_PROFILE_FRAGMENT} }
+      invitedBy { ${TEAM_PROFILE_FRAGMENT} }
+      team { id name }
+    }
+  }
+`;

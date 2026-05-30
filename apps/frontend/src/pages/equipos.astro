@@ -14,6 +14,7 @@ export const prerender = false;
 import { Users, Shield, ChevronRight } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
 import { CreateTeamDialog } from '../components/teams/CreateTeamDialog';
+import { MyInvitationsList } from '../components/teams/MyInvitationsList';
 import { MY_TEAMS, type TeamData } from '../graphql/operations/teams';
 import { readAccessToken } from '../lib/auth';
 
@@ -63,6 +64,9 @@ function myRole(team: TeamData): 'CAPTAIN' | 'MEMBER' {
       </div>
       <CreateTeamDialog client:load />
     </div>
+
+    {/* Invitaciones pendientes recibidas */}
+    <MyInvitationsList client:load />
 
     {fetchError && (
       <div class="error-banner" role="alert">{fetchError}</div>

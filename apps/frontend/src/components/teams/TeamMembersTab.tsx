@@ -18,6 +18,7 @@ interface Props {
   userId: string | null;
   isCaptain: boolean;
   onTeamUpdated: (team: TeamData) => void;
+  onInviteClick?: () => void;
 }
 
 const POSITION_LABEL: Record<string, string> = {
@@ -40,7 +41,7 @@ async function gqlAuthPost<T>(query: string, variables?: Record<string, unknown>
   }
 }
 
-export function TeamMembersTab({ team, userId, isCaptain, onTeamUpdated }: Props) {
+export function TeamMembersTab({ team, userId, isCaptain, onTeamUpdated, onInviteClick }: Props) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
@@ -74,7 +75,7 @@ export function TeamMembersTab({ team, userId, isCaptain, onTeamUpdated }: Props
           {team.members.length} {team.members.length === 1 ? 'jugador' : 'jugadores'}
         </span>
         {isCaptain && (
-          <button className="invite-btn" disabled title="Invitar jugador (próximamente)">
+          <button className="invite-btn" onClick={onInviteClick}>
             <UserPlus size={15} strokeWidth={2} aria-hidden="true" />
             Invitar jugador
           </button>

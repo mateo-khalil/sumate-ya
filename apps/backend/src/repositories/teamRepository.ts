@@ -509,6 +509,48 @@ class TeamRepository {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (data ?? []) as any[];
   }
+
+  // --- Player Search ---
+
+  async searchProfiles(search: string, limit = 10, db?: SupabaseClient): Promise<ProfileRow[]> {
+    const client = db ?? supabase;
+    const { data, error } = await client
+      .from('profiles')
+      .select(PROFILE_COLUMNS)
+      .ilike('displayName', `%${search}%`)
+      .limit(limit);
+
+    if (error) {
+      console.error('[TeamRepository.searchProfiles] Supabase error:', error.message);
+      throw new Error(error.message);
+    }
+    return (data ?? []) as ProfileRow[];
+  }
+
+  // --- Team Invitations (captain view) ---
+
+  async getInvitationsByTeamId(
+    teamId: string,
+    db?: SupabaseClient,
+  ): Promise<(TeamInvitationRow & { invitedPlayer: ProfileRow; invitedByProfile: ProfileRow })[]> {
+    const client = db ?? supabase;
+    const { data, error } = await client
+      .from('teamInvitations')
+      .select(`
+        ${INVITATION_COLUMNS},
+        invitedPlayer:profiles!teamInvitations_invitedPlayerId_fkey(${PROFILE_COLUMNS}),
+        invitedByProfile:profiles!teamInvitations_invitedBy_fkey(${PROFILE_COLUMNS})
+      `)
+      .eq('teamId', teamId)
+      .order('createdAt', { ascending: false });
+
+    if (error) {
+      console.error(`[TeamRepository.getInvitationsByTeamId] Supabase error for teamId=${teamId}:`, error.message);
+      throw new Error(error.message);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (data ?? []) as any[];
+  }
 }
 
 export const teamRepository = new TeamRepository();

@@ -117,6 +117,30 @@ const Query: QueryResolvers = {
       return [];
     }
   },
+
+  searchPlayers: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const parsed = z.string().min(2, 'Mínimo 2 caracteres').max(80).safeParse(args.search);
+    if (!parsed.success) return [];
+    try {
+      return await teamService.searchPlayers(parsed.data, { userId: user.id });
+    } catch (error) {
+      console.error(`[teamResolver.searchPlayers] Failed for userId=${user.id}:`, error);
+      return [];
+    }
+  },
+
+  teamInvitations: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const parsed = UUID.safeParse(args.teamId);
+    if (!parsed.success) return [];
+    try {
+      return await teamService.listTeamInvitations(parsed.data, { userId: user.id });
+    } catch (error) {
+      console.error(`[teamResolver.teamInvitations] Failed for teamId=${args.teamId}:`, error);
+      return [];
+    }
+  },
 };
 
 const Mutation: MutationResolvers = {

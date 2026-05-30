@@ -10,11 +10,13 @@
  */
 
 import { useState } from 'react';
-import { Users, Settings, Clock, Trophy } from 'lucide-react';
+import { Users, Settings, Clock, Trophy, Mail } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { TeamData } from '../../graphql/operations/teams';
 import { TeamMembersTab } from './TeamMembersTab';
 import { TeamConfigTab } from './TeamConfigTab';
+import { TeamInvitationsTab } from './TeamInvitationsTab';
+import { InvitePlayerDialog } from './InvitePlayerDialog';
 
 interface Props {
   team: TeamData;
@@ -22,7 +24,7 @@ interface Props {
   isCaptain: boolean;
 }
 
-type Tab = 'members' | 'tournaments' | 'availability' | 'config';
+type Tab = 'members' | 'invitations' | 'tournaments' | 'availability' | 'config';
 
 interface TabDef {
   id: Tab;
@@ -33,6 +35,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: 'members',      label: 'Miembros',      Icon: Users,    captainOnly: false },
+  { id: 'invitations',  label: 'Invitaciones',  Icon: Mail,     captainOnly: true  },
   { id: 'availability', label: 'Disponibilidad', Icon: Clock,    captainOnly: false },
   { id: 'tournaments',  label: 'Torneos',        Icon: Trophy,   captainOnly: true  },
   { id: 'config',       label: 'Configuración',  Icon: Settings, captainOnly: true  },
@@ -41,11 +44,17 @@ const TABS: TabDef[] = [
 export function TeamDashboard({ team: initialTeam, userId, isCaptain }: Props) {
   const [team, setTeam] = useState<TeamData>(initialTeam);
   const [activeTab, setActiveTab] = useState<Tab>('members');
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
 
   const visibleTabs = TABS.filter(t => isCaptain || !t.captainOnly);
 
-  function handleTeamUpdated(updated: TeamData) {
-    setTeam(updated);
+  function handleTeamUpdated(updated: TeamData) { setTeam(updated); }
+
+  function openInviteDialog() { setShowInviteDialog(true); }
+
+  function handleInvited() {
+    // Refrescar equipo tras invitación exitosa (cambia memberCount en curso)
+    setShowInviteDialog(false);
   }
 
   return (
@@ -74,6 +83,14 @@ export function TeamDashboard({ team: initialTeam, userId, isCaptain }: Props) {
             userId={userId}
             isCaptain={isCaptain}
             onTeamUpdated={handleTeamUpdated}
+            onInviteClick={isCaptain ? openInviteDialog : undefined}
+          />
+        )}
+
+        {activeTab === 'invitations' && isCaptain && (
+          <TeamInvitationsTab
+            teamId={team.id}
+            onInviteNew={openInviteDialog}
           />
         )}
 
@@ -86,12 +103,18 @@ export function TeamDashboard({ team: initialTeam, userId, isCaptain }: Props) {
         )}
 
         {activeTab === 'config' && isCaptain && (
-          <TeamConfigTab
-            team={team}
-            onTeamUpdated={handleTeamUpdated}
-          />
+          <TeamConfigTab team={team} onTeamUpdated={handleTeamUpdated} />
         )}
       </div>
+
+      {/* Invite dialog (portal) */}
+      {showInviteDialog && isCaptain && (
+        <InvitePlayerDialog
+          teamId={team.id}
+          onClose={() => setShowInviteDialog(false)}
+          onInvited={handleInvited}
+        />
+      )}
     </div>
   );
 }
