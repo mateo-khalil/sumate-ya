@@ -13,6 +13,7 @@ export const prerender = false;
 
 import { Users, Shield, ChevronRight } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
+import Topbar from '../components/shared/Topbar.astro';
 import { CreateTeamDialog } from '../components/teams/CreateTeamDialog';
 import { MyInvitationsList } from '../components/teams/MyInvitationsList';
 import { MY_TEAMS, type TeamData } from '../graphql/operations/teams';
@@ -55,7 +56,9 @@ function myRole(team: TeamData): 'CAPTAIN' | 'MEMBER' {
 ---
 
 <Layout title="Mis Equipos">
-  <div class="page-container">
+  <div class="page-shell">
+    <Topbar user={user} />
+    <div class="page-container">
     <!-- Header -->
     <div class="page-header">
       <div class="header-title">
@@ -117,11 +120,13 @@ function myRole(team: TeamData): 'CAPTAIN' | 'MEMBER' {
         })}
       </div>
     )}
+    </div>
   </div>
 </Layout>
 
 <style>
-  .page-container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+  .page-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .page-container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; flex: 1; }
 
   .page-header {
     display: flex; align-items: center; justify-content: space-between;

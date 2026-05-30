@@ -1,0 +1,264 @@
+---
+/**
+ * Topbar — barra de navegación compartida, siempre visible (sticky top-0).
+ *
+ * Decision Context:
+ * - Extraído de las navbars inline de cada página para eliminar duplicación y garantizar
+ *   que todos los usuarios (player, capitán, club_admin, visitante) tengan la misma nav.
+ * - Las flechas ← → usan history.back() y history.forward() para facilitar navegación.
+ * - El botón "Partidos" es el hub central: allí se listan partidos Y torneos.
+ * - CaptainBadge solo se monta para usuarios con role=player (isla React lazy).
+ * - Previously fixed bugs: none relevant.
+ */
+
+import { Volleyball, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { CaptainBadge } from '@/components/teams/CaptainBadge';
+
+interface Props {
+  user?: {
+    id: string;
+    displayName?: string | null;
+    email?: string | null;
+    role?: string | null;
+  } | null;
+}
+
+const { user } = Astro.props;
+const nombre = user?.displayName || user?.email || '';
+const isPlayer = user?.role === 'player';
+const isClubAdmin = user?.role === 'club_admin';
+---
+
+<nav class="shared-topbar">
+  <div class="topbar-inner">
+
+    <!-- Flechas de navegación del historial del navegador -->
+    <div class="nav-arrows" aria-label="Navegación">
+      <button class="nav-arrow" data-nav="back" title="Volver" aria-label="Volver">
+        <ChevronLeft size={17} strokeWidth={2.5} aria-hidden="true" />
+      </button>
+      <button class="nav-arrow" data-nav="forward" title="Adelante" aria-label="Adelante">
+        <ChevronRight size={17} strokeWidth={2.5} aria-hidden="true" />
+      </button>
+    </div>
+
+    <!-- Brand -->
+    <a href="/partidos" class="topbar-brand">
+      <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
+      <span class="topbar-name">SUMATE YA</span>
+    </a>
+
+    <!-- Links centrales visibles en todas las vistas -->
+    <div class="topbar-center">
+      <a href="/partidos" class="nav-link">Partidos</a>
+      {user && <a href="/equipos" class="nav-link">Equipos</a>}
+    </div>
+
+    <!-- Acciones contextuales según rol -->
+    <div class="topbar-actions">
+      {user ? (
+        <>
+          {isPlayer && (
+            <a href="/partidos/crear" class="btn-action">+ Crear partido</a>
+          )}
+          <a href="/torneos/crear" class="btn-action btn-action--secondary">Crear torneo</a>
+          {isClubAdmin && (
+            <a href="/panel-club" class="btn-action btn-action--club">Panel Club</a>
+          )}
+          {isPlayer && <a href="/perfil" class="nav-link nav-link--perfil">Mi Perfil</a>}
+          {isPlayer && user.id && <CaptainBadge client:load userId={user.id} />}
+          <span class="user-badge">
+            <span class="user-dot" aria-hidden="true"></span>
+            <span class="user-name">{nombre}</span>
+          </span>
+          <ThemeToggle client:load />
+          <form method="POST" action="/api/auth/logout" style="display:contents">
+            <button type="submit" class="btn-logout">Salir</button>
+          </form>
+        </>
+      ) : (
+        <>
+          <ThemeToggle client:load />
+          <a href="/login" class="btn-login">Iniciar Sesión</a>
+        </>
+      )}
+    </div>
+  </div>
+  <div class="topbar-accent" aria-hidden="true"></div>
+</nav>
+
+<!-- Activa las flechas de navegación en cliente -->
+<script>
+  document.querySelectorAll<HTMLButtonElement>('[data-nav="back"]').forEach(btn =>
+    btn.addEventListener('click', () => history.back())
+  );
+  document.querySelectorAll<HTMLButtonElement>('[data-nav="forward"]').forEach(btn =>
+    btn.addEventListener('click', () => history.forward())
+  );
+</script>
+
+<style>
+  .shared-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(7, 15, 31, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .topbar-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  /* Flechas de historial */
+  .nav-arrows {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+  .nav-arrow {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.09);
+    color: hsl(215 20% 55%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-arrow:hover {
+    background: rgba(255,255,255,0.13);
+    color: hsl(215 20% 80%);
+  }
+
+  /* Brand */
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .topbar-ball { color: hsl(35 100% 55%); line-height: 1; }
+  .topbar-name {
+    font-family: 'Bebas Neue', 'Barlow Condensed', sans-serif;
+    font-size: 1.05rem;
+    letter-spacing: 0.05em;
+    color: hsl(210 20% 94%);
+  }
+
+  /* Links centrales */
+  .topbar-center {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 1;
+  }
+
+  .nav-link {
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: hsl(215 20% 65%);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.15s, background 0.15s;
+  }
+  .nav-link:hover { color: hsl(215 20% 90%); background: rgba(255,255,255,0.06); }
+
+  /* Acciones */
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .btn-action {
+    padding: 0.35rem 0.75rem;
+    border-radius: 7px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: hsl(35 100% 48%);
+    color: hsl(0 0% 5%);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .btn-action:hover { opacity: 0.88; }
+  .btn-action--secondary {
+    background: hsl(216 85% 42%);
+    color: #fff;
+  }
+  .btn-action--club {
+    background: hsl(270 60% 45%);
+    color: #fff;
+  }
+
+  .user-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: hsl(215 20% 65%);
+    white-space: nowrap;
+  }
+  .user-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: hsl(140 70% 50%);
+    flex-shrink: 0;
+  }
+  .user-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
+
+  .btn-logout {
+    padding: 0.3rem 0.65rem;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.12);
+    color: hsl(215 20% 60%);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-logout:hover { border-color: rgba(255,255,255,0.3); color: hsl(215 20% 85%); }
+
+  .btn-login {
+    padding: 0.35rem 0.8rem;
+    border-radius: 7px;
+    background: hsl(35 100% 48%);
+    color: hsl(0 0% 5%);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .topbar-accent {
+    height: 2px;
+    background: linear-gradient(90deg, hsl(35 100% 48%) 0%, hsl(216 85% 50%) 100%);
+  }
+
+  /* Responsive: ocultar elementos secundarios en mobile */
+  @media (max-width: 768px) {
+    .nav-link--perfil { display: none; }
+    .btn-action--secondary { display: none; }
+    .user-name { display: none; }
+    .topbar-center { display: none; }
+  }
+  @media (max-width: 480px) {
+    .btn-action { display: none; }
+  }
+</style>

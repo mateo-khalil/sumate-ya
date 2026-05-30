@@ -11,8 +11,9 @@
  */
 export const prerender = false;
 
-import { Users, Shield, ChevronLeft, UserRound } from 'lucide-react';
+import { Users, Shield, UserRound } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
+import Topbar from '../../components/shared/Topbar.astro';
 import { TeamDashboard } from '../../components/teams/TeamDashboard';
 import { GET_TEAM, type TeamData } from '../../graphql/operations/teams';
 import { readAccessToken } from '../../lib/auth';
@@ -59,11 +60,9 @@ const FORMAT_LABEL: Record<string, string> = {
 ---
 
 <Layout title={team?.name ?? 'Equipo'}>
-  <div class="page-container">
-    <!-- Back -->
-    <a href="/equipos" class="back-link">
-      <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" /> Mis Equipos
-    </a>
+  <div class="page-shell">
+    <Topbar user={user} />
+    <div class="page-container">
 
     {fetchError && (
       <div class="error-banner" role="alert">{fetchError}</div>
@@ -138,19 +137,13 @@ const FORMAT_LABEL: Record<string, string> = {
         )}
       </>
     )}
+    </div>
   </div>
 </Layout>
 
 <style>
-  .page-container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
-
-  .back-link {
-    display: inline-flex; align-items: center; gap: 0.35rem;
-    color: var(--color-muted-foreground); text-decoration: none;
-    font-size: 0.875rem; margin-bottom: 1.5rem;
-    transition: color 0.15s;
-  }
-  .back-link:hover { color: var(--color-foreground); }
+  .page-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .page-container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; flex: 1; }
 
   .error-banner {
     background: hsl(0 60% 15%); border: 1px solid hsl(0 72% 40%);
