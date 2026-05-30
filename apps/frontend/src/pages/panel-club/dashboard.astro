@@ -218,6 +218,52 @@ const nombre = user.displayName || user.email;
   @media (min-width: 768px) and (max-width: 1023px) {
     .page-layout { padding: 1.5rem 1.25rem; gap: 1.5rem; }
   }
+
+  /* ── Tema claro ── */
+  :global(html.light) .topbar {
+    background: rgba(255,255,255,0.93);
+    border-bottom-color: rgba(0,0,0,0.08);
+  }
+  :global(html.light) .topbar-name { color: hsl(220 72% 10%); }
+  :global(html.light) .topbar-role-pill {
+    background: rgba(246,164,0,0.1);
+    border-color: rgba(246,164,0,0.25);
+  }
+  :global(html.light) .user-badge {
+    color: hsl(220 20% 30%);
+    background: rgba(0,0,0,0.04);
+    border-color: rgba(0,0,0,0.1);
+  }
+  :global(html.light) .user-dot { box-shadow: none; }
+  :global(html.light) .btn-logout {
+    color: hsl(220 20% 40%); border-color: rgba(0,0,0,0.12);
+  }
+  :global(html.light) .btn-logout:hover {
+    background: rgba(0,0,0,0.04); color: hsl(220 72% 10%);
+  }
+  :global(html.light) .section-header { border-bottom-color: rgba(0,0,0,0.07); }
+  :global(html.light) .section-title { color: hsl(220 72% 10%); }
+  :global(html.light) .section-sub { color: hsl(215 16% 38%); }
+  :global(html.light) .section-label { color: hsl(42 100% 38%); }
+
+  /* KPI cards del dashboard */
+  :global(html.light) .kpi-card {
+    background: hsl(0 0% 100%);
+    border-color: rgba(0,0,0,0.07);
+  }
+  :global(html.light) .kpi-card:hover { border-color: rgba(0,0,0,0.13); }
+  :global(html.light) .kpi-icon { background: rgba(0,0,0,0.04); }
+  :global(html.light) .kpi-label { color: hsl(215 16% 40%); }
+  :global(html.light) .kpi-sub { color: hsl(215 16% 52%); }
+
+  /* Club name */
+  :global(html.light) .dash-club-title { color: hsl(220 72% 10%); }
+  :global(html.light) .dash-club-label { color: hsl(42 100% 38%); }
+
+  /* Occupancy gauge track */
+  :global(html.light) .occ-gauge {
+    background: conic-gradient(var(--col, hsl(216 85% 55%)) var(--pct, 0%), rgba(0,0,0,0.07) 0);
+  }
 </style>
 
 <script>

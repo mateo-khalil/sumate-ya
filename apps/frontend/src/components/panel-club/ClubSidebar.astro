@@ -17,7 +17,7 @@
  *     creation feature unreachable from navigation. Fixed by adding it here.
  */
 
-import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3, Trophy } from 'lucide-react';
+import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3, Trophy, Home, Shield } from 'lucide-react';
 
 const { currentPath } = Astro.props;
 
@@ -27,6 +27,27 @@ function isActive(href: string): boolean {
 ---
 
 <aside class="sidebar">
+  <!-- Navegación global: accesible desde el panel de club -->
+  <div class="sidebar-section">
+    <div class="sidebar-label">NAVEGACIÓN</div>
+    <nav class="sidebar-nav">
+      <a
+        href="/partidos"
+        class={`sidebar-link${isActive('/partidos') ? ' sidebar-link--active' : ''}`}
+      >
+        <span class="sidebar-icon"><Home size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Partidos &amp; Torneos
+      </a>
+      <a
+        href="/equipos"
+        class={`sidebar-link${currentPath.startsWith('/equipos') ? ' sidebar-link--active' : ''}`}
+      >
+        <span class="sidebar-icon"><Shield size={16} strokeWidth={2} aria-hidden="true" /></span>
+        Equipos
+      </a>
+    </nav>
+  </div>
+
   <div class="sidebar-section">
     <div class="sidebar-label">GESTIÓN</div>
     <nav class="sidebar-nav">

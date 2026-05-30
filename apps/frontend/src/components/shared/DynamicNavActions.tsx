@@ -56,7 +56,14 @@ export function DynamicNavActions({ userId }: Props) {
     setInvitations(invData?.myPendingInvitations ?? []);
   }
 
-  useEffect(() => { loadData(); }, [userId]);
+  useEffect(() => {
+    loadData();
+    // Refresca invitaciones cuando el usuario vuelve al tab.
+    // Soluciona el caso donde una invitación fue enviada mientras el tab estaba inactivo.
+    const onVisible = () => { if (document.visibilityState === 'visible') loadData(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [userId]);
 
   // Cerrar dropdown al clickear fuera
   useEffect(() => {
