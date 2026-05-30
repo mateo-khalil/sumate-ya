@@ -6,7 +6,11 @@
  *   full insert happens transactionally under auth.uid() without direct table RLS friction.
  * - Once tournamentTeams reaches teamCount, generateFixtureIfRegistrationComplete() fills
  *   those fixture rows with round-robin pairings and marks the tournament in_progress.
+ * - F9 (issue #137): solo capitanes de equipo permanente pueden crear torneos. La validación
+ *   usa teamRepository.getTeamsByCaptainId para no introducir una dependencia circular entre
+ *   servicios (tournamentService → teamRepository es aceptable; → teamService no lo es).
  * - Services return data only; resolvers decide how to shape success/error responses.
+ * - Previously fixed bugs: none relevant.
  */
 
 import { supabase } from '../config/supabase.js';
@@ -38,6 +42,7 @@ import {
   type TournamentTeamRow,
 } from '../repositories/tournamentRepository.js';
 import { clubRepository } from '../repositories/clubRepository.js';
+import { teamRepository } from '../repositories/teamRepository.js';
 import { dateToDayOfWeek } from './clubService.js';
 import type { ServiceContext } from '../types/context.js';
 
@@ -427,6 +432,12 @@ export async function createTournament(
   if (!ctx.userId) throw new Error('Authentication required');
   const db = ctx.supabase;
   if (!db) throw new Error('User-scoped client required for write operations');
+
+  // F9: solo capitanes de equipo permanente pueden crear torneos
+  const captainTeams = await teamRepository.getTeamsByCaptainId(ctx.userId);
+  if (captainTeams.length === 0) {
+    throw new Error('Solo capitanes de equipo pueden crear torneos. Primero creá un equipo y convertite en capitán.');
+  }
 
   const name = input.name.trim();
   if (name.length < 3) throw new Error('El nombre del torneo debe tener al menos 3 caracteres');
