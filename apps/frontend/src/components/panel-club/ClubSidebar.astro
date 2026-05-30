@@ -3,67 +3,76 @@
  * ClubSidebar — shared navigation sidebar for the club admin panel
  *
  * Decision Context:
- * - Extracted from per-page inline sidebars to eliminate duplication across
- *   dashboard.astro, horarios.astro, and crear-partido.astro.
- * - "Crear partido" is a real implemented route (/panel-club/crear-partido), added in
- *   the panel-club-crear-partido branch. It uses sidebar-link--highlight style to stand
- *   out as the primary CTA action — same treatment it had in the pre-extraction sidebars.
- * - Active detection: strict equality on pathname so /panel-club/horarios doesn't
- *   accidentally activate /panel-club.
- * - Placeholder routes (#): Canchas, Reservas, Configuración, Estadísticas are not yet
- *   implemented. They stay in the nav with muted style to show the intended structure.
+ * - Sección NAVEGACIÓN (azul FIFA): links al hub principal de la app (Partidos & Torneos,
+ *   Equipos). Usa azul para distinguirlos visualmente de las acciones internas del panel.
+ * - Sección GESTIÓN (naranja FIFA): acciones del panel. "Crear partido" es el CTA
+ *   principal con estilo filled/sólido. "Crear torneo" usa el estilo highlight secundario.
+ * - Sección REPORTES: items placeholder para futura implementación, claramente marcados.
+ * - Todos los estilos usan fallbacks HSL + overrides html.light para tema claro/oscuro.
  * - Previously fixed bugs:
- *   - "Crear partido" link was missing after sidebar extraction, making the match
- *     creation feature unreachable from navigation. Fixed by adding it here.
+ *   - "Crear partido" link was missing after sidebar extraction. Fixed by adding it here.
  */
 
-import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3, Trophy, Home, Shield } from 'lucide-react';
+import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3, Trophy, Volleyball as Ball, Home, Shield } from 'lucide-react';
 
 const { currentPath } = Astro.props;
 
 function isActive(href: string): boolean {
   return currentPath === href;
 }
+function startsWithPath(prefix: string): boolean {
+  return currentPath.startsWith(prefix);
+}
 ---
 
 <aside class="sidebar">
-  <!-- Navegación global: accesible desde el panel de club -->
+
+  <!-- ── NAVEGACIÓN — links al hub principal de la app ── -->
   <div class="sidebar-section">
-    <div class="sidebar-label">NAVEGACIÓN</div>
+    <div class="sidebar-label sidebar-label--nav">
+      <span class="label-bar label-bar--blue"></span>
+      NAVEGACIÓN
+    </div>
     <nav class="sidebar-nav">
       <a
         href="/partidos"
-        class={`sidebar-link${isActive('/partidos') ? ' sidebar-link--active' : ''}`}
+        class={`sidebar-link sidebar-link--nav${isActive('/partidos') ? ' sidebar-link--nav-active' : ''}`}
       >
-        <span class="sidebar-icon"><Home size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><Home size={15} strokeWidth={2} aria-hidden="true" /></span>
         Partidos &amp; Torneos
       </a>
       <a
         href="/equipos"
-        class={`sidebar-link${currentPath.startsWith('/equipos') ? ' sidebar-link--active' : ''}`}
+        class={`sidebar-link sidebar-link--nav${startsWithPath('/equipos') ? ' sidebar-link--nav-active' : ''}`}
       >
-        <span class="sidebar-icon"><Shield size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><Shield size={15} strokeWidth={2} aria-hidden="true" /></span>
         Equipos
       </a>
     </nav>
   </div>
 
+  <!-- ── GESTIÓN — acciones internas del panel ── -->
   <div class="sidebar-section">
-    <div class="sidebar-label">GESTIÓN</div>
+    <div class="sidebar-label sidebar-label--mgmt">
+      <span class="label-bar label-bar--orange"></span>
+      GESTIÓN
+    </div>
     <nav class="sidebar-nav">
+
       <a
         href="/panel-club/dashboard"
         class={`sidebar-link${isActive('/panel-club/dashboard') ? ' sidebar-link--active' : ''}`}
       >
-        <span class="sidebar-icon"><LayoutDashboard size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><LayoutDashboard size={15} strokeWidth={2} aria-hidden="true" /></span>
         Dashboard
       </a>
 
+      <!-- CTA principal: Crear partido -->
       <a
         href="/panel-club/crear-partido"
-        class={`sidebar-link sidebar-link--highlight${isActive('/panel-club/crear-partido') ? ' sidebar-link--active' : ''}`}
+        class={`sidebar-link sidebar-link--cta${isActive('/panel-club/crear-partido') ? ' sidebar-link--cta-active' : ''}`}
       >
-        <span class="sidebar-icon"><Plus size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><Plus size={15} strokeWidth={2.5} aria-hidden="true" /></span>
         Crear partido
       </a>
 
@@ -71,142 +80,295 @@ function isActive(href: string): boolean {
         href="/panel-club/horarios"
         class={`sidebar-link${isActive('/panel-club/horarios') ? ' sidebar-link--active' : ''}`}
       >
-        <span class="sidebar-icon"><Calendar size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><Calendar size={15} strokeWidth={2} aria-hidden="true" /></span>
         Horarios
       </a>
 
+      <!-- CTA secundario: Crear torneo -->
       <a
         href="/torneos/crear"
-        class={`sidebar-link${isActive('/torneos/crear') ? ' sidebar-link--active' : ''}`}
+        class={`sidebar-link sidebar-link--secondary${isActive('/torneos/crear') ? ' sidebar-link--active' : ''}`}
       >
-        <span class="sidebar-icon"><Trophy size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><Trophy size={15} strokeWidth={2} aria-hidden="true" /></span>
         Crear torneo
       </a>
 
-      <a href="#" class="sidebar-link sidebar-link--placeholder">
-        <span class="sidebar-icon"><Volleyball size={16} strokeWidth={2} aria-hidden="true" /></span>
+      <div class="sidebar-divider"></div>
+
+      <a href="#" class="sidebar-link sidebar-link--placeholder" tabindex="-1" aria-disabled="true">
+        <span class="sidebar-icon"><Ball size={15} strokeWidth={2} aria-hidden="true" /></span>
         Canchas
+        <span class="coming-pill">Próximo</span>
       </a>
 
-      <a href="#" class="sidebar-link sidebar-link--placeholder">
-        <span class="sidebar-icon"><Users size={16} strokeWidth={2} aria-hidden="true" /></span>
+      <a href="#" class="sidebar-link sidebar-link--placeholder" tabindex="-1" aria-disabled="true">
+        <span class="sidebar-icon"><Users size={15} strokeWidth={2} aria-hidden="true" /></span>
         Reservas
+        <span class="coming-pill">Próximo</span>
       </a>
 
-      <a href="#" class="sidebar-link sidebar-link--placeholder">
-        <span class="sidebar-icon"><Settings size={16} strokeWidth={2} aria-hidden="true" /></span>
+      <a href="#" class="sidebar-link sidebar-link--placeholder" tabindex="-1" aria-disabled="true">
+        <span class="sidebar-icon"><Settings size={15} strokeWidth={2} aria-hidden="true" /></span>
         Configuración
+        <span class="coming-pill">Próximo</span>
+      </a>
+
+    </nav>
+  </div>
+
+  <!-- ── REPORTES ── -->
+  <div class="sidebar-section">
+    <div class="sidebar-label sidebar-label--mgmt">
+      <span class="label-bar label-bar--orange"></span>
+      REPORTES
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="sidebar-link sidebar-link--placeholder" tabindex="-1" aria-disabled="true">
+        <span class="sidebar-icon"><BarChart3 size={15} strokeWidth={2} aria-hidden="true" /></span>
+        Estadísticas
+        <span class="coming-pill">Próximo</span>
       </a>
     </nav>
   </div>
 
-  <div class="sidebar-section">
-    <div class="sidebar-label">REPORTES</div>
-    <nav class="sidebar-nav">
-      <a href="#" class="sidebar-link sidebar-link--placeholder">
-        <span class="sidebar-icon"><BarChart3 size={16} strokeWidth={2} aria-hidden="true" /></span>
-        Estadísticas
-      </a>
-    </nav>
-  </div>
 </aside>
 
 <style>
+  /* ── Shell ── */
   .sidebar {
-    width: 220px;
+    width: 230px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1.25rem;
+    padding: 0.25rem 0;
   }
 
-  @media (max-width: 767px) {
-    .sidebar { display: none; }
-  }
+  @media (max-width: 767px) { .sidebar { display: none; } }
 
-  .sidebar-section {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-  }
+  /* ── Section ── */
+  .sidebar-section { display: flex; flex-direction: column; gap: 0.3rem; }
 
+  /* ── Labels ── */
   .sidebar-label {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    color: hsl(215 20% 40%);
-    text-transform: uppercase;
-    padding: 0 0.75rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .sidebar-nav {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 0 0.5rem;
+    margin-bottom: 0.2rem;
   }
+  .sidebar-label--nav  { color: hsl(216 60% 55%); }
+  .sidebar-label--mgmt { color: hsl(35 80% 50%); }
+  .label-bar {
+    width: 3px; height: 12px; border-radius: 2px; flex-shrink: 0;
+  }
+  .label-bar--blue   { background: hsl(216 85% 55%); }
+  .label-bar--orange { background: hsl(35 100% 48%); }
 
+  /* ── Nav ── */
+  .sidebar-nav { display: flex; flex-direction: column; gap: 3px; }
+
+  /* ── Base link ── */
   .sidebar-link {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
+    gap: 0.6rem;
     padding: 0.5rem 0.75rem;
-    border-radius: 8px;
-    font-size: 0.875rem;
+    border-radius: 9px;
+    font-size: 0.86rem;
     font-family: 'Barlow', sans-serif;
     font-weight: 500;
     color: hsl(215 20% 55%);
     text-decoration: none;
     border: 1px solid transparent;
-    transition: background 0.12s, color 0.12s;
+    transition: background 0.13s, color 0.13s, border-color 0.13s;
+    position: relative;
   }
-
   .sidebar-link:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: hsl(210 20% 85%);
+    background: rgba(255,255,255,0.06);
+    color: hsl(210 20% 82%);
   }
 
+  /* ── Active (GESTIÓN) — orange ── */
   .sidebar-link--active {
-    background: rgba(246, 164, 0, 0.1);
+    background: rgba(246,164,0,0.12);
     color: hsl(42 100% 65%);
-    border-color: rgba(246, 164, 0, 0.18);
+    border-color: rgba(246,164,0,0.22);
+    font-weight: 600;
   }
-
   .sidebar-link--active:hover {
-    background: rgba(246, 164, 0, 0.14);
+    background: rgba(246,164,0,0.17);
     color: hsl(42 100% 70%);
   }
 
-  /* Crear partido — CTA destacado */
-  .sidebar-link--highlight {
-    color: hsl(35 100% 58%);
-    border-color: rgba(246, 120, 0, 0.22);
+  /* ── NAVEGACIÓN links — blue FIFA ── */
+  .sidebar-link--nav {
+    color: hsl(216 70% 60%);
+    background: rgba(27,105,224,0.07);
+    border-color: rgba(27,105,224,0.15);
+    font-weight: 600;
+  }
+  .sidebar-link--nav:hover {
+    background: rgba(27,105,224,0.14);
+    color: hsl(216 90% 72%);
+    border-color: rgba(27,105,224,0.28);
+  }
+  .sidebar-link--nav-active {
+    background: rgba(27,105,224,0.18);
+    color: hsl(216 90% 75%);
+    border-color: rgba(27,105,224,0.35);
   }
 
-  .sidebar-link--highlight:hover {
-    background: rgba(246, 120, 0, 0.1);
-    color: hsl(35 100% 68%);
-    border-color: rgba(246, 120, 0, 0.35);
+  /* ── CTA principal: Crear partido — naranja sólido ── */
+  .sidebar-link--cta {
+    background: hsl(35 100% 48%);
+    color: hsl(220 72% 7%);
+    border-color: transparent;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(246,120,0,0.25);
+  }
+  .sidebar-link--cta:hover {
+    background: hsl(35 100% 55%);
+    color: hsl(220 72% 5%);
+    box-shadow: 0 3px 12px rgba(246,120,0,0.35);
+  }
+  .sidebar-link--cta-active {
+    background: hsl(35 100% 42%);
+    box-shadow: 0 2px 6px rgba(246,120,0,0.2);
   }
 
-  /* Placeholder routes — slightly dimmed */
+  /* ── CTA secundario: Crear torneo — contorno naranja ── */
+  .sidebar-link--secondary {
+    color: hsl(35 90% 55%);
+    border-color: rgba(246,120,0,0.28);
+    font-weight: 600;
+  }
+  .sidebar-link--secondary:hover {
+    background: rgba(246,120,0,0.09);
+    color: hsl(35 100% 65%);
+    border-color: rgba(246,120,0,0.42);
+  }
+
+  /* ── Divider ── */
+  .sidebar-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 0.25rem 0.5rem;
+  }
+
+  /* ── Placeholders ── */
   .sidebar-link--placeholder {
-    opacity: 0.55;
+    opacity: 0.45;
     cursor: not-allowed;
+    pointer-events: none;
   }
 
-  .sidebar-link--placeholder:hover {
-    background: transparent;
-    color: hsl(215 20% 55%);
-    opacity: 0.55;
+  /* ── Coming soon pill ── */
+  .coming-pill {
+    margin-left: auto;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.07);
+    color: hsl(215 20% 50%);
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid rgba(255,255,255,0.08);
   }
 
+  /* ── Icon ── */
   .sidebar-icon {
     line-height: 1;
     display: inline-flex;
     align-items: center;
-    color: inherit;
     flex-shrink: 0;
+    color: inherit;
+    opacity: 0.85;
+  }
+
+  /* ══════════════════════════════════════════════
+     TEMA CLARO — overrides html.light
+     ══════════════════════════════════════════════ */
+
+  :global(html.light) .sidebar-label--nav  { color: hsl(216 70% 40%); }
+  :global(html.light) .sidebar-label--mgmt { color: hsl(35 80% 38%); }
+  :global(html.light) .label-bar--blue   { background: hsl(216 85% 48%); }
+  :global(html.light) .label-bar--orange { background: hsl(35 100% 42%); }
+
+  /* Links base */
+  :global(html.light) .sidebar-link {
+    color: hsl(220 16% 42%);
+  }
+  :global(html.light) .sidebar-link:hover {
+    background: rgba(0,0,0,0.05);
+    color: hsl(220 20% 18%);
+  }
+
+  /* Active gestión */
+  :global(html.light) .sidebar-link--active {
+    background: hsl(35 100% 92%);
+    color: hsl(35 100% 30%);
+    border-color: hsl(35 80% 78%);
+  }
+  :global(html.light) .sidebar-link--active:hover {
+    background: hsl(35 100% 88%);
+  }
+
+  /* Nav links */
+  :global(html.light) .sidebar-link--nav {
+    color: hsl(216 70% 38%);
+    background: hsl(216 100% 96%);
+    border-color: hsl(216 60% 82%);
+  }
+  :global(html.light) .sidebar-link--nav:hover {
+    background: hsl(216 100% 91%);
+    color: hsl(216 80% 28%);
+    border-color: hsl(216 60% 68%);
+  }
+  :global(html.light) .sidebar-link--nav-active {
+    background: hsl(216 100% 88%);
+    color: hsl(216 80% 28%);
+    border-color: hsl(216 60% 65%);
+  }
+
+  /* CTA principal */
+  :global(html.light) .sidebar-link--cta {
+    background: hsl(35 100% 44%);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(246,120,0,0.22);
+  }
+  :global(html.light) .sidebar-link--cta:hover {
+    background: hsl(35 100% 38%);
+  }
+
+  /* CTA secundario */
+  :global(html.light) .sidebar-link--secondary {
+    color: hsl(35 100% 35%);
+    border-color: hsl(35 80% 65%);
+    background: hsl(35 100% 96%);
+  }
+  :global(html.light) .sidebar-link--secondary:hover {
+    background: hsl(35 100% 91%);
+    color: hsl(35 100% 28%);
+    border-color: hsl(35 80% 52%);
+  }
+
+  /* Divider */
+  :global(html.light) .sidebar-divider { background: rgba(0,0,0,0.06); }
+
+  /* Placeholders */
+  :global(html.light) .sidebar-link--placeholder { opacity: 0.38; }
+
+  /* Coming pill */
+  :global(html.light) .coming-pill {
+    background: rgba(0,0,0,0.05);
+    color: hsl(215 16% 52%);
+    border-color: rgba(0,0,0,0.07);
   }
 </style>
