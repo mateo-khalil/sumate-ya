@@ -398,6 +398,7 @@ class TeamRepository {
 
   async getPendingInvitationsByPlayerId(playerId: string, db?: SupabaseClient): Promise<(TeamInvitationRow & {
     team: TeamRow;
+    invitedPlayer: ProfileRow;
     invitedByProfile: ProfileRow;
   })[]> {
     const client = db ?? supabase;
@@ -406,6 +407,7 @@ class TeamRepository {
       .select(`
         ${INVITATION_COLUMNS},
         team:teams!teamInvitations_teamId_fkey(${TEAM_COLUMNS}),
+        invitedPlayer:profiles!teamInvitations_invitedPlayerId_fkey(${PROFILE_COLUMNS}),
         invitedByProfile:profiles!teamInvitations_invitedBy_fkey(${PROFILE_COLUMNS})
       `)
       .eq('invitedPlayerId', playerId)

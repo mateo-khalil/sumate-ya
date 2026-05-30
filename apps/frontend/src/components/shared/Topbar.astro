@@ -14,7 +14,7 @@
  *   - "Crear torneo" aparecía para todos → movido a DynamicNavActions que filtra por capitanía
  */
 
-import { Volleyball, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Volleyball, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { DynamicNavActions } from './DynamicNavActions';
 
@@ -73,6 +73,11 @@ const isClubAdmin = user?.role === 'club_admin';
             <DynamicNavActions client:load userId={user.id} />
           )}
           {isPlayer && <a href="/perfil" class="nav-link nav-link--perfil">Mi Perfil</a>}
+          {isPlayer && (
+            <a href="/ajustes" class="nav-link nav-link--perfil nav-link--settings" title="Ajustes de cuenta">
+              <Settings size={15} strokeWidth={2} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'middle' }} />
+            </a>
+          )}
           <span class="user-badge">
             <span class="user-dot" aria-hidden="true"></span>
             <span class="user-name">{nombre}</span>
