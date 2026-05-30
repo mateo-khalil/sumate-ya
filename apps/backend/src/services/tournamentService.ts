@@ -85,8 +85,8 @@ const FORMAT_ORDER: Record<string, number> = {
   '11v11': 4,
 };
 
-const TOURNAMENTS_REGISTRATION_CACHE_KEY = `${CACHE_PREFIX.TOURNAMENTS_LIST}:status:registration`;
-const TOURNAMENT_DETAIL_CACHE_PREFIX = `${CACHE_PREFIX.TOURNAMENTS_LIST}:detail:`;
+const TOURNAMENTS_REGISTRATION_CACHE_KEY = `${CACHE_PREFIX.TOURNAMENTS_LIST}:status:registration:v2`;
+const TOURNAMENT_DETAIL_CACHE_PREFIX = `${CACHE_PREFIX.TOURNAMENTS_LIST}:detail:v2:`;
 
 // =====================================================
 // Helpers
@@ -193,6 +193,8 @@ function toTournament(row: TournamentRow): Tournament {
           name: row.clubs.name,
           zone: row.clubs.zone,
           address: row.clubs.address,
+          lat: row.clubs.lat ?? null,
+          lng: row.clubs.lng ?? null,
           imageUrl: row.clubs.imageUrl,
         }
       : null,

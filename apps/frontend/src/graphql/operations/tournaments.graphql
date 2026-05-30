@@ -17,6 +17,8 @@ query GetTournaments {
       name
       zone
       address
+      lat
+      lng
       imageUrl
     }
   }
@@ -47,6 +49,8 @@ query GetTournamentDetail($id: ID!) {
       name
       zone
       address
+      lat
+      lng
       imageUrl
     }
     teams {
@@ -128,6 +132,8 @@ mutation CreateTournament($input: CreateTournamentInput!) {
         name
         zone
         address
+        lat
+        lng
         imageUrl
       }
       fixtureMatches {
@@ -175,6 +181,8 @@ mutation RegisterTournamentTeam($input: RegisterTournamentTeamInput!) {
         name
         zone
         address
+        lat
+        lng
         imageUrl
       }
       fixtureMatches {
@@ -240,6 +248,8 @@ mutation JoinTournament($input: JoinTournamentInput!) {
         name
         zone
         address
+        lat
+        lng
         imageUrl
       }
       fixtureMatches {

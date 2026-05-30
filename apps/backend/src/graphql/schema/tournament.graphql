@@ -29,6 +29,8 @@ type TournamentClub {
   name: String!
   zone: String
   address: String
+  lat: Float
+  lng: Float
   imageUrl: String
 }
 
