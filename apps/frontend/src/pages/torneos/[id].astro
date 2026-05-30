@@ -397,4 +397,90 @@ for (const match of tournament?.fixtureMatches ?? []) {
     .page-content { padding: 1.25rem 1rem; }
     .hero-main { padding: 1.35rem; min-height: 230px; }
   }
+
+  /* ── Tema claro — tarjetas con fondo claro y texto oscuro ── */
+  :global(html.light) .hero-main,
+  :global(html.light) .signup-panel,
+  :global(html.light) .info-item,
+  :global(html.light) .detail-section {
+    background: hsl(0 0% 100%);
+    border-color: rgba(0, 0, 0, 0.08);
+  }
+  :global(html.light) h1,
+  :global(html.light) .section-heading h2,
+  :global(html.light) .team-title h3,
+  :global(html.light) .capacity-number,
+  :global(html.light) .fixture-line { color: hsl(220 72% 10%); }
+  :global(html.light) .hero-description,
+  :global(html.light) .hero-meta span,
+  :global(html.light) .signup-panel p,
+  :global(html.light) .info-item span,
+  :global(html.light) .section-heading span,
+  :global(html.light) .team-title p,
+  :global(html.light) .players-mini li,
+  :global(html.light) .fixture-time,
+  :global(html.light) .played-mark,
+  :global(html.light) .empty-state { color: hsl(215 16% 42%); }
+  :global(html.light) .info-item strong { color: hsl(220 72% 10%); }
+  :global(html.light) .capacity-number span { color: hsl(215 16% 50%); }
+  :global(html.light) .hero-meta span {
+    background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.08);
+    color: hsl(220 20% 25%);
+  }
+  :global(html.light) .team-row,
+  :global(html.light) .fixture-match {
+    background: hsl(210 40% 97%);
+    border-color: rgba(0,0,0,0.07);
+  }
+  :global(html.light) .player-dot {
+    background: hsl(210 40% 90%); color: hsl(35 100% 38%);
+  }
+  :global(html.light) .capacity-bar { background: hsl(220 20% 88%); }
+  :global(html.light) .hero-main {
+    background-image: linear-gradient(135deg, rgba(246,164,0,0.08), transparent 42%),
+      linear-gradient(180deg, hsl(0 0% 100%), hsl(210 40% 97%));
+  }
+  :global(html.light) .topbar {
+    background: rgba(255,255,255,0.93);
+    border-bottom-color: rgba(0,0,0,0.08);
+  }
+  :global(html.light) .topbar-name { color: hsl(220 72% 10%); }
+  :global(html.light) .nav-link { color: hsl(220 20% 35%); }
+  :global(html.light) .nav-link:hover { color: hsl(220 72% 10%); background: rgba(0,0,0,0.04); }
+  :global(html.light) .user-badge { color: hsl(220 20% 40%); }
+  :global(html.light) .btn-logout { color: hsl(220 20% 45%); border-color: rgba(0,0,0,0.12); }
+
+  /* Registration form global overrides for light mode */
+  :global(html.light .detail-team-input) {
+    background: hsl(210 40% 97%) !important;
+    border-color: rgba(0,0,0,0.12) !important;
+    color: hsl(220 72% 10%) !important;
+  }
+  :global(html.light .player-search-box) {
+    background: hsl(210 40% 97%) !important;
+    border-color: rgba(0,0,0,0.12) !important;
+    color: hsl(220 20% 35%) !important;
+  }
+  :global(html.light .player-search-input) { color: hsl(220 72% 10%) !important; }
+  :global(html.light .selected-player-chip),
+  :global(html.light .player-result-item) {
+    background: hsl(210 40% 95%) !important;
+    border-color: rgba(0,0,0,0.08) !important;
+    color: hsl(220 20% 25%) !important;
+  }
+  :global(html.light .captain-panel) {
+    background: hsl(210 40% 96%) !important;
+    border-color: rgba(0,0,0,0.08) !important;
+  }
+  :global(html.light .captain-panel strong),
+  :global(html.light .team-builder-count strong) { color: hsl(220 72% 10%) !important; }
+  :global(html.light .team-builder-count) { color: hsl(215 16% 40%) !important; }
+  :global(html.light .player-results-note) {
+    border-color: rgba(0,0,0,0.1) !important;
+    color: hsl(215 16% 45%) !important;
+  }
+  :global(html.light .registration-closed) {
+    background: hsl(210 40% 95%) !important;
+    color: hsl(215 16% 45%) !important;
+  }
 </style>
