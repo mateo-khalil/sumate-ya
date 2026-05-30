@@ -62,6 +62,14 @@ export const CACHE_PREFIX = {
   // Long TTL (GEOCODING) because addresses rarely move and Nominatim usage policy
   // requires aggressive caching. See geocodingService for details.
   GEOCODE: 'geocode:',
+  // team:{teamId} — equipo permanente con miembros. Invalidar en createTeam, updateTeam, leaveTeam, etc.
+  TEAM_DETAIL: 'team:',
+  // teams:list — lista pública de equipos activos.
+  TEAMS_LIST: 'teams:list',
+  // user:teams:{userId} — equipos donde el usuario es miembro o capitán.
+  USER_TEAMS: 'user:teams:',
+  // team:availability:{teamId} — matriz de disponibilidad del equipo.
+  TEAM_AVAILABILITY: 'team:availability:',
 } as const;
 
 // =====================================================

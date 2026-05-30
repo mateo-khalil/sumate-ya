@@ -1,0 +1,145 @@
+# Team management: equipos permanentes, invitaciones, disponibilidad horaria
+# Issue #137 — admin-equipos-capitan
+#
+# Decision Context:
+# - Opción A arquitectónica: tabla teams separada de tournamentTeams porque
+#   tournamentTeams.tournamentId NOT NULL la acopla a un torneo específico.
+#   Los equipos permanentes existen independientemente de torneos.
+# - TeamRosterEntry (no TeamMember): evita conflicto con TeamMember definido en match.graphql
+#   (que representa un jugador dentro de los equipos A/B de un partido).
+# - MatchFormat y PlayerPosition son enums ya definidos en match.graphql y profile.graphql.
+# - Previously fixed bugs: none relevant.
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum TeamMemberRole {
+  CAPTAIN
+  MEMBER
+}
+
+type TeamProfile {
+  id: ID!
+  displayName: String!
+  avatarUrl: String
+  preferredPosition: PlayerPosition
+}
+
+type Team {
+  id: ID!
+  name: String!
+  captainId: ID
+  captain: TeamProfile
+  logoUrl: String
+  format: MatchFormat!
+  description: String
+  isActive: Boolean!
+  memberCount: Int!
+  members: [TeamRosterEntry!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type TeamRosterEntry {
+  id: ID!
+  teamId: ID!
+  player: TeamProfile!
+  role: TeamMemberRole!
+  joinedAt: String!
+}
+
+type TeamInvitation {
+  id: ID!
+  team: Team!
+  invitedPlayer: TeamProfile!
+  invitedBy: TeamProfile!
+  status: InvitationStatus!
+  message: String
+  expiresAt: String!
+  respondedAt: String
+  createdAt: String!
+}
+
+type AvailabilityMatrixCell {
+  dayOfWeek: Int!
+  startTime: String!
+  availableCount: Int!
+  availablePlayers: [TeamProfile!]!
+}
+
+input CreateTeamInput {
+  name: String!
+  format: MatchFormat!
+  description: String
+}
+
+input UpdateTeamInput {
+  teamId: ID!
+  name: String
+  logoUrl: String
+  format: MatchFormat
+  description: String
+}
+
+input InvitePlayerInput {
+  teamId: ID!
+  playerId: ID!
+  message: String
+}
+
+input RespondInvitationInput {
+  invitationId: ID!
+  accept: Boolean!
+}
+
+input AvailabilitySlotInput {
+  dayOfWeek: Int!
+  startTime: String!
+  endTime: String!
+}
+
+input SetAvailabilityInput {
+  teamId: ID!
+  slots: [AvailabilitySlotInput!]!
+}
+
+type TeamResult {
+  success: Boolean!
+  message: String!
+  team: Team
+}
+
+type TeamMutationResult {
+  success: Boolean!
+  message: String!
+}
+
+type TeamInvitationResult {
+  success: Boolean!
+  message: String!
+  invitation: TeamInvitation
+}
+
+extend type Query {
+  myTeams: [Team!]!
+  team(id: ID!): Team
+  myPendingInvitations: [TeamInvitation!]!
+  teamAvailabilityMatrix(teamId: ID!): [AvailabilityMatrixCell!]!
+}
+
+extend type Mutation {
+  createTeam(input: CreateTeamInput!): TeamResult!
+  updateTeam(input: UpdateTeamInput!): TeamResult!
+  deleteTeam(teamId: ID!): TeamMutationResult!
+  invitePlayer(input: InvitePlayerInput!): TeamInvitationResult!
+  cancelInvitation(invitationId: ID!): TeamMutationResult!
+  respondInvitation(input: RespondInvitationInput!): TeamMutationResult!
+  claimCaptain(teamId: ID!): TeamResult!
+  removeMember(teamId: ID!, playerId: ID!): TeamMutationResult!
+  leaveTeam(teamId: ID!): TeamMutationResult!
+  setMyAvailability(input: SetAvailabilityInput!): TeamMutationResult!
+}

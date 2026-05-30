@@ -18,6 +18,7 @@ import { matchResolvers } from './domains/match.js';
 import { matchResultResolvers } from './domains/match-result.js';
 import { profileResolvers } from './domains/profile.js';
 import { tournamentResolvers } from './domains/tournament.js';
+import { teamResolvers } from './domains/team.js';
 
 export const resolvers = {
   Query: {
@@ -29,6 +30,7 @@ export const resolvers = {
     ...clubDashboardResolvers.Query,
     ...clubMatchResolvers.Query,
     ...tournamentResolvers.Query,
+    ...teamResolvers.Query,
   },
   Mutation: {
     ...matchResolvers.Mutation,
@@ -37,5 +39,6 @@ export const resolvers = {
     ...clubSlotResolvers.Mutation,
     ...clubMatchResolvers.Mutation,
     ...tournamentResolvers.Mutation,
+    ...teamResolvers.Mutation,
   },
 };
