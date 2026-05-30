@@ -199,6 +199,8 @@ for (const match of tournament?.fixtureMatches ?? []) {
               <TournamentRegistrationForm
                 client:load
                 tournamentId={tournament.id}
+                tournamentName={tournament.name}
+                tournamentStatus={tournament.status}
                 isAuthenticated={isAuthenticated}
                 canRegister={canRegister}
                 playersPerTeam={tournament.playersPerTeam}

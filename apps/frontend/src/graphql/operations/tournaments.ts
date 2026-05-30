@@ -497,3 +497,27 @@ export const REMOVE_TOURNAMENT_TEAM_MEMBER = /* GraphQL */ `
     }
   }
 `;
+
+export interface LeaveTournamentInput {
+  tournamentId: string;
+  teamId: string;
+  reason?: string | null;
+}
+
+export interface LeaveTournamentResult {
+  success: boolean;
+  message: string;
+  tournamentStatus: string | null;
+  remainingTeams: number | null;
+}
+
+export const LEAVE_TOURNAMENT = /* GraphQL */ `
+  mutation LeaveTournament($input: LeaveTournamentInput!) {
+    leaveTournament(input: $input) {
+      success
+      message
+      tournamentStatus
+      remainingTeams
+    }
+  }
+`;

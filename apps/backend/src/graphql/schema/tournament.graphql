@@ -136,10 +136,24 @@ extend type Query {
   tournamentEligiblePlayers(tournamentId: ID!, search: String): [TournamentPlayer!]!
 }
 
+input LeaveTournamentInput {
+  tournamentId: ID!
+  teamId: ID!
+  reason: String
+}
+
+type LeaveTournamentResult {
+  success: Boolean!
+  message: String!
+  tournamentStatus: String
+  remainingTeams: Int
+}
+
 extend type Mutation {
   createTournament(input: CreateTournamentInput!): CreateTournamentResult!
   registerTournamentTeam(input: RegisterTournamentTeamInput!): TournamentTeamRegistrationResult!
   joinTournament(input: JoinTournamentInput!): TournamentTeamRegistrationResult!
   addTournamentTeamMember(input: TournamentTeamMemberInput!): TournamentTeamRegistrationResult!
   removeTournamentTeamMember(input: TournamentTeamMemberInput!): TournamentTeamRegistrationResult!
+  leaveTournament(input: LeaveTournamentInput!): LeaveTournamentResult!
 }

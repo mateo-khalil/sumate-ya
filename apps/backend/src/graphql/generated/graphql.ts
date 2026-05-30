@@ -345,6 +345,20 @@ export type LeaveMatchResult = {
   matchDeleted: Scalars['Boolean']['output'];
 };
 
+export type LeaveTournamentInput = {
+  reason?: InputMaybe<Scalars['String']['input']>;
+  teamId: Scalars['ID']['input'];
+  tournamentId: Scalars['ID']['input'];
+};
+
+export type LeaveTournamentResult = {
+  __typename?: 'LeaveTournamentResult';
+  message: Scalars['String']['output'];
+  remainingTeams?: Maybe<Scalars['Int']['output']>;
+  success: Scalars['Boolean']['output'];
+  tournamentStatus?: Maybe<Scalars['String']['output']>;
+};
+
 export type ManagedClubSlot = {
   __typename?: 'ManagedClubSlot';
   allowOnlineBooking: Scalars['Boolean']['output'];
@@ -494,6 +508,7 @@ export type Mutation = {
   joinMatch: JoinMatchResult;
   joinTournament: TournamentTeamRegistrationResult;
   leaveMatch: LeaveMatchResult;
+  leaveTournament: LeaveTournamentResult;
   proposeMatchResult: MatchResultSubmission;
   registerTournamentTeam: TournamentTeamRegistrationResult;
   removeTournamentTeamMember: TournamentTeamRegistrationResult;
@@ -557,6 +572,11 @@ export type MutationJoinTournamentArgs = {
 
 export type MutationLeaveMatchArgs = {
   input: LeaveMatchInput;
+};
+
+
+export type MutationLeaveTournamentArgs = {
+  input: LeaveTournamentInput;
 };
 
 
@@ -1096,6 +1116,8 @@ export type ResolversTypes = ResolversObject<{
   JoinTournamentInput: JoinTournamentInput;
   LeaveMatchInput: LeaveMatchInput;
   LeaveMatchResult: ResolverTypeWrapper<LeaveMatchResult>;
+  LeaveTournamentInput: LeaveTournamentInput;
+  LeaveTournamentResult: ResolverTypeWrapper<LeaveTournamentResult>;
   ManagedClubSlot: ResolverTypeWrapper<ManagedClubSlot>;
   Match: ResolverTypeWrapper<Match>;
   MatchFilters: MatchFilters;
@@ -1184,6 +1206,8 @@ export type ResolversParentTypes = ResolversObject<{
   JoinTournamentInput: JoinTournamentInput;
   LeaveMatchInput: LeaveMatchInput;
   LeaveMatchResult: LeaveMatchResult;
+  LeaveTournamentInput: LeaveTournamentInput;
+  LeaveTournamentResult: LeaveTournamentResult;
   ManagedClubSlot: ManagedClubSlot;
   Match: Match;
   MatchFilters: MatchFilters;
@@ -1412,6 +1436,13 @@ export type LeaveMatchResultResolvers<ContextType = GraphQLContext, ParentType e
   matchDeleted?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
 }>;
 
+export type LeaveTournamentResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['LeaveTournamentResult'] = ResolversParentTypes['LeaveTournamentResult']> = ResolversObject<{
+  message?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  remainingTeams?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  tournamentStatus?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+}>;
+
 export type ManagedClubSlotResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ManagedClubSlot'] = ResolversParentTypes['ManagedClubSlot']> = ResolversObject<{
   allowOnlineBooking?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   blockReason?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -1516,6 +1547,7 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   joinMatch?: Resolver<ResolversTypes['JoinMatchResult'], ParentType, ContextType, RequireFields<MutationJoinMatchArgs, 'input'>>;
   joinTournament?: Resolver<ResolversTypes['TournamentTeamRegistrationResult'], ParentType, ContextType, RequireFields<MutationJoinTournamentArgs, 'input'>>;
   leaveMatch?: Resolver<ResolversTypes['LeaveMatchResult'], ParentType, ContextType, RequireFields<MutationLeaveMatchArgs, 'input'>>;
+  leaveTournament?: Resolver<ResolversTypes['LeaveTournamentResult'], ParentType, ContextType, RequireFields<MutationLeaveTournamentArgs, 'input'>>;
   proposeMatchResult?: Resolver<ResolversTypes['MatchResultSubmission'], ParentType, ContextType, RequireFields<MutationProposeMatchResultArgs, 'input'>>;
   registerTournamentTeam?: Resolver<ResolversTypes['TournamentTeamRegistrationResult'], ParentType, ContextType, RequireFields<MutationRegisterTournamentTeamArgs, 'input'>>;
   removeTournamentTeamMember?: Resolver<ResolversTypes['TournamentTeamRegistrationResult'], ParentType, ContextType, RequireFields<MutationRemoveTournamentTeamMemberArgs, 'input'>>;
@@ -1715,6 +1747,7 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   DashboardMatch?: DashboardMatchResolvers<ContextType>;
   JoinMatchResult?: JoinMatchResultResolvers<ContextType>;
   LeaveMatchResult?: LeaveMatchResultResolvers<ContextType>;
+  LeaveTournamentResult?: LeaveTournamentResultResolvers<ContextType>;
   ManagedClubSlot?: ManagedClubSlotResolvers<ContextType>;
   Match?: MatchResolvers<ContextType>;
   MatchHistoryConnection?: MatchHistoryConnectionResolvers<ContextType>;

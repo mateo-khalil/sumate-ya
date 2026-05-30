@@ -337,3 +337,12 @@ mutation RemoveTournamentTeamMember($input: TournamentTeamMemberInput!) {
     }
   }
 }
+
+mutation LeaveTournament($input: LeaveTournamentInput!) {
+  leaveTournament(input: $input) {
+    success
+    message
+    tournamentStatus
+    remainingTeams
+  }
+}
