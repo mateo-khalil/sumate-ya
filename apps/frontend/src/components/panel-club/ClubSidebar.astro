@@ -107,10 +107,12 @@ function startsWithPath(prefix: string): boolean {
         <span class="coming-pill">Próximo</span>
       </a>
 
-      <a href="#" class="sidebar-link sidebar-link--placeholder" tabindex="-1" aria-disabled="true">
+      <a
+        href="/panel-club/configuracion"
+        class={`sidebar-link${isActive('/panel-club/configuracion') ? ' sidebar-link--active' : ''}`}
+      >
         <span class="sidebar-icon"><Settings size={15} strokeWidth={2} aria-hidden="true" /></span>
         Configuración
-        <span class="coming-pill">Próximo</span>
       </a>
 
     </nav>

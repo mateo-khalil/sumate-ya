@@ -78,6 +78,11 @@ const isClubAdmin = user?.role === 'club_admin';
               <Settings size={15} strokeWidth={2} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'middle' }} />
             </a>
           )}
+          {isClubAdmin && (
+            <a href="/panel-club/configuracion" class="nav-link nav-link--settings" title="Configuración de cuenta">
+              <Settings size={15} strokeWidth={2} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'middle' }} />
+            </a>
+          )}
           <span class="user-badge">
             <span class="user-dot" aria-hidden="true"></span>
             <span class="user-name">{nombre}</span>
