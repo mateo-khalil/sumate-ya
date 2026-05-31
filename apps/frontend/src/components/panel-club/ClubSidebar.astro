@@ -67,10 +67,10 @@ function startsWithPath(prefix: string): boolean {
         Dashboard
       </a>
 
-      <!-- CTA principal: Crear partido -->
+      <!-- Crear partido: mismo estilo card unificado que el resto de Gestión -->
       <a
         href="/panel-club/crear-partido"
-        class={`sidebar-link sidebar-link--cta${isActive('/panel-club/crear-partido') ? ' sidebar-link--cta-active' : ''}`}
+        class={`sidebar-link${isActive('/panel-club/crear-partido') ? ' sidebar-link--active' : ''}`}
       >
         <span class="sidebar-icon"><Plus size={15} strokeWidth={2.5} aria-hidden="true" /></span>
         Crear partido
@@ -84,10 +84,10 @@ function startsWithPath(prefix: string): boolean {
         Horarios
       </a>
 
-      <!-- CTA secundario: Crear torneo -->
+      <!-- Crear torneo: mismo estilo card unificado -->
       <a
         href="/torneos/crear"
-        class={`sidebar-link sidebar-link--secondary${isActive('/torneos/crear') ? ' sidebar-link--active' : ''}`}
+        class={`sidebar-link${isActive('/torneos/crear') ? ' sidebar-link--active' : ''}`}
       >
         <span class="sidebar-icon"><Trophy size={15} strokeWidth={2} aria-hidden="true" /></span>
         Crear torneo
@@ -241,26 +241,8 @@ function startsWithPath(prefix: string): boolean {
     border-color: rgba(27, 105, 224, 0.38);
   }
 
-  /* ── CTA principal: Crear partido — sólido naranja (conserva estilo propio) ── */
-  .sidebar-link--cta {
-    background: hsl(35 100% 48%);
-    color: hsl(220 72% 7%);
-    border-color: transparent;
-    font-weight: 700;
-    box-shadow: 0 2px 8px rgba(246, 120, 0, 0.28);
-  }
-  .sidebar-link--cta:hover {
-    background: hsl(35 100% 55%);
-    color: hsl(220 72% 5%);
-    box-shadow: 0 3px 12px rgba(246, 120, 0, 0.38);
-  }
-  .sidebar-link--cta-active {
-    background: hsl(35 100% 42%);
-    box-shadow: 0 2px 6px rgba(246, 120, 0, 0.22);
-  }
-
-  /* ── Crear torneo — mismo estilo que base (ya unificado) ── */
-  .sidebar-link--secondary { font-weight: 600; }
+  /* sidebar-link--cta y sidebar-link--secondary eliminados:
+     todos los links de Gestión/Reportes usan .sidebar-link base unificado. */
 
   /* ── Divider ── */
   .sidebar-divider {
@@ -350,18 +332,7 @@ function startsWithPath(prefix: string): boolean {
     border-color: hsl(216 60% 60%);
   }
 
-  /* CTA Crear partido */
-  :global(html.light) .sidebar-link--cta {
-    background: hsl(35 100% 44%);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(246, 120, 0, 0.24);
-  }
-  :global(html.light) .sidebar-link--cta:hover {
-    background: hsl(35 100% 38%);
-  }
-
-  /* Crear torneo — mismo estilo que base */
-  :global(html.light) .sidebar-link--secondary { font-weight: 600; }
+  /* sidebar-link--cta y sidebar-link--secondary eliminados de light mode también. */
 
   /* Divider */
   :global(html.light) .sidebar-divider { background: hsl(35 80% 85%); }
