@@ -19,10 +19,11 @@ import {
   Trophy,
   UserRound,
   Users,
-  Volleyball,
 } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
+import Topbar from '../../components/shared/Topbar.astro';
 import { TournamentRegistrationForm } from '../../components/tournaments/TournamentRegistrationForm';
+import { LeaveTournamentButton } from '../../components/tournaments/LeaveTournamentButton';
 import { GET_TOURNAMENT_DETAIL, type TournamentData, type TournamentFixtureMatch } from '../../graphql/operations/tournaments';
 import { readAccessToken } from '../../lib/auth';
 
@@ -123,6 +124,10 @@ const canRegister = Boolean(
     tournament.registeredTeamsCount < tournament.teamCount,
 );
 const progress = tournament?.teamCount ? Math.round((registeredTeams / tournament.teamCount) * 100) : 0;
+
+// Equipo del capitán ya inscripto en este torneo (para mostrar "Darse de baja")
+const captainEnrolledTeam = tournament?.teams.find(t => t.captainId === user?.id) ?? null;
+const hasOnlyTwoTeams = (tournament?.registeredTeamsCount ?? 0) <= 2;
 const fixtureByRound = new Map<number, TournamentFixtureMatch[]>();
 for (const match of tournament?.fixtureMatches ?? []) {
   const matches = fixtureByRound.get(match.round) ?? [];
@@ -133,36 +138,7 @@ for (const match of tournament?.fixtureMatches ?? []) {
 
 <Layout title={tournament ? `${tournament.name} - Sumate Ya` : 'Torneo - Sumate Ya'}>
   <div class="app-shell">
-    <nav class="topbar">
-      <div class="topbar-inner">
-        <a class="topbar-brand" href="/partidos">
-          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
-          <span class="topbar-name">SUMATE YA</span>
-        </a>
-
-        <div class="topbar-actions">
-          {isAuthenticated ? (
-            <>
-              <a href="/partidos" class="nav-link">Partidos</a>
-              <a href="/torneos" class="nav-link">Torneos</a>
-              <a href="/torneos/crear" class="btn-crear">Crear torneo</a>
-              {user?.role === 'player' && <a href="/perfil" class="nav-link">Mi Perfil</a>}
-              <span class="user-badge"><span class="user-dot"></span>{nombre}</span>
-              <form method="POST" action="/api/auth/logout">
-                <button type="submit" class="btn-logout">Salir</button>
-              </form>
-            </>
-          ) : (
-            <>
-              <a href="/partidos" class="nav-link">Partidos</a>
-              <a href="/torneos" class="nav-link">Torneos</a>
-              <a href="/login" class="btn-logout">Iniciar Sesion</a>
-            </>
-          )}
-        </div>
-      </div>
-      <div class="topbar-accent"></div>
-    </nav>
+    <Topbar user={user} />
 
     <main class="page-content">
       {(!tournament || fetchError) && (
@@ -178,35 +154,61 @@ for (const match of tournament?.fixtureMatches ?? []) {
           <a href="/torneos" class="link-back">Volver a torneos</a>
 
           <section class="hero-panel">
+            <!-- Hero compacto: sin área vacía innecesaria -->
             <div class="hero-main">
-              <div class="eyebrow"><Trophy size={15} strokeWidth={2} aria-hidden="true" /> TORNEO</div>
+              <div class="eyebrow"><Trophy size={14} strokeWidth={2} aria-hidden="true" /> TORNEO</div>
               <h1>{tournament.name}</h1>
-              <p class="hero-description">
-                {tournament.description || 'Torneo abierto para equipos que quieren competir con fixture organizado y resultados visibles.'}
-              </p>
+              {tournament.description && (
+                <p class="hero-description">{tournament.description}</p>
+              )}
               <div class="hero-meta">
-                <span><Shield size={15} aria-hidden="true" /> {formatLabels[tournament.format]}</span>
-                <span><MapPin size={15} aria-hidden="true" /> {tournament.club?.name ?? 'Club a confirmar'}</span>
-                <span><UserRound size={15} aria-hidden="true" /> {tournament.organizer?.displayName ?? 'Organizador'}</span>
+                <span><Shield size={14} aria-hidden="true" /> {formatLabels[tournament.format]}</span>
+                <span><MapPin size={14} aria-hidden="true" /> {tournament.club?.name ?? 'Club a confirmar'}</span>
+                <span><UserRound size={14} aria-hidden="true" /> {tournament.organizer?.displayName ?? 'Organizador'}</span>
               </div>
             </div>
 
             <aside class="signup-panel" aria-label="Inscripcion del torneo">
               <div class="status-pill">{statusLabels[tournament.status]}</div>
               <div class="capacity-number">{registeredTeams}<span>/{tournament.teamCount}</span></div>
-              <p>equipos inscriptos</p>
+              <p class="capacity-label">equipos inscriptos</p>
               <div class="capacity-bar" aria-hidden="true"><span style={`width: ${progress}%`}></span></div>
-              <TournamentRegistrationForm
-                client:load
-                tournamentId={tournament.id}
-                tournamentName={tournament.name}
-                tournamentStatus={tournament.status}
-                isAuthenticated={isAuthenticated}
-                canRegister={canRegister}
-                playersPerTeam={tournament.playersPerTeam}
-                currentUserId={user?.id ?? null}
-                teams={tournament.teams}
-              />
+
+              {captainEnrolledTeam ? (
+                <!-- El capitán ya tiene su equipo inscripto: mostrar estado + botón de baja -->
+                <div class="enrolled-panel">
+                  <div class="enrolled-badge">
+                    <CheckCircle size={14} strokeWidth={2} aria-hidden="true" />
+                    Tu equipo está inscripto
+                  </div>
+                  <p class="enrolled-team-name">{captainEnrolledTeam.name}</p>
+
+                  {tournament.status === 'REGISTRATION' && (
+                    <div class="leave-wrap">
+                      <LeaveTournamentButton
+                        client:load
+                        tournamentId={tournament.id}
+                        teamId={captainEnrolledTeam.id}
+                        teamName={captainEnrolledTeam.name}
+                        tournamentName={tournament.name}
+                        hasOnlyTwoTeams={hasOnlyTwoTeams}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <TournamentRegistrationForm
+                  client:load
+                  tournamentId={tournament.id}
+                  tournamentName={tournament.name}
+                  tournamentStatus={tournament.status}
+                  isAuthenticated={isAuthenticated}
+                  canRegister={canRegister}
+                  playersPerTeam={tournament.playersPerTeam}
+                  currentUserId={user?.id ?? null}
+                  teams={tournament.teams}
+                />
+              )}
             </aside>
           </section>
 
@@ -328,19 +330,43 @@ for (const match of tournament?.fixtureMatches ?? []) {
   .link-back, .btn-back { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: hsl(35 100% 55%); text-decoration: none; width: fit-content; }
   .hero-panel { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; align-items: stretch; }
   .hero-main, .signup-panel, .info-item, .detail-section { background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; }
-  .hero-main { padding: 2rem; min-height: 270px; display: flex; flex-direction: column; justify-content: flex-end; background-image: linear-gradient(135deg, rgba(246,164,0,0.14), transparent 42%), linear-gradient(180deg, hsl(220 55% 13%), hsl(220 55% 9%)); }
+  .hero-main {
+    padding: 1.5rem 2rem 2rem;
+    display: flex; flex-direction: column; gap: 0.75rem;
+    justify-content: flex-end;
+    background-image: linear-gradient(135deg, rgba(246,164,0,0.14), transparent 42%), linear-gradient(180deg, hsl(220 55% 13%), hsl(220 55% 9%));
+  }
   .eyebrow { display: flex; align-items: center; gap: 0.45rem; font-family: 'Barlow Condensed', sans-serif; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.18em; color: hsl(42 100% 62%); margin-bottom: 0.75rem; }
   h1 { margin: 0; font-family: 'Bebas Neue', sans-serif; font-size: clamp(2.5rem, 9vw, 5.5rem); line-height: 0.9; letter-spacing: 0.03em; color: white; }
   .hero-description { max-width: 680px; margin: 0.9rem 0 0; color: hsl(215 20% 72%); font-size: 1rem; line-height: 1.55; }
   .hero-meta { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.25rem; }
   .hero-meta span { display: inline-flex; align-items: center; gap: 0.4rem; color: hsl(210 20% 90%); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09); border-radius: 999px; padding: 0.4rem 0.7rem; font-size: 0.875rem; }
-  .signup-panel { padding: 1.25rem; display: flex; flex-direction: column; justify-content: center; gap: 0.85rem; }
+  .signup-panel { padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
   .status-pill { width: fit-content; border: 1px solid rgba(246,164,0,0.35); color: hsl(42 100% 65%); border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-  .capacity-number { font-family: 'Bebas Neue', sans-serif; color: white; font-size: 4rem; line-height: 0.9; }
-  .capacity-number span { color: hsl(215 20% 50%); font-size: 2rem; }
-  .signup-panel p { margin: 0; color: hsl(215 20% 60%); }
-  .capacity-bar { height: 8px; background: hsl(220 45% 18%); border-radius: 999px; overflow: hidden; }
+  .capacity-number { font-family: 'Bebas Neue', sans-serif; color: white; font-size: 3.2rem; line-height: 0.95; margin: 0; }
+  .capacity-number span { color: hsl(215 20% 50%); font-size: 1.6rem; }
+  .capacity-label { margin: 0; color: hsl(215 20% 60%); font-size: 0.85rem; }
+  .capacity-bar { height: 6px; background: hsl(220 45% 18%); border-radius: 999px; overflow: hidden; }
   .capacity-bar span { display: block; height: 100%; background: hsl(35 100% 50%); border-radius: inherit; }
+
+  /* Panel de inscripto (capitán ya registró su equipo) */
+  .enrolled-panel { display: flex; flex-direction: column; gap: 0.75rem; }
+  .enrolled-badge {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: hsl(140 60% 12%); border: 1px solid hsl(140 50% 28%);
+    color: hsl(140 70% 55%); border-radius: 8px;
+    padding: 0.55rem 0.85rem; font-size: 0.82rem; font-weight: 600;
+  }
+  .enrolled-team-name {
+    font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem;
+    color: white; margin: 0; letter-spacing: 0.03em;
+  }
+  .leave-wrap { margin-top: 0.25rem; }
+
+  /* Botón darse de baja — estilos globales para LeaveTournamentButton en este contexto */
+  :global(.leave-tournament-btn) {
+    width: 100%; justify-content: center; font-size: 0.85rem;
+  }
   :global(.detail-register-form) { display: grid; gap: 0.65rem; margin-top: 0.35rem; }
   :global(.detail-team-input) { min-height: 42px; border: 1px solid rgba(255,255,255,0.12); background: hsl(220 55% 8%); color: white; border-radius: 8px; padding: 0 0.8rem; outline: none; }
   :global(.detail-form-error) { margin: 0; color: hsl(0 72% 70%); font-size: 0.85rem; }
@@ -440,6 +466,14 @@ for (const match of tournament?.fixtureMatches ?? []) {
     background-image: linear-gradient(135deg, rgba(246,164,0,0.08), transparent 42%),
       linear-gradient(180deg, hsl(0 0% 100%), hsl(210 40% 97%));
   }
+  :global(html.light) .enrolled-badge {
+    background: hsl(140 60% 94%); border-color: hsl(140 50% 70%);
+    color: hsl(140 70% 28%);
+  }
+  :global(html.light) .enrolled-team-name { color: hsl(220 72% 10%); }
+  :global(html.light) .capacity-number { color: hsl(220 72% 10%); }
+  :global(html.light) .capacity-number span { color: hsl(215 16% 48%); }
+  :global(html.light) .capacity-label { color: hsl(215 16% 42%); }
   :global(html.light) .topbar {
     background: rgba(255,255,255,0.93);
     border-bottom-color: rgba(0,0,0,0.08);
