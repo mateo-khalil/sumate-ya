@@ -130,6 +130,18 @@ const Query: QueryResolvers = {
     }
   },
 
+  searchTeams: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const parsed = z.string().min(2).max(80).safeParse(args.search);
+    if (!parsed.success) return [];
+    try {
+      return await teamService.searchTeams(parsed.data, { userId: user.id });
+    } catch (error) {
+      console.error(`[teamResolver.searchTeams] Failed for userId=${user.id}:`, error);
+      return [];
+    }
+  },
+
   teamInvitations: async (_parent, args, ctx) => {
     const user = requireAuth(ctx);
     const parsed = UUID.safeParse(args.teamId);

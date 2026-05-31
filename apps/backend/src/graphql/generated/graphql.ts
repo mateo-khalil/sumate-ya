@@ -294,13 +294,21 @@ export type CreateTeamInput = {
 };
 
 export type CreateTournamentInput = {
+  advancingPerGroup?: InputMaybe<Scalars['Int']['input']>;
+  cadenceDays?: InputMaybe<Scalars['Int']['input']>;
   clubId: Scalars['ID']['input'];
   description?: InputMaybe<Scalars['String']['input']>;
+  durationMode?: InputMaybe<DurationMode>;
+  firstMatchday?: InputMaybe<Scalars['String']['input']>;
   format: MatchFormat;
+  groupCount?: InputMaybe<Scalars['Int']['input']>;
   name: Scalars['String']['input'];
   playersPerTeam: Scalars['Int']['input'];
-  schedule: Array<TournamentScheduleSlotInput>;
+  schedule?: InputMaybe<Array<TournamentScheduleSlotInput>>;
+  specificDays?: InputMaybe<Array<InputMaybe<Scalars['Int']['input']>>>;
   teamCount: Scalars['Int']['input'];
+  teamsPerGroup?: InputMaybe<Scalars['Int']['input']>;
+  tournamentType?: InputMaybe<TournamentType>;
 };
 
 export type CreateTournamentResult = {
@@ -330,6 +338,11 @@ export type DashboardMatch = {
   timeStatusLabel: Scalars['String']['output'];
 };
 
+export enum DurationMode {
+  MultiDay = 'MULTI_DAY',
+  SingleDay = 'SINGLE_DAY'
+}
+
 export type EnrollTeamResult = {
   __typename?: 'EnrollTeamResult';
   message: Scalars['String']['output'];
@@ -344,6 +357,15 @@ export enum FixtureMatchStatus {
   Scheduled = 'SCHEDULED'
 }
 
+export enum FixturePhase {
+  Final = 'FINAL',
+  GroupStage = 'GROUP_STAGE',
+  Quarterfinal = 'QUARTERFINAL',
+  RoundOf_16 = 'ROUND_OF_16',
+  Semifinal = 'SEMIFINAL',
+  ThirdPlace = 'THIRD_PLACE'
+}
+
 export enum InvitationStatus {
   Accepted = 'ACCEPTED',
   Expired = 'EXPIRED',
@@ -355,6 +377,12 @@ export type InvitePlayerInput = {
   message?: InputMaybe<Scalars['String']['input']>;
   playerId: Scalars['ID']['input'];
   teamId: Scalars['ID']['input'];
+};
+
+export type InviteTeamToTournamentInput = {
+  message?: InputMaybe<Scalars['String']['input']>;
+  teamId: Scalars['ID']['input'];
+  tournamentId: Scalars['ID']['input'];
 };
 
 export type JoinMatchInput = {
@@ -551,6 +579,7 @@ export type Mutation = {
   deleteTeam: TeamMutationResult;
   enrollTeamInTournament: EnrollTeamResult;
   invitePlayer: TeamInvitationResult;
+  inviteTeamToTournament: TournamentInvitationResult;
   joinMatch: JoinMatchResult;
   joinTournament: TournamentTeamRegistrationResult;
   leaveMatch: LeaveMatchResult;
@@ -561,6 +590,7 @@ export type Mutation = {
   removeMember: TeamMutationResult;
   removeTournamentTeamMember: TournamentTeamRegistrationResult;
   respondInvitation: TeamMutationResult;
+  respondTournamentInvitation: TournamentMutationResult;
   setMyAvailability: TeamMutationResult;
   toggleSlotBlock: ClubSlotMutationResult;
   updateClubSlot: ClubSlotMutationResult;
@@ -642,6 +672,11 @@ export type MutationInvitePlayerArgs = {
 };
 
 
+export type MutationInviteTeamToTournamentArgs = {
+  input: InviteTeamToTournamentInput;
+};
+
+
 export type MutationJoinMatchArgs = {
   input: JoinMatchInput;
 };
@@ -690,6 +725,12 @@ export type MutationRemoveTournamentTeamMemberArgs = {
 
 export type MutationRespondInvitationArgs = {
   input: RespondInvitationInput;
+};
+
+
+export type MutationRespondTournamentInvitationArgs = {
+  accept: Scalars['Boolean']['input'];
+  invitationId: Scalars['ID']['input'];
 };
 
 
@@ -800,8 +841,11 @@ export type Query = {
   mySettings: PrivacySettings;
   myTeamAvailability: Array<PlayerAvailabilitySlot>;
   myTeams: Array<Team>;
+  myTournamentInvitations: Array<TournamentInvitation>;
   profile?: Maybe<Profile>;
+  schedulePreview: Array<SchedulePreviewDay>;
   searchPlayers: Array<TeamProfile>;
+  searchTeams: Array<Team>;
   slotAuditLog: Array<SlotAuditLog>;
   slotImpactPreview: SlotImpactPreview;
   team?: Maybe<Team>;
@@ -877,7 +921,17 @@ export type QueryProfileArgs = {
 };
 
 
+export type QuerySchedulePreviewArgs = {
+  input: SchedulePreviewInput;
+};
+
+
 export type QuerySearchPlayersArgs = {
+  search: Scalars['String']['input'];
+};
+
+
+export type QuerySearchTeamsArgs = {
   search: Scalars['String']['input'];
 };
 
@@ -937,6 +991,24 @@ export type RegisterTournamentTeamInput = {
 export type RespondInvitationInput = {
   accept: Scalars['Boolean']['input'];
   invitationId: Scalars['ID']['input'];
+};
+
+export type SchedulePreviewDay = {
+  __typename?: 'SchedulePreviewDay';
+  date: Scalars['String']['output'];
+  isPast: Scalars['Boolean']['output'];
+  matchCount: Scalars['Int']['output'];
+  matchday: Scalars['Int']['output'];
+};
+
+export type SchedulePreviewInput = {
+  cadenceDays?: InputMaybe<Scalars['Int']['input']>;
+  durationMode: DurationMode;
+  firstMatchday: Scalars['String']['input'];
+  groupCount?: InputMaybe<Scalars['Int']['input']>;
+  teamCount: Scalars['Int']['input'];
+  teamsPerGroup?: InputMaybe<Scalars['Int']['input']>;
+  tournamentType: TournamentType;
 };
 
 export type ScheduleSlot = {
@@ -1111,12 +1183,17 @@ export enum TimeStatus {
 
 export type Tournament = {
   __typename?: 'Tournament';
+  advancingPerGroup?: Maybe<Scalars['Int']['output']>;
+  cadenceDays?: Maybe<Scalars['Int']['output']>;
   club?: Maybe<TournamentClub>;
   createdAt: Scalars['String']['output'];
   description?: Maybe<Scalars['String']['output']>;
+  durationMode: DurationMode;
   endDate?: Maybe<Scalars['String']['output']>;
+  firstMatchday?: Maybe<Scalars['String']['output']>;
   fixtureMatches: Array<TournamentFixtureMatch>;
   format: MatchFormat;
+  groupCount?: Maybe<Scalars['Int']['output']>;
   id: Scalars['ID']['output'];
   name: Scalars['String']['output'];
   organizer?: Maybe<TournamentPlayer>;
@@ -1127,6 +1204,8 @@ export type Tournament = {
   status: TournamentStatus;
   teamCount: Scalars['Int']['output'];
   teams: Array<TournamentTeam>;
+  teamsPerGroup?: Maybe<Scalars['Int']['output']>;
+  tournamentType: TournamentType;
 };
 
 export type TournamentClub = {
@@ -1154,15 +1233,55 @@ export type TournamentFixtureMatch = {
   awayTeam?: Maybe<TournamentTeam>;
   awayTeamId?: Maybe<Scalars['ID']['output']>;
   courtId?: Maybe<Scalars['ID']['output']>;
+  groupName?: Maybe<Scalars['String']['output']>;
   homeTeam?: Maybe<TournamentTeam>;
   homeTeamId?: Maybe<Scalars['ID']['output']>;
   id: Scalars['ID']['output'];
+  isPast: Scalars['Boolean']['output'];
+  matchday?: Maybe<Scalars['Int']['output']>;
+  phase?: Maybe<FixturePhase>;
   round: Scalars['Int']['output'];
   scheduledAt?: Maybe<Scalars['String']['output']>;
   scoreAway?: Maybe<Scalars['Int']['output']>;
   scoreHome?: Maybe<Scalars['Int']['output']>;
   status: FixtureMatchStatus;
   tournamentId: Scalars['ID']['output'];
+};
+
+export type TournamentInvitation = {
+  __typename?: 'TournamentInvitation';
+  captain: TournamentPlayer;
+  createdAt: Scalars['String']['output'];
+  expiresAt: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  invitedBy: TournamentPlayer;
+  message?: Maybe<Scalars['String']['output']>;
+  respondedAt?: Maybe<Scalars['String']['output']>;
+  status: TournamentInvitationStatus;
+  teamId?: Maybe<Scalars['ID']['output']>;
+  teamName: Scalars['String']['output'];
+  tournamentId: Scalars['ID']['output'];
+  tournamentName: Scalars['String']['output'];
+};
+
+export type TournamentInvitationResult = {
+  __typename?: 'TournamentInvitationResult';
+  invitation?: Maybe<TournamentInvitation>;
+  message: Scalars['String']['output'];
+  success: Scalars['Boolean']['output'];
+};
+
+export enum TournamentInvitationStatus {
+  Accepted = 'ACCEPTED',
+  Expired = 'EXPIRED',
+  Pending = 'PENDING',
+  Rejected = 'REJECTED'
+}
+
+export type TournamentMutationResult = {
+  __typename?: 'TournamentMutationResult';
+  message: Scalars['String']['output'];
+  success: Scalars['Boolean']['output'];
 };
 
 export type TournamentPlayer = {
@@ -1208,6 +1327,12 @@ export type TournamentTeamRegistrationResult = {
   teamId?: Maybe<Scalars['ID']['output']>;
   tournament?: Maybe<Tournament>;
 };
+
+export enum TournamentType {
+  GroupStageElimination = 'GROUP_STAGE_ELIMINATION',
+  RoundRobin = 'ROUND_ROBIN',
+  SingleElimination = 'SINGLE_ELIMINATION'
+}
 
 export type UpdateClubSlotInput = {
   allowOnlineBooking?: InputMaybe<Scalars['Boolean']['input']>;
@@ -1380,13 +1505,16 @@ export type ResolversTypes = ResolversObject<{
   CreateTournamentInput: CreateTournamentInput;
   CreateTournamentResult: ResolverTypeWrapper<CreateTournamentResult>;
   DashboardMatch: ResolverTypeWrapper<DashboardMatch>;
+  DurationMode: DurationMode;
   EnrollTeamResult: ResolverTypeWrapper<EnrollTeamResult>;
   FixtureMatchStatus: FixtureMatchStatus;
+  FixturePhase: FixturePhase;
   Float: ResolverTypeWrapper<Scalars['Float']['output']>;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
   InvitationStatus: InvitationStatus;
   InvitePlayerInput: InvitePlayerInput;
+  InviteTeamToTournamentInput: InviteTeamToTournamentInput;
   JoinMatchInput: JoinMatchInput;
   JoinMatchResult: ResolverTypeWrapper<JoinMatchResult>;
   JoinTournamentInput: JoinTournamentInput;
@@ -1416,6 +1544,8 @@ export type ResolversTypes = ResolversObject<{
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
   RegisterTournamentTeamInput: RegisterTournamentTeamInput;
   RespondInvitationInput: RespondInvitationInput;
+  SchedulePreviewDay: ResolverTypeWrapper<SchedulePreviewDay>;
+  SchedulePreviewInput: SchedulePreviewInput;
   ScheduleSlot: ResolverTypeWrapper<ScheduleSlot>;
   ScheduleSlotStatus: ScheduleSlotStatus;
   SetAvailabilityInput: SetAvailabilityInput;
@@ -1439,12 +1569,17 @@ export type ResolversTypes = ResolversObject<{
   TournamentClub: ResolverTypeWrapper<TournamentClub>;
   TournamentFilters: TournamentFilters;
   TournamentFixtureMatch: ResolverTypeWrapper<TournamentFixtureMatch>;
+  TournamentInvitation: ResolverTypeWrapper<TournamentInvitation>;
+  TournamentInvitationResult: ResolverTypeWrapper<TournamentInvitationResult>;
+  TournamentInvitationStatus: TournamentInvitationStatus;
+  TournamentMutationResult: ResolverTypeWrapper<TournamentMutationResult>;
   TournamentPlayer: ResolverTypeWrapper<TournamentPlayer>;
   TournamentScheduleSlotInput: TournamentScheduleSlotInput;
   TournamentStatus: TournamentStatus;
   TournamentTeam: ResolverTypeWrapper<TournamentTeam>;
   TournamentTeamMemberInput: TournamentTeamMemberInput;
   TournamentTeamRegistrationResult: ResolverTypeWrapper<TournamentTeamRegistrationResult>;
+  TournamentType: TournamentType;
   UpdateClubSlotInput: UpdateClubSlotInput;
   UpdateCourtPricingInput: UpdateCourtPricingInput;
   UpdatePrivacyInput: UpdatePrivacyInput;
@@ -1496,6 +1631,7 @@ export type ResolversParentTypes = ResolversObject<{
   ID: Scalars['ID']['output'];
   Int: Scalars['Int']['output'];
   InvitePlayerInput: InvitePlayerInput;
+  InviteTeamToTournamentInput: InviteTeamToTournamentInput;
   JoinMatchInput: JoinMatchInput;
   JoinMatchResult: JoinMatchResult;
   JoinTournamentInput: JoinTournamentInput;
@@ -1520,6 +1656,8 @@ export type ResolversParentTypes = ResolversObject<{
   Query: Record<PropertyKey, never>;
   RegisterTournamentTeamInput: RegisterTournamentTeamInput;
   RespondInvitationInput: RespondInvitationInput;
+  SchedulePreviewDay: SchedulePreviewDay;
+  SchedulePreviewInput: SchedulePreviewInput;
   ScheduleSlot: ScheduleSlot;
   SetAvailabilityInput: SetAvailabilityInput;
   SlotAuditLog: SlotAuditLog;
@@ -1538,6 +1676,9 @@ export type ResolversParentTypes = ResolversObject<{
   TournamentClub: TournamentClub;
   TournamentFilters: TournamentFilters;
   TournamentFixtureMatch: TournamentFixtureMatch;
+  TournamentInvitation: TournamentInvitation;
+  TournamentInvitationResult: TournamentInvitationResult;
+  TournamentMutationResult: TournamentMutationResult;
   TournamentPlayer: TournamentPlayer;
   TournamentScheduleSlotInput: TournamentScheduleSlotInput;
   TournamentTeam: TournamentTeam;
@@ -1871,6 +2012,7 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   deleteTeam?: Resolver<ResolversTypes['TeamMutationResult'], ParentType, ContextType, RequireFields<MutationDeleteTeamArgs, 'teamId'>>;
   enrollTeamInTournament?: Resolver<ResolversTypes['EnrollTeamResult'], ParentType, ContextType, RequireFields<MutationEnrollTeamInTournamentArgs, 'teamId' | 'tournamentId'>>;
   invitePlayer?: Resolver<ResolversTypes['TeamInvitationResult'], ParentType, ContextType, RequireFields<MutationInvitePlayerArgs, 'input'>>;
+  inviteTeamToTournament?: Resolver<ResolversTypes['TournamentInvitationResult'], ParentType, ContextType, RequireFields<MutationInviteTeamToTournamentArgs, 'input'>>;
   joinMatch?: Resolver<ResolversTypes['JoinMatchResult'], ParentType, ContextType, RequireFields<MutationJoinMatchArgs, 'input'>>;
   joinTournament?: Resolver<ResolversTypes['TournamentTeamRegistrationResult'], ParentType, ContextType, RequireFields<MutationJoinTournamentArgs, 'input'>>;
   leaveMatch?: Resolver<ResolversTypes['LeaveMatchResult'], ParentType, ContextType, RequireFields<MutationLeaveMatchArgs, 'input'>>;
@@ -1881,6 +2023,7 @@ export type MutationResolvers<ContextType = GraphQLContext, ParentType extends R
   removeMember?: Resolver<ResolversTypes['TeamMutationResult'], ParentType, ContextType, RequireFields<MutationRemoveMemberArgs, 'playerId' | 'teamId'>>;
   removeTournamentTeamMember?: Resolver<ResolversTypes['TournamentTeamRegistrationResult'], ParentType, ContextType, RequireFields<MutationRemoveTournamentTeamMemberArgs, 'input'>>;
   respondInvitation?: Resolver<ResolversTypes['TeamMutationResult'], ParentType, ContextType, RequireFields<MutationRespondInvitationArgs, 'input'>>;
+  respondTournamentInvitation?: Resolver<ResolversTypes['TournamentMutationResult'], ParentType, ContextType, RequireFields<MutationRespondTournamentInvitationArgs, 'accept' | 'invitationId'>>;
   setMyAvailability?: Resolver<ResolversTypes['TeamMutationResult'], ParentType, ContextType, RequireFields<MutationSetMyAvailabilityArgs, 'input'>>;
   toggleSlotBlock?: Resolver<ResolversTypes['ClubSlotMutationResult'], ParentType, ContextType, RequireFields<MutationToggleSlotBlockArgs, 'input'>>;
   updateClubSlot?: Resolver<ResolversTypes['ClubSlotMutationResult'], ParentType, ContextType, RequireFields<MutationUpdateClubSlotArgs, 'input'>>;
@@ -1944,8 +2087,11 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   mySettings?: Resolver<ResolversTypes['PrivacySettings'], ParentType, ContextType>;
   myTeamAvailability?: Resolver<Array<ResolversTypes['PlayerAvailabilitySlot']>, ParentType, ContextType, RequireFields<QueryMyTeamAvailabilityArgs, 'teamId'>>;
   myTeams?: Resolver<Array<ResolversTypes['Team']>, ParentType, ContextType>;
+  myTournamentInvitations?: Resolver<Array<ResolversTypes['TournamentInvitation']>, ParentType, ContextType>;
   profile?: Resolver<Maybe<ResolversTypes['Profile']>, ParentType, ContextType, RequireFields<QueryProfileArgs, 'id'>>;
+  schedulePreview?: Resolver<Array<ResolversTypes['SchedulePreviewDay']>, ParentType, ContextType, RequireFields<QuerySchedulePreviewArgs, 'input'>>;
   searchPlayers?: Resolver<Array<ResolversTypes['TeamProfile']>, ParentType, ContextType, RequireFields<QuerySearchPlayersArgs, 'search'>>;
+  searchTeams?: Resolver<Array<ResolversTypes['Team']>, ParentType, ContextType, RequireFields<QuerySearchTeamsArgs, 'search'>>;
   slotAuditLog?: Resolver<Array<ResolversTypes['SlotAuditLog']>, ParentType, ContextType, RequireFields<QuerySlotAuditLogArgs, 'slotId'>>;
   slotImpactPreview?: Resolver<ResolversTypes['SlotImpactPreview'], ParentType, ContextType, RequireFields<QuerySlotImpactPreviewArgs, 'slotIds'>>;
   team?: Resolver<Maybe<ResolversTypes['Team']>, ParentType, ContextType, RequireFields<QueryTeamArgs, 'id'>>;
@@ -1955,6 +2101,13 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   tournament?: Resolver<Maybe<ResolversTypes['Tournament']>, ParentType, ContextType, RequireFields<QueryTournamentArgs, 'id'>>;
   tournamentEligiblePlayers?: Resolver<Array<ResolversTypes['TournamentPlayer']>, ParentType, ContextType, RequireFields<QueryTournamentEligiblePlayersArgs, 'tournamentId'>>;
   tournaments?: Resolver<Array<ResolversTypes['Tournament']>, ParentType, ContextType, Partial<QueryTournamentsArgs>>;
+}>;
+
+export type SchedulePreviewDayResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['SchedulePreviewDay'] = ResolversParentTypes['SchedulePreviewDay']> = ResolversObject<{
+  date?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  isPast?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  matchCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  matchday?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
 }>;
 
 export type ScheduleSlotResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ScheduleSlot'] = ResolversParentTypes['ScheduleSlot']> = ResolversObject<{
@@ -2071,12 +2224,17 @@ export type TeamRosterEntryResolvers<ContextType = GraphQLContext, ParentType ex
 }>;
 
 export type TournamentResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Tournament'] = ResolversParentTypes['Tournament']> = ResolversObject<{
+  advancingPerGroup?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  cadenceDays?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   club?: Resolver<Maybe<ResolversTypes['TournamentClub']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   description?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  durationMode?: Resolver<ResolversTypes['DurationMode'], ParentType, ContextType>;
   endDate?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  firstMatchday?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   fixtureMatches?: Resolver<Array<ResolversTypes['TournamentFixtureMatch']>, ParentType, ContextType>;
   format?: Resolver<ResolversTypes['MatchFormat'], ParentType, ContextType>;
+  groupCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   organizer?: Resolver<Maybe<ResolversTypes['TournamentPlayer']>, ParentType, ContextType>;
@@ -2087,6 +2245,8 @@ export type TournamentResolvers<ContextType = GraphQLContext, ParentType extends
   status?: Resolver<ResolversTypes['TournamentStatus'], ParentType, ContextType>;
   teamCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   teams?: Resolver<Array<ResolversTypes['TournamentTeam']>, ParentType, ContextType>;
+  teamsPerGroup?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  tournamentType?: Resolver<ResolversTypes['TournamentType'], ParentType, ContextType>;
 }>;
 
 export type TournamentClubResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentClub'] = ResolversParentTypes['TournamentClub']> = ResolversObject<{
@@ -2103,15 +2263,45 @@ export type TournamentFixtureMatchResolvers<ContextType = GraphQLContext, Parent
   awayTeam?: Resolver<Maybe<ResolversTypes['TournamentTeam']>, ParentType, ContextType>;
   awayTeamId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   courtId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  groupName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   homeTeam?: Resolver<Maybe<ResolversTypes['TournamentTeam']>, ParentType, ContextType>;
   homeTeamId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  isPast?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  matchday?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  phase?: Resolver<Maybe<ResolversTypes['FixturePhase']>, ParentType, ContextType>;
   round?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   scheduledAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   scoreAway?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   scoreHome?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   status?: Resolver<ResolversTypes['FixtureMatchStatus'], ParentType, ContextType>;
   tournamentId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+}>;
+
+export type TournamentInvitationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentInvitation'] = ResolversParentTypes['TournamentInvitation']> = ResolversObject<{
+  captain?: Resolver<ResolversTypes['TournamentPlayer'], ParentType, ContextType>;
+  createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  expiresAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  invitedBy?: Resolver<ResolversTypes['TournamentPlayer'], ParentType, ContextType>;
+  message?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  respondedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['TournamentInvitationStatus'], ParentType, ContextType>;
+  teamId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  teamName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  tournamentId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  tournamentName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
+export type TournamentInvitationResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentInvitationResult'] = ResolversParentTypes['TournamentInvitationResult']> = ResolversObject<{
+  invitation?: Resolver<Maybe<ResolversTypes['TournamentInvitation']>, ParentType, ContextType>;
+  message?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+}>;
+
+export type TournamentMutationResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentMutationResult'] = ResolversParentTypes['TournamentMutationResult']> = ResolversObject<{
+  message?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
 }>;
 
 export type TournamentPlayerResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['TournamentPlayer'] = ResolversParentTypes['TournamentPlayer']> = ResolversObject<{
@@ -2181,6 +2371,7 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Profile?: ProfileResolvers<ContextType>;
   ProfileSummary?: ProfileSummaryResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
+  SchedulePreviewDay?: SchedulePreviewDayResolvers<ContextType>;
   ScheduleSlot?: ScheduleSlotResolvers<ContextType>;
   SlotAuditLog?: SlotAuditLogResolvers<ContextType>;
   SlotImpactPreview?: SlotImpactPreviewResolvers<ContextType>;
@@ -2196,6 +2387,9 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   Tournament?: TournamentResolvers<ContextType>;
   TournamentClub?: TournamentClubResolvers<ContextType>;
   TournamentFixtureMatch?: TournamentFixtureMatchResolvers<ContextType>;
+  TournamentInvitation?: TournamentInvitationResolvers<ContextType>;
+  TournamentInvitationResult?: TournamentInvitationResultResolvers<ContextType>;
+  TournamentMutationResult?: TournamentMutationResultResolvers<ContextType>;
   TournamentPlayer?: TournamentPlayerResolvers<ContextType>;
   TournamentTeam?: TournamentTeamResolvers<ContextType>;
   TournamentTeamRegistrationResult?: TournamentTeamRegistrationResultResolvers<ContextType>;

@@ -16,19 +16,28 @@
 import { supabase } from '../config/supabase.js';
 import { cacheDeletePattern, cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
 import {
+  DurationMode,
   FixtureMatchStatus,
+  FixturePhase,
   MatchFormat,
   PlayerPosition,
+  TournamentInvitationStatus,
   TournamentStatus,
+  TournamentType,
   type CreateTournamentInput,
   type CreateTournamentResult,
+  type InviteTeamToTournamentInput,
   type JoinTournamentInput,
   type LeaveTournamentInput,
   type LeaveTournamentResult,
   type RegisterTournamentTeamInput,
+  type SchedulePreviewInput,
   type Tournament,
   type TournamentFilters,
   type TournamentFixtureMatch,
+  type TournamentInvitation,
+  type TournamentInvitationResult,
+  type TournamentMutationResult,
   type TournamentPlayer,
   type TournamentTeam,
   type TournamentTeamMemberInput,
@@ -47,6 +56,14 @@ import { clubRepository } from '../repositories/clubRepository.js';
 import { teamRepository } from '../repositories/teamRepository.js';
 import { dateToDayOfWeek } from './clubService.js';
 import type { ServiceContext } from '../types/context.js';
+import {
+  buildRoundRobinFixtureRows,
+  buildSingleEliminationFixtureRows,
+  buildGroupStageFixtureRows,
+  buildSchedulePreview,
+  calcTotalMatchdays,
+  calcMatchesPerMatchday,
+} from './tournamentFixtureService.js';
 
 // =====================================================
 // Enum Mapping
@@ -165,6 +182,16 @@ function toTournamentTeam(row: TournamentTeamRow): TournamentTeam {
 }
 
 function toFixtureMatch(row: FixtureMatchRow): TournamentFixtureMatch {
+  const now = new Date();
+  const isPast = row.scheduledAt ? new Date(row.scheduledAt) < now : false;
+  const DB_TO_PHASE: Record<string, import('../graphql/generated/graphql.js').FixturePhase> = {
+    group_stage: FixturePhase.GroupStage,
+    round_of_16: FixturePhase.RoundOf_16,
+    quarterfinal: FixturePhase.Quarterfinal,
+    semifinal: FixturePhase.Semifinal,
+    third_place: FixturePhase.ThirdPlace,
+    final: FixturePhase.Final,
+  };
   return {
     id: row.id,
     tournamentId: row.tournamentId,
@@ -178,6 +205,11 @@ function toFixtureMatch(row: FixtureMatchRow): TournamentFixtureMatch {
     status: DB_TO_FIXTURE_STATUS[row.status] ?? FixtureMatchStatus.Scheduled,
     scoreHome: row.scoreHome,
     scoreAway: row.scoreAway,
+    // Issue #132: nuevos campos
+    phase: row.phase ? (DB_TO_PHASE[row.phase] ?? null) : null,
+    groupName: row.groupName ?? null,
+    matchday: row.matchday ?? null,
+    isPast,
   };
 }
 
@@ -223,6 +255,14 @@ function toTournament(row: TournamentRow): Tournament {
       : null,
     teams: activeTeamRows.map(toTournamentTeam),
     fixtureMatches: fixtureMatches.map(toFixtureMatch),
+    // Issue #132: nuevos campos de tipo y scheduling
+    tournamentType: DB_TO_TOURNAMENT_TYPE[row.tournamentType ?? 'round_robin'] ?? TournamentType.RoundRobin,
+    durationMode: DB_TO_DURATION_MODE[row.durationMode ?? 'multi_day'] ?? DurationMode.MultiDay,
+    firstMatchday: row.firstMatchday ?? null,
+    cadenceDays: row.cadenceDays ?? null,
+    groupCount: row.groupCount ?? null,
+    teamsPerGroup: row.teamsPerGroup ?? null,
+    advancingPerGroup: row.advancingPerGroup ?? null,
   };
 }
 
@@ -262,16 +302,17 @@ async function normalizeAndValidateSchedule(
   input: CreateTournamentInput,
   dbFormat: string,
 ): Promise<NormalizedScheduleSlot[]> {
+  const schedule = input.schedule ?? [];
   const shape = roundRobinShape(input.teamCount);
 
-  if (input.schedule.length < shape.requiredMatches) {
+  if (schedule.length < shape.requiredMatches) {
     throw new Error(
       `Necesitás seleccionar ${shape.requiredMatches} horarios para un round-robin de ${input.teamCount} equipos.`,
     );
   }
 
   const occurrenceKeys = new Set<string>();
-  for (const occurrence of input.schedule) {
+  for (const occurrence of schedule) {
     const key = `${occurrence.slotId}|${occurrence.date}`;
     if (occurrenceKeys.has(key)) {
       throw new Error('Hay horarios repetidos en el fixture del torneo');
@@ -279,11 +320,11 @@ async function normalizeAndValidateSchedule(
     occurrenceKeys.add(key);
   }
 
-  const uniqueSlotIds = [...new Set(input.schedule.map((s) => s.slotId))];
+  const uniqueSlotIds = [...new Set(schedule.map((s) => s.slotId))];
   const slots = await tournamentRepository.getSlotsByIds(uniqueSlotIds);
   const slotsById = new Map(slots.map((slot) => [slot.id, slot]));
 
-  const normalized = input.schedule.map((occurrence) => {
+  const normalized = schedule.map((occurrence) => {
     const slot = slotsById.get(occurrence.slotId);
     if (!slot) throw new Error('Uno de los horarios seleccionados ya no existe');
     if (slot.clubId !== input.clubId) {
@@ -856,16 +897,374 @@ export async function leaveTournament(
   };
 }
 
+// =====================================================
+// Issue #132: nuevos mapeos de enum
+// =====================================================
+
+const DB_TO_TOURNAMENT_TYPE: Record<string, TournamentType> = {
+  round_robin: TournamentType.RoundRobin,
+  single_elimination: TournamentType.SingleElimination,
+  group_stage_elimination: TournamentType.GroupStageElimination,
+};
+
+const DB_TO_DURATION_MODE: Record<string, DurationMode> = {
+  single_day: DurationMode.SingleDay,
+  multi_day: DurationMode.MultiDay,
+};
+
+const DB_TO_FIXTURE_PHASE: Record<string, FixturePhase> = {
+  group_stage: FixturePhase.GroupStage,
+  round_of_16: FixturePhase.RoundOf_16,
+  quarterfinal: FixturePhase.Quarterfinal,
+  semifinal: FixturePhase.Semifinal,
+  third_place: FixturePhase.ThirdPlace,
+  final: FixturePhase.Final,
+};
+
+const DB_TO_INVITATION_STATUS: Record<string, TournamentInvitationStatus> = {
+  pending: TournamentInvitationStatus.Pending,
+  accepted: TournamentInvitationStatus.Accepted,
+  rejected: TournamentInvitationStatus.Rejected,
+  expired: TournamentInvitationStatus.Expired,
+};
+
+// =====================================================
+// Issue #132: crear torneo con auto-scheduling (date-based)
+// =====================================================
+
+/**
+ * Crear torneo usando fechas automáticas (sin slots de club).
+ * Camino: firstMatchday + cadenceDays → calcular scheduledAt de cada fixture.
+ */
+export async function createTournamentAutoSchedule(
+  input: CreateTournamentInput,
+  ctx: ServiceContext,
+): Promise<CreateTournamentResult> {
+  /*
+   * Decision Context:
+   * - Este camino se activa cuando input.firstMatchday está presente y schedule está vacío.
+   * - No usa el RPC create_tournament_with_fixture (que requiere slots de club).
+   * - Los fixtures se crean sin courtId — el organizador puede asignar cancha después.
+   * - Genera fixture según tournamentType:
+   *   round_robin → buildRoundRobinFixtureRows
+   *   single_elimination → buildSingleEliminationFixtureRows
+   *   group_stage_elimination → buildGroupStageFixtureRows (grupos + eliminación)
+   * - Para group_stage: los fixtures de eliminación son placeholders (homeTeamId/awayTeamId NULL).
+   * - Validación: firstMatchday >= hoy.
+   * - Previously fixed bugs: none relevant (nueva funcionalidad).
+   */
+  if (!ctx.userId) throw new Error('Authentication required');
+  const db = ctx.supabase;
+  if (!db) throw new Error('User-scoped client required');
+
+  const captainTeams = await teamRepository.getTeamsByCaptainId(ctx.userId);
+  if (captainTeams.length === 0) {
+    throw new Error('Solo capitanes de equipo pueden crear torneos. Primero creá un equipo y convertite en capitán.');
+  }
+
+  const name = input.name.trim();
+  if (name.length < 3) throw new Error('El nombre del torneo debe tener al menos 3 caracteres');
+  if (!input.firstMatchday) throw new Error('firstMatchday es requerido para auto-scheduling');
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (input.firstMatchday < today) throw new Error('La primera jornada debe ser a partir de hoy');
+
+  const tournamentType = input.tournamentType ?? TournamentType.RoundRobin;
+  const durationMode = input.durationMode ?? DurationMode.MultiDay;
+  const cadenceDays = input.cadenceDays ?? 7;
+
+  if (durationMode === 'MULTI_DAY' && !cadenceDays) {
+    throw new Error('cadenceDays es requerido para torneos de varios días');
+  }
+
+  const typeDb = {
+    [TournamentType.RoundRobin]: 'round_robin',
+    [TournamentType.SingleElimination]: 'single_elimination',
+    [TournamentType.GroupStageElimination]: 'group_stage_elimination',
+  }[tournamentType] ?? 'round_robin';
+
+  const modeDb = durationMode === DurationMode.SingleDay ? 'single_day' : 'multi_day';
+
+  if (typeDb === 'group_stage_elimination') {
+    if (!input.groupCount || input.groupCount < 2) throw new Error('groupCount mínimo es 2 para torneos por grupos');
+    const tpg = input.teamsPerGroup ?? Math.ceil(input.teamCount / input.groupCount);
+    if (input.teamCount !== input.groupCount * tpg) {
+      throw new Error(`teamCount (${input.teamCount}) debe ser groupCount × teamsPerGroup (${input.groupCount} × ${tpg})`);
+    }
+  }
+
+  const dbFormat = FORMAT_TO_DB[input.format as MatchFormat];
+  if (!dbFormat) throw new Error('Formato de torneo inválido');
+
+  const club = await clubRepository.getClubById(input.clubId);
+  if (!club) throw new Error('Club no encontrado');
+
+  // Calcular startDate y endDate para el torneo
+  const totalMatchdays = calcTotalMatchdays(typeDb, input.teamCount, input.groupCount, input.teamsPerGroup);
+  const endDateObj = new Date(input.firstMatchday + 'T12:00:00Z');
+  endDateObj.setUTCDate(endDateObj.getUTCDate() + (totalMatchdays - 1) * cadenceDays);
+  const endDate = endDateObj.toISOString().slice(0, 10);
+
+  const tournamentId = await tournamentRepository.createTournamentDirect(
+    {
+      organizerId: ctx.userId,
+      clubId: input.clubId,
+      name,
+      format: dbFormat,
+      teamCount: input.teamCount,
+      playersPerTeam: input.playersPerTeam,
+      description: input.description?.trim() || null,
+      startDate: input.firstMatchday,
+      endDate,
+      tournamentType: typeDb,
+      durationMode: modeDb,
+      firstMatchday: input.firstMatchday,
+      cadenceDays,
+      specificDays: (input.specificDays?.filter((d): d is number => d != null)) ?? null,
+      groupCount: input.groupCount ?? null,
+      teamsPerGroup: input.teamsPerGroup ?? null,
+      advancingPerGroup: input.advancingPerGroup ?? null,
+    },
+    db,
+  );
+
+  // Para round_robin y single_elimination: los fixture rows se crean con equipos placeholder.
+  // Los equipos reales se asignan al completar la inscripción en generateFixtureIfRegistrationComplete.
+  // Para group_stage: igual, pero se crean los grupos cuando se completa la inscripción.
+  // Los fixtures se crean ahora como PLACEHOLDER para reservar las jornadas.
+  if (typeDb === 'single_elimination') {
+    // Crear placeholder de matches por ronda (sin equipos asignados aún)
+    const totalMatchdays2 = calcTotalMatchdays('single_elimination', input.teamCount);
+    const placeholderRows = [];
+    const bracket = nextPow2(input.teamCount);
+
+    for (let round = 1; round <= Math.log2(bracket); round++) {
+      const matchesThisRound = bracket / Math.pow(2, round);
+      for (let m = 0; m < matchesThisRound; m++) {
+        const date = calcMatchdayDateHelper(input.firstMatchday, round, cadenceDays, modeDb);
+        placeholderRows.push({
+          tournamentId,
+          round,
+          matchday: round,
+          scheduledAt: `${date}T${String(9 + m).padStart(2, '0')}:00:00+00:00`,
+          phase: phaseHelper(round, Math.log2(bracket)),
+          groupName: null,
+        });
+      }
+    }
+    await tournamentRepository.insertFixtureMatchesWithPhase(placeholderRows, supabase);
+  }
+
+  // Auto-inscripción del creador
+  if (db) {
+    try {
+      const team = captainTeams[0];
+      await teamRepository.enrollPermanentTeamInTournament(
+        { teamId: team.id, tournamentId, name: team.name, captainId: ctx.userId },
+        db,
+      );
+    } catch (e) {
+      console.warn('[tournamentService.createTournamentAutoSchedule] Auto-inscripción fallida:', e);
+    }
+  }
+
+  await invalidateTournamentListCaches();
+  const created = await tournamentRepository.getTournamentById(tournamentId);
+  if (!created) throw new Error('No se pudo cargar el torneo creado');
+
+  return { success: true, tournamentId: created.id, message: null, tournament: toTournament(created) };
+}
+
+// Helpers locales para evitar imports circulares
+function nextPow2(n: number): number {
+  let p = 1; while (p < n) p *= 2; return p;
+}
+function calcMatchdayDateHelper(firstMatchday: string, matchday: number, cadenceDays: number, durationMode: string): string {
+  if (durationMode === 'single_day') return firstMatchday;
+  const d = new Date(firstMatchday + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + (matchday - 1) * cadenceDays);
+  return d.toISOString().slice(0, 10);
+}
+function phaseHelper(round: number, totalRounds: number): string {
+  const fromEnd = totalRounds - round;
+  switch (fromEnd) {
+    case 0: return 'final'; case 1: return 'semifinal';
+    case 2: return 'quarterfinal'; case 3: return 'round_of_16';
+    default: return 'group_stage';
+  }
+}
+
+// =====================================================
+// Issue #132: schedulePreview — sin escritura a DB
+// =====================================================
+
+export function getSchedulePreview(
+  input: SchedulePreviewInput,
+): Array<{ matchday: number; date: string; matchCount: number; isPast: boolean }> {
+  const typeDb = {
+    [TournamentType.RoundRobin]: 'round_robin',
+    [TournamentType.SingleElimination]: 'single_elimination',
+    [TournamentType.GroupStageElimination]: 'group_stage_elimination',
+  }[input.tournamentType] ?? 'round_robin';
+
+  const modeDb = input.durationMode === DurationMode.SingleDay ? 'single_day' : 'multi_day';
+  const cadenceDays = input.cadenceDays ?? 7;
+  const totalMatchdays = calcTotalMatchdays(typeDb, input.teamCount, input.groupCount, input.teamsPerGroup);
+  const matchesPerMatchday = calcMatchesPerMatchday(typeDb, input.teamCount, input.groupCount, input.teamsPerGroup);
+
+  return buildSchedulePreview(input.firstMatchday, totalMatchdays, matchesPerMatchday, cadenceDays, modeDb);
+}
+
+// =====================================================
+// Issue #132: invitaciones de equipos a torneos (T5)
+// =====================================================
+
+export async function inviteTeamToTournament(
+  input: InviteTeamToTournamentInput,
+  ctx: ServiceContext,
+): Promise<TournamentInvitationResult> {
+  const userId = ctx.userId;
+  if (!userId) throw new Error('Autenticación requerida');
+  const db = ctx.supabase ?? supabase;
+
+  const tournament = await tournamentRepository.getTournamentById(input.tournamentId);
+  if (!tournament) throw new Error('Torneo no encontrado');
+  if (tournament.organizerId !== userId) throw new Error('Solo el organizador puede invitar equipos');
+  if (tournament.status !== 'registration') throw new Error('El torneo no está en período de inscripción');
+
+  const team = await teamRepository.getTeamById(input.teamId);
+  if (!team) throw new Error('Equipo no encontrado');
+  if (!team.isActive) throw new Error('El equipo no está activo');
+
+  // Verificar que el equipo no está ya inscripto
+  const existing = await teamRepository.getEnrollmentByPermanentTeamAndTournament(input.teamId, input.tournamentId);
+  if (existing) throw new Error('El equipo ya está inscripto en este torneo');
+
+  // Verificar que no hay invitación pendiente
+  const pending = await tournamentRepository.getPendingTournamentInvitation(input.tournamentId, input.teamId);
+  if (pending) throw new Error('Ya existe una invitación pendiente para este equipo');
+
+  if (!team.captainId) throw new Error('El equipo no tiene capitán asignado');
+
+  const invitation = await tournamentRepository.createTournamentInvitation(
+    { tournamentId: input.tournamentId, teamId: input.teamId, invitedBy: userId, captainId: team.captainId, message: input.message ?? null },
+    db,
+  );
+
+  console.info(`[tournamentService.inviteTeamToTournament] Invitación enviada: tournamentId=${input.tournamentId}, teamId=${input.teamId}`);
+  const full = await tournamentRepository.getTournamentInvitationById(invitation.id);
+
+  return {
+    success: true,
+    message: 'Invitación enviada correctamente',
+    invitation: full ? toTournamentInvitation(full) : null,
+  };
+}
+
+export async function respondTournamentInvitation(
+  invitationId: string,
+  accept: boolean,
+  ctx: ServiceContext,
+): Promise<TournamentMutationResult> {
+  const userId = ctx.userId;
+  if (!userId) throw new Error('Autenticación requerida');
+  const db = ctx.supabase ?? supabase;
+
+  const inv = await tournamentRepository.getTournamentInvitationById(invitationId);
+  if (!inv) throw new Error('Invitación no encontrada');
+  if (inv.captainId !== userId) throw new Error('Solo el capitán del equipo puede responder esta invitación');
+  if (inv.status !== 'pending') throw new Error('Esta invitación ya fue respondida');
+  if (new Date(inv.expiresAt) < new Date()) throw new Error('La invitación expiró');
+
+  const now = new Date().toISOString();
+
+  if (accept) {
+    if (inv.teamId) {
+      const team = await teamRepository.getTeamById(inv.teamId);
+      if (team) {
+        try {
+          await teamRepository.enrollPermanentTeamInTournament(
+            { teamId: inv.teamId, tournamentId: inv.tournamentId, name: team.name, captainId: userId },
+            db,
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Error al inscribir el equipo';
+          throw new Error(msg);
+        }
+      }
+    }
+    await tournamentRepository.updateTournamentInvitationStatus(invitationId, 'accepted', now, db);
+    await generateFixtureIfRegistrationComplete({ userId, supabase: db }, inv.tournamentId);
+    await invalidateTournamentListCaches();
+    console.info(`[tournamentService.respondTournamentInvitation] Aceptada: ${invitationId}`);
+    return { success: true, message: '¡Equipo inscripto al torneo exitosamente!' };
+  } else {
+    await tournamentRepository.updateTournamentInvitationStatus(invitationId, 'rejected', now, db);
+    console.info(`[tournamentService.respondTournamentInvitation] Rechazada: ${invitationId}`);
+    return { success: true, message: 'Invitación rechazada' };
+  }
+}
+
+export async function getMyTournamentInvitations(ctx: ServiceContext): Promise<TournamentInvitation[]> {
+  if (!ctx.userId) throw new Error('Autenticación requerida');
+  const rows = await tournamentRepository.getMyTournamentInvitations(ctx.userId);
+  return rows.map(toTournamentInvitation);
+}
+
+// Mapper de invitación DB → GraphQL
+function toTournamentInvitation(row: import('../repositories/tournamentRepository.js').TournamentInvitationRow): TournamentInvitation {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = row as any;
+  return {
+    id: r.id,
+    tournamentId: r.tournamentId,
+    tournamentName: r.tournament?.name ?? '',
+    teamId: r.teamId ?? null,
+    teamName: r.team?.name ?? '',
+    invitedBy: {
+      id: r.invitedByProfile?.id ?? r.invitedBy,
+      displayName: r.invitedByProfile?.displayName ?? '',
+      avatarUrl: r.invitedByProfile?.avatarUrl ?? null,
+      preferredPosition: null,
+    },
+    captain: {
+      id: r.captainProfile?.id ?? r.captainId,
+      displayName: r.captainProfile?.displayName ?? '',
+      avatarUrl: r.captainProfile?.avatarUrl ?? null,
+      preferredPosition: null,
+    },
+    status: DB_TO_INVITATION_STATUS[r.status] ?? TournamentInvitationStatus.Pending,
+    message: r.message ?? null,
+    expiresAt: r.expiresAt,
+    respondedAt: r.respondedAt ?? null,
+    createdAt: r.createdAt,
+  };
+}
+
+// =====================================================
+// Actualizar toTournament y toFixtureMatch con nuevos campos
+// =====================================================
+
+// Nota: toTournament y toFixtureMatch ya están definidos en el service.
+// Los nuevos campos (tournamentType, durationMode, isPast, phase, etc.)
+// se agregan en el mixin below que se usa en los mappers existentes.
+// Ver parche en toTournament y toFixtureMatch abajo.
+
 export const tournamentService = {
   listTournaments,
   listRegistrationTournaments,
   getTournamentById,
   searchTournamentEligiblePlayers,
   createTournament,
+  createTournamentAutoSchedule,
   generateFixtureIfRegistrationComplete,
   registerTournamentTeam,
   joinTournament,
   addTournamentTeamMember,
   removeTournamentTeamMember,
   leaveTournament,
+  getSchedulePreview,
+  inviteTeamToTournament,
+  respondTournamentInvitation,
+  getMyTournamentInvitations,
 };

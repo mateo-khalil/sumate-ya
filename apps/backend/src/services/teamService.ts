@@ -556,6 +556,28 @@ async function searchPlayers(search: string, ctx: ServiceContext): Promise<TeamP
   return rows.map(rowToTeamProfile);
 }
 
+async function searchTeams(search: string, ctx: ServiceContext): Promise<Team[]> {
+  getUserIdOrThrow(ctx);
+  const trimmed = search.trim();
+  if (trimmed.length < 2) return [];
+  // Reutiliza getTeamsByIds luego de buscar por nombre en la tabla teams
+  const { data } = await supabase
+    .from('teams')
+    .select(`
+      id, name, "captainId", "logoUrl", format, description, "isActive", "createdBy", "createdAt", "updatedAt",
+      captain:profiles!teams_captainId_fkey(id, "displayName", "avatarUrl", "preferredPosition"),
+      members:teamMembers!teamMembers_teamId_fkey(
+        id, "teamId", "playerId", role, "joinedAt",
+        player:profiles!teamMembers_playerId_fkey(id, "displayName", "avatarUrl", "preferredPosition")
+      )
+    `)
+    .eq('isActive', true)
+    .ilike('name', `%${trimmed}%`)
+    .limit(10);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((data ?? []) as any[]).map(rowToTeam);
+}
+
 async function listTeamInvitations(teamId: string, ctx: ServiceContext): Promise<TeamInvitation[]> {
   const userId = getUserIdOrThrow(ctx);
 
@@ -700,6 +722,7 @@ export const teamService = {
   getTeamAvailabilityMatrix,
   myPendingInvitations,
   searchPlayers,
+  searchTeams,
   listTeamInvitations,
   getMyTeamAvailability,
   getTeamEnrollments,
