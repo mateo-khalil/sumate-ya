@@ -686,6 +686,18 @@ export async function leaveTournament(
   input: LeaveTournamentInput,
   ctx: ServiceContext,
 ): Promise<LeaveTournamentResult> {
+  /*
+   * Decision Context:
+   * - withdrawTeamById usa ctx.supabase (user-scoped) para respetar RLS.
+   * - REQUIERE política UPDATE en tournamentTeams: "captainId = auth.uid()".
+   *   Sin esa política, Supabase devuelve { error: null, data: [] } (0 rows)
+   *   silenciosamente — countActiveTeams sigue retornando > 0 y el torneo
+   *   nunca se cancela aunque queden 0 equipos activos.
+   * - Fix aplicado 2026-05-31: migración fix_tournament_teams_update_delete_rls
+   *   agrega las políticas UPDATE/DELETE faltantes en tournamentTeams y
+   *   DELETE en tournamentTeamMembers.
+   * - Previously fixed bugs: policies RLS faltantes → retiro silencioso sin cancelación.
+   */
   // VALIDACIÓN 1 — Autenticación (requireAuth en resolver, pero se verifica acá también)
   if (!ctx.userId) throw new Error('Authentication required');
 
