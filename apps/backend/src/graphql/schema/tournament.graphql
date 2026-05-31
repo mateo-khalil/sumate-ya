@@ -1,14 +1,18 @@
-# Tournament creation and fixture planning
+# Tournament creation, scheduling y fixture planning — issue #132 mejorar-torneos
 #
 # Decision Context:
-# - Tournaments already exist in the DB schema, but this is the first GraphQL contract
-#   that lets authenticated users create them.
-# - createTournament accepts concrete slot/date pairs. The service validates each selected
-#   occurrence and writes planned fixtureMatches rows with round numbers. Team ids stay
-#   null until registration is complete, at which point the service can fill them using
-#   round-robin pairing.
-# - MatchFormat is reused from match.graphql so tournament formats stay aligned with
-#   player and club match creation.
+# - Tres tipos de torneo: round_robin (existente), single_elimination, group_stage_elimination.
+# - Dos flujos de creación coexisten:
+#   a) schedule no vacío → flujo legado via RPC (slot-based, sin romper torneos existentes)
+#   b) firstMatchday provisto → flujo nuevo auto-schedule (date-based, sin slots)
+# - isPast en TournamentFixtureMatch: campo calculado en el service (scheduledAt < now())
+#   para que el frontend pueda atenuar fechas pasadas sin lógica extra (T4).
+# - TournamentInvitation: invitación de equipo permanente a torneo (T5),
+#   separada de teamInvitations (que es invitación de jugador a equipo).
+# - Previously fixed bugs: tournament creation bloqueaba a club_admin — el filtro de rol
+#   en getPlayerProfilesByIds fue eliminado.
+
+# ── Enums existentes ─────────────────────────────────────────
 
 enum TournamentStatus {
   REGISTRATION
@@ -23,6 +27,37 @@ enum FixtureMatchStatus {
   COMPLETED
   CANCELLED
 }
+
+# ── Nuevos enums (issue #132) ────────────────────────────────
+
+enum TournamentType {
+  ROUND_ROBIN
+  SINGLE_ELIMINATION
+  GROUP_STAGE_ELIMINATION
+}
+
+enum DurationMode {
+  SINGLE_DAY
+  MULTI_DAY
+}
+
+enum FixturePhase {
+  GROUP_STAGE
+  ROUND_OF_16
+  QUARTERFINAL
+  SEMIFINAL
+  THIRD_PLACE
+  FINAL
+}
+
+enum TournamentInvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+# ── Tipos existentes (extendidos) ────────────────────────────
 
 type TournamentClub {
   id: ID!
@@ -47,6 +82,12 @@ type TournamentFixtureMatch {
   status: FixtureMatchStatus!
   scoreHome: Int
   scoreAway: Int
+  # Issue #132: nuevos campos de fase, grupo y jornada
+  phase: FixturePhase
+  groupName: String
+  matchday: Int
+  # T4: calculado en el service — true si scheduledAt < now()
+  isPast: Boolean!
 }
 
 type TournamentPlayer {
@@ -82,13 +123,63 @@ type Tournament {
   club: TournamentClub
   teams: [TournamentTeam!]!
   fixtureMatches: [TournamentFixtureMatch!]!
+  # Issue #132: nuevos campos de tipo y scheduling
+  tournamentType: TournamentType!
+  durationMode: DurationMode!
+  firstMatchday: String
+  cadenceDays: Int
+  groupCount: Int
+  teamsPerGroup: Int
+  advancingPerGroup: Int
 }
+
+# ── Nuevos tipos (issue #132) ────────────────────────────────
+
+# Preview de calendario antes de crear (T2 — sin escribir a DB)
+type SchedulePreviewDay {
+  matchday: Int!
+  date: String!
+  matchCount: Int!
+  isPast: Boolean!
+}
+
+# Invitación de equipo permanente a torneo (T5)
+type TournamentInvitation {
+  id: ID!
+  tournamentId: ID!
+  tournamentName: String!
+  teamId: ID
+  teamName: String!
+  invitedBy: TournamentPlayer!
+  captain: TournamentPlayer!
+  status: TournamentInvitationStatus!
+  message: String
+  expiresAt: String!
+  respondedAt: String
+  createdAt: String!
+}
+
+type TournamentInvitationResult {
+  success: Boolean!
+  message: String!
+  invitation: TournamentInvitation
+}
+
+type TournamentMutationResult {
+  success: Boolean!
+  message: String!
+}
+
+# ── Inputs ──────────────────────────────────────────────────
 
 input TournamentScheduleSlotInput {
   slotId: ID!
   date: String!
 }
 
+# CreateTournamentInput extendido:
+# - schedule ahora es OPCIONAL (array vacío → usar firstMatchday para auto-schedule)
+# - nuevos campos para tipo de torneo y scheduling por fecha (T1-T3)
 input CreateTournamentInput {
   clubId: ID!
   name: String!
@@ -96,7 +187,21 @@ input CreateTournamentInput {
   teamCount: Int!
   playersPerTeam: Int!
   description: String
-  schedule: [TournamentScheduleSlotInput!]!
+
+  # Flujo legado (slot-based): proveer schedule no vacío
+  schedule: [TournamentScheduleSlotInput!]
+
+  # Flujo nuevo (date-based): proveer firstMatchday + cadenceDays
+  tournamentType: TournamentType
+  durationMode: DurationMode
+  firstMatchday: String
+  cadenceDays: Int
+  specificDays: [Int]
+
+  # Configuración de grupos (obligatorio para group_stage_elimination)
+  groupCount: Int
+  teamsPerGroup: Int
+  advancingPerGroup: Int
 }
 
 input TournamentFilters {
@@ -106,20 +211,6 @@ input TournamentFilters {
   dateFrom: String
   dateTo: String
   search: String
-}
-
-type CreateTournamentResult {
-  success: Boolean!
-  tournamentId: ID
-  message: String
-  tournament: Tournament
-}
-
-type TournamentTeamRegistrationResult {
-  success: Boolean!
-  teamId: ID
-  message: String
-  tournament: Tournament
 }
 
 input RegisterTournamentTeamInput {
@@ -139,16 +230,42 @@ input TournamentTeamMemberInput {
   playerId: ID!
 }
 
-extend type Query {
-  tournaments(filters: TournamentFilters): [Tournament!]!
-  tournament(id: ID!): Tournament
-  tournamentEligiblePlayers(tournamentId: ID!, search: String): [TournamentPlayer!]!
-}
-
 input LeaveTournamentInput {
   tournamentId: ID!
   teamId: ID!
   reason: String
+}
+
+input InviteTeamToTournamentInput {
+  tournamentId: ID!
+  teamId: ID!
+  message: String
+}
+
+input SchedulePreviewInput {
+  tournamentType: TournamentType!
+  teamCount: Int!
+  firstMatchday: String!
+  cadenceDays: Int
+  durationMode: DurationMode!
+  groupCount: Int
+  teamsPerGroup: Int
+}
+
+# ── Tipos de resultado ───────────────────────────────────────
+
+type CreateTournamentResult {
+  success: Boolean!
+  tournamentId: ID
+  message: String
+  tournament: Tournament
+}
+
+type TournamentTeamRegistrationResult {
+  success: Boolean!
+  teamId: ID
+  message: String
+  tournament: Tournament
 }
 
 type LeaveTournamentResult {
@@ -158,6 +275,20 @@ type LeaveTournamentResult {
   remainingTeams: Int
 }
 
+# ── Queries ──────────────────────────────────────────────────
+
+extend type Query {
+  tournaments(filters: TournamentFilters): [Tournament!]!
+  tournament(id: ID!): Tournament
+  tournamentEligiblePlayers(tournamentId: ID!, search: String): [TournamentPlayer!]!
+  # Issue #132: preview de calendario antes de crear (T2)
+  schedulePreview(input: SchedulePreviewInput!): [SchedulePreviewDay!]!
+  # Issue #132: invitaciones de torneo recibidas por el capitán (T5)
+  myTournamentInvitations: [TournamentInvitation!]!
+}
+
+# ── Mutations ────────────────────────────────────────────────
+
 extend type Mutation {
   createTournament(input: CreateTournamentInput!): CreateTournamentResult!
   registerTournamentTeam(input: RegisterTournamentTeamInput!): TournamentTeamRegistrationResult!
@@ -165,4 +296,7 @@ extend type Mutation {
   addTournamentTeamMember(input: TournamentTeamMemberInput!): TournamentTeamRegistrationResult!
   removeTournamentTeamMember(input: TournamentTeamMemberInput!): TournamentTeamRegistrationResult!
   leaveTournament(input: LeaveTournamentInput!): LeaveTournamentResult!
+  # Issue #132: invitaciones de equipos a torneos (T5)
+  inviteTeamToTournament(input: InviteTeamToTournamentInput!): TournamentInvitationResult!
+  respondTournamentInvitation(invitationId: ID!, accept: Boolean!): TournamentMutationResult!
 }

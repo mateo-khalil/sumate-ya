@@ -29,7 +29,14 @@ const TOURNAMENT_COLUMNS = `
   description,
   "startDate",
   "endDate",
-  "createdAt"
+  "createdAt",
+  "tournamentType",
+  "durationMode",
+  "firstMatchday",
+  "cadenceDays",
+  "groupCount",
+  "teamsPerGroup",
+  "advancingPerGroup"
 `;
 
 const TOURNAMENT_CLUB_COLUMNS = `
@@ -53,7 +60,10 @@ const FIXTURE_COLUMNS = `
   status,
   "scoreHome",
   "scoreAway",
-  "createdAt"
+  "createdAt",
+  phase,
+  "groupName",
+  matchday
 `;
 
 const TOURNAMENT_PLAYER_COLUMNS = `
@@ -115,6 +125,10 @@ export interface FixtureMatchRow {
   scoreHome: number | null;
   scoreAway: number | null;
   createdAt: string;
+  // Issue #132: nuevos campos de tipo y scheduling
+  phase?: string | null;
+  groupName?: string | null;
+  matchday?: number | null;
 }
 
 export interface TournamentTeamCountRow {
@@ -139,6 +153,14 @@ export interface TournamentRow {
   fixtureMatches?: FixtureMatchRow[];
   registeredTeams?: TournamentTeamCountRow[];
   tournamentTeams?: TournamentTeamRow[];
+  // Issue #132: nuevos campos
+  tournamentType?: string;
+  durationMode?: string;
+  firstMatchday?: string | null;
+  cadenceDays?: number | null;
+  groupCount?: number | null;
+  teamsPerGroup?: number | null;
+  advancingPerGroup?: number | null;
 }
 
 export interface TournamentSlotCourtRow {
@@ -1005,6 +1027,278 @@ export async function countActiveTeams(
   return count ?? 0;
 }
 
+// =====================================================
+// Issue #132: Nuevas interfaces y funciones
+// =====================================================
+
+/** Input para crear torneo por fecha (sin slots de club) */
+export interface CreateTournamentDirectInput {
+  organizerId: string;
+  clubId: string;
+  name: string;
+  format: string;
+  teamCount: number;
+  playersPerTeam: number;
+  description?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  tournamentType: string;
+  durationMode: string;
+  firstMatchday?: string | null;
+  cadenceDays?: number | null;
+  specificDays?: number[] | null;
+  groupCount?: number | null;
+  teamsPerGroup?: number | null;
+  advancingPerGroup?: number | null;
+}
+
+/** Input para insertar fixtures con campos de fase y jornada */
+export interface CreateFixtureMatchWithPhaseInput {
+  tournamentId: string;
+  round: number;
+  matchday: number;
+  courtId?: string | null;
+  scheduledAt?: string | null;
+  phase?: string | null;
+  groupName?: string | null;
+}
+
+export interface TournamentGroupRow {
+  id: string;
+  tournamentId: string;
+  groupName: string;
+  createdAt: string;
+}
+
+export interface TournamentInvitationRow {
+  id: string;
+  tournamentId: string;
+  teamId: string | null;
+  invitedBy: string;
+  captainId: string;
+  status: string;
+  message: string | null;
+  respondedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+  // joins opcionales
+  tournament?: { name: string } | null;
+  invitedByProfile?: { id: string; displayName: string; avatarUrl: string | null } | null;
+  captainProfile?: { id: string; displayName: string; avatarUrl: string | null } | null;
+  team?: { id: string; name: string } | null;
+}
+
+const TOURNAMENT_INVITATION_COLUMNS = `
+  id, "tournamentId", "teamId", "invitedBy", "captainId",
+  status, message, "respondedAt", "expiresAt", "createdAt"
+`;
+
+/** Crea un torneo directamente (sin RPC de slots) para auto-scheduling */
+export async function createTournamentDirect(
+  input: CreateTournamentDirectInput,
+  client: SupabaseClient,
+): Promise<string> {
+  const { data, error } = await client
+    .from('tournaments')
+    .insert({
+      organizerId: input.organizerId,
+      clubId: input.clubId,
+      name: input.name,
+      format: input.format,
+      teamCount: input.teamCount,
+      playersPerTeam: input.playersPerTeam,
+      description: input.description ?? null,
+      startDate: input.startDate ?? null,
+      endDate: input.endDate ?? null,
+      tournamentType: input.tournamentType,
+      durationMode: input.durationMode,
+      firstMatchday: input.firstMatchday ?? null,
+      cadenceDays: input.cadenceDays ?? null,
+      specificDays: input.specificDays ?? null,
+      groupCount: input.groupCount ?? null,
+      teamsPerGroup: input.teamsPerGroup ?? null,
+      advancingPerGroup: input.advancingPerGroup ?? null,
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('[tournamentRepository.createTournamentDirect] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+  return (data as { id: string }).id;
+}
+
+/** Inserta fixture matches con campos de fase, grupo y jornada */
+export async function insertFixtureMatchesWithPhase(
+  rows: CreateFixtureMatchWithPhaseInput[],
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await client
+    .from('fixtureMatches')
+    .insert(rows.map(r => ({
+      tournamentId: r.tournamentId,
+      round: r.round,
+      matchday: r.matchday,
+      courtId: r.courtId ?? null,
+      scheduledAt: r.scheduledAt ?? null,
+      phase: r.phase ?? null,
+      groupName: r.groupName ?? null,
+    })));
+
+  if (error) {
+    console.error('[tournamentRepository.insertFixtureMatchesWithPhase] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+}
+
+// ── Grupos ────────────────────────────────────────────────────
+
+export async function createTournamentGroup(
+  tournamentId: string,
+  groupName: string,
+  client: SupabaseClient = supabase,
+): Promise<TournamentGroupRow> {
+  const { data, error } = await client
+    .from('tournamentGroups')
+    .insert({ tournamentId, groupName })
+    .select('id, "tournamentId", "groupName", "createdAt"')
+    .single();
+
+  if (error) {
+    console.error('[tournamentRepository.createTournamentGroup] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+  return data as TournamentGroupRow;
+}
+
+export async function assignTeamToGroup(
+  groupId: string,
+  teamId: string,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('tournamentGroupTeams')
+    .insert({ groupId, teamId });
+
+  if (error) {
+    console.error('[tournamentRepository.assignTeamToGroup] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+}
+
+// ── Invitaciones de torneo ─────────────────────────────────────
+
+export async function createTournamentInvitation(
+  input: { tournamentId: string; teamId: string | null; invitedBy: string; captainId: string; message?: string | null },
+  client: SupabaseClient,
+): Promise<TournamentInvitationRow> {
+  const { data, error } = await client
+    .from('tournamentInvitations')
+    .insert({
+      tournamentId: input.tournamentId,
+      teamId: input.teamId ?? null,
+      invitedBy: input.invitedBy,
+      captainId: input.captainId,
+      message: input.message ?? null,
+    })
+    .select(TOURNAMENT_INVITATION_COLUMNS)
+    .single();
+
+  if (error) {
+    console.error('[tournamentRepository.createTournamentInvitation] Supabase error:', error.message);
+    if (error.code === '23505') throw new Error('Ya existe una invitación pendiente para este equipo en este torneo');
+    throw new Error(error.message);
+  }
+  return data as TournamentInvitationRow;
+}
+
+export async function getTournamentInvitationById(
+  id: string,
+  client: SupabaseClient = supabase,
+): Promise<TournamentInvitationRow | null> {
+  const { data, error } = await client
+    .from('tournamentInvitations')
+    .select(`
+      ${TOURNAMENT_INVITATION_COLUMNS},
+      tournament:tournaments!tournamentInvitations_tournamentId_fkey(name),
+      invitedByProfile:profiles!tournamentInvitations_invitedBy_fkey(id, "displayName", "avatarUrl"),
+      captainProfile:profiles!tournamentInvitations_captainId_fkey(id, "displayName", "avatarUrl"),
+      team:teams!tournamentInvitations_teamId_fkey(id, name)
+    `)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[tournamentRepository.getTournamentInvitationById] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return data as any;
+}
+
+export async function getPendingTournamentInvitation(
+  tournamentId: string,
+  teamId: string,
+  client: SupabaseClient = supabase,
+): Promise<TournamentInvitationRow | null> {
+  const { data, error } = await client
+    .from('tournamentInvitations')
+    .select(TOURNAMENT_INVITATION_COLUMNS)
+    .eq('tournamentId', tournamentId)
+    .eq('teamId', teamId)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  if (error) {
+    console.error('[tournamentRepository.getPendingTournamentInvitation] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+  return data as TournamentInvitationRow | null;
+}
+
+export async function getMyTournamentInvitations(
+  captainId: string,
+  client: SupabaseClient = supabase,
+): Promise<TournamentInvitationRow[]> {
+  const { data, error } = await client
+    .from('tournamentInvitations')
+    .select(`
+      ${TOURNAMENT_INVITATION_COLUMNS},
+      tournament:tournaments!tournamentInvitations_tournamentId_fkey(name),
+      invitedByProfile:profiles!tournamentInvitations_invitedBy_fkey(id, "displayName", "avatarUrl"),
+      team:teams!tournamentInvitations_teamId_fkey(id, name)
+    `)
+    .eq('captainId', captainId)
+    .eq('status', 'pending')
+    .order('createdAt', { ascending: false });
+
+  if (error) {
+    console.error('[tournamentRepository.getMyTournamentInvitations] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []) as any[];
+}
+
+export async function updateTournamentInvitationStatus(
+  id: string,
+  status: string,
+  respondedAt: string | null,
+  client: SupabaseClient,
+): Promise<void> {
+  const patch: Record<string, unknown> = { status };
+  if (respondedAt) patch.respondedAt = respondedAt;
+
+  const { error } = await client.from('tournamentInvitations').update(patch).eq('id', id);
+
+  if (error) {
+    console.error('[tournamentRepository.updateTournamentInvitationStatus] Supabase error:', error.message);
+    throw new Error(error.message);
+  }
+}
+
 export const tournamentRepository = {
   getSlotsByIds,
   getMatchesForSlotDates,
@@ -1034,4 +1328,14 @@ export const tournamentRepository = {
   getFixtureMatchesByTeam,
   clearTeamFromFixtureMatches,
   countActiveTeams,
+  // Issue #132
+  createTournamentDirect,
+  insertFixtureMatchesWithPhase,
+  createTournamentGroup,
+  assignTeamToGroup,
+  createTournamentInvitation,
+  getTournamentInvitationById,
+  getPendingTournamentInvitation,
+  getMyTournamentInvitations,
+  updateTournamentInvitationStatus,
 };
