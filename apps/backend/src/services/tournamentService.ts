@@ -371,7 +371,7 @@ async function validateJoinRoster(
   const foundIds = new Set(players.map((player) => player.id));
   const missing = playerIds.filter((playerId) => !foundIds.has(playerId));
   if (missing.length > 0) {
-    throw new Error('Uno o mas jugadores no existen o no tienen rol de jugador');
+    throw new Error('Uno o más jugadores no se encontraron en el sistema');
   }
 
   const usedPlayerIds = await tournamentRepository.getTournamentMemberPlayerIds(tournament.id);
@@ -469,6 +469,25 @@ export async function createTournament(
     },
     db,
   );
+
+  // Auto-inscripción: si el creador es capitán de un equipo permanente, se lo anota
+  // automáticamente al torneo que acaba de crear. Comportamiento solicitado en issue #137.
+  // Falla silenciosamente (solo log) para no impedir la creación del torneo.
+  if (ctx.userId && db) {
+    const captainTeams = await teamRepository.getTeamsByCaptainId(ctx.userId);
+    if (captainTeams.length > 0) {
+      const captainTeam = captainTeams[0];
+      try {
+        await teamRepository.enrollPermanentTeamInTournament(
+          { teamId: captainTeam.id, tournamentId, name: captainTeam.name, captainId: ctx.userId },
+          db,
+        );
+        console.info(`[tournamentService.createTournament] Auto-inscripto teamId=${captainTeam.id} en tournamentId=${tournamentId}`);
+      } catch (enrollErr) {
+        console.warn(`[tournamentService.createTournament] Auto-inscripción fallida para teamId=${captainTeam.id}:`, enrollErr);
+      }
+    }
+  }
 
   await generateFixtureIfRegistrationComplete({ userId: ctx.userId, supabase: db }, tournamentId);
   await invalidateTournamentListCaches();
