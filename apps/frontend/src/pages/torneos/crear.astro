@@ -15,6 +15,7 @@ export const prerender = false;
 import { Trophy, Volleyball, Shield } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import CreateTournamentFlow from '../../components/tournaments/create/CreateTournamentFlow';
+import { NewTournamentWizard } from '../../components/tournaments/create/NewTournamentWizard';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ACCESS_TOKEN_COOKIE } from '../../lib/auth';
 import { GET_CLUBS, type ClubDetail } from '../../graphql/operations/matches';
@@ -98,7 +99,7 @@ try {
           TORNEOS
         </div>
         <h1 class="section-title">Crear Torneo</h1>
-        <p class="section-sub">Round-robin con horarios reservados desde el inicio</p>
+        <p class="section-sub">Elegí el tipo de torneo y el modo de creación</p>
       </header>
 
       {!isCaptain ? (
@@ -116,13 +117,45 @@ try {
           </div>
         </section>
       ) : clubs.length > 0 ? (
-        <CreateTournamentFlow
-          client:load
-          initialClubs={clubs}
-          accessToken={accessToken}
-          userName={displayName}
-          userRole={user.role}
-        />
+        <!-- Issue #132: Dos modos de creación — el usuario elige -->
+        <div class="creation-modes">
+          <div class="mode-tabs" role="tablist" id="creation-mode-tabs">
+            <button role="tab" aria-controls="panel-wizard" id="tab-wizard"
+              class="mode-tab mode-tab--active" data-target="wizard">
+              <Trophy size={15} strokeWidth={2} aria-hidden="true" style={{ display:'inline',verticalAlign:'middle' }} />
+              Modo automático <span class="mode-badge mode-badge--new">Nuevo</span>
+            </button>
+            <button role="tab" aria-controls="panel-legacy" id="tab-legacy"
+              class="mode-tab" data-target="legacy">
+              Modo clásico (horarios)
+            </button>
+          </div>
+
+          <div id="panel-wizard" role="tabpanel" class="mode-panel mode-panel--active">
+            <p class="mode-desc">
+              Configurá el tipo de torneo, elegí una fecha inicial y el sistema calcula las jornadas automáticamente.
+            </p>
+            <NewTournamentWizard
+              client:load
+              initialClubs={clubs}
+              accessToken={accessToken}
+              userName={displayName}
+            />
+          </div>
+
+          <div id="panel-legacy" role="tabpanel" class="mode-panel" style="display:none">
+            <p class="mode-desc">
+              Seleccioná horarios específicos de la cancha para cada partido del fixture.
+            </p>
+            <CreateTournamentFlow
+              client:load
+              initialClubs={clubs}
+              accessToken={accessToken}
+              userName={displayName}
+              userRole={user.role}
+            />
+          </div>
+        </div>
       ) : (
         <section class="empty-state" role="status">
           <h2>No hay clubes disponibles</h2>
@@ -288,4 +321,45 @@ try {
     }
     .page-content { padding: 1.25rem 1rem 2rem; }
   }
+
+  /* ── Modo de creación tabs (issue #132) ── */
+  .creation-modes { max-width: 680px; display: flex; flex-direction: column; gap: 1.25rem; }
+  .mode-tabs { display: flex; gap: 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.07); padding-bottom: 0; }
+  .mode-tab {
+    display: flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1rem;
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: hsl(215 20% 55%); cursor: pointer; font-size: 0.875rem; font-weight: 500;
+    white-space: nowrap; transition: color 0.15s, border-color 0.15s; margin-bottom: -1px;
+  }
+  .mode-tab:hover { color: hsl(215 20% 82%); }
+  .mode-tab--active { color: hsl(35 100% 58%); border-bottom-color: hsl(35 100% 58%); font-weight: 600; }
+  .mode-badge { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; padding: 0.1rem 0.4rem; border-radius: 4px; }
+  .mode-badge--new { background: rgba(246,164,0,0.15); color: hsl(42 100% 60%); }
+  .mode-panel { }
+  .mode-desc { font-size: 0.85rem; color: hsl(215 20% 52%); margin: 0 0 1.25rem; }
+
+  :global(html.light) .mode-tab { color: hsl(220 16% 42%); }
+  :global(html.light) .mode-tab:hover { color: hsl(220 72% 10%); }
+  :global(html.light) .mode-tab--active { color: hsl(35 100% 35%); border-bottom-color: hsl(35 100% 35%); }
+  :global(html.light) .mode-tabs { border-bottom-color: rgba(0,0,0,0.08); }
 </style>
+
+<script>
+  // Tab switching para modos de creación
+  document.querySelectorAll<HTMLButtonElement>('.mode-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.mode-tab').forEach(t => {
+        t.classList.remove('mode-tab--active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      tab.classList.add('mode-tab--active');
+      tab.setAttribute('aria-selected', 'true');
+
+      const target = tab.dataset.target;
+      document.querySelectorAll<HTMLElement>('.mode-panel').forEach(p => {
+        p.style.display = p.id === `panel-${target}` ? '' : 'none';
+        p.classList.toggle('mode-panel--active', p.id === `panel-${target}`);
+      });
+    });
+  });
+</script>

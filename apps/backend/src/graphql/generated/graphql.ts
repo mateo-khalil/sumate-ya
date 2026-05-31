@@ -845,6 +845,7 @@ export type Query = {
   profile?: Maybe<Profile>;
   schedulePreview: Array<SchedulePreviewDay>;
   searchPlayers: Array<TeamProfile>;
+  searchTeams: Array<Team>;
   slotAuditLog: Array<SlotAuditLog>;
   slotImpactPreview: SlotImpactPreview;
   team?: Maybe<Team>;
@@ -926,6 +927,11 @@ export type QuerySchedulePreviewArgs = {
 
 
 export type QuerySearchPlayersArgs = {
+  search: Scalars['String']['input'];
+};
+
+
+export type QuerySearchTeamsArgs = {
   search: Scalars['String']['input'];
 };
 
@@ -2085,6 +2091,7 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   profile?: Resolver<Maybe<ResolversTypes['Profile']>, ParentType, ContextType, RequireFields<QueryProfileArgs, 'id'>>;
   schedulePreview?: Resolver<Array<ResolversTypes['SchedulePreviewDay']>, ParentType, ContextType, RequireFields<QuerySchedulePreviewArgs, 'input'>>;
   searchPlayers?: Resolver<Array<ResolversTypes['TeamProfile']>, ParentType, ContextType, RequireFields<QuerySearchPlayersArgs, 'search'>>;
+  searchTeams?: Resolver<Array<ResolversTypes['Team']>, ParentType, ContextType, RequireFields<QuerySearchTeamsArgs, 'search'>>;
   slotAuditLog?: Resolver<Array<ResolversTypes['SlotAuditLog']>, ParentType, ContextType, RequireFields<QuerySlotAuditLogArgs, 'slotId'>>;
   slotImpactPreview?: Resolver<ResolversTypes['SlotImpactPreview'], ParentType, ContextType, RequireFields<QuerySlotImpactPreviewArgs, 'slotIds'>>;
   team?: Resolver<Maybe<ResolversTypes['Team']>, ParentType, ContextType, RequireFields<QueryTeamArgs, 'id'>>;

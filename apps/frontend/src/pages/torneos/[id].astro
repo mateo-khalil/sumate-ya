@@ -26,6 +26,7 @@ import { TournamentRegistrationForm } from '../../components/tournaments/Tournam
 import { LeaveTournamentButton } from '../../components/tournaments/LeaveTournamentButton';
 import { TournamentBracket } from '../../components/tournaments/TournamentBracket';
 import { GroupStandings } from '../../components/tournaments/GroupStandings';
+import { InviteTeamSection } from '../../components/tournaments/InviteTeamSection';
 import { GET_TOURNAMENT_DETAIL, type TournamentData, type TournamentFixtureMatch } from '../../graphql/operations/tournaments';
 import { readAccessToken } from '../../lib/auth';
 
@@ -120,6 +121,8 @@ function teamName(match: TournamentFixtureMatch, side: 'home' | 'away'): string 
 }
 
 const registeredTeams = tournament ? Math.min(tournament.registeredTeamsCount, tournament.teamCount) : 0;
+const currentUserId = user?.id ?? null;
+const isOrganizer = !!currentUserId && tournament?.organizerId === currentUserId;
 const canRegister = Boolean(
   tournament &&
     tournament.status === 'REGISTRATION' &&
@@ -153,7 +156,13 @@ for (const match of tournament?.fixtureMatches ?? []) {
 
       {tournament && (
         <div class="tournament-detail">
-          <a href="/torneos" class="link-back">Volver a torneos</a>
+          <div class="detail-top-bar">
+            <a href="/torneos" class="link-back">Volver a torneos</a>
+            {/* T5: botón de invitar equipos solo para el organizador */}
+            {isOrganizer && tournament.status === 'REGISTRATION' && (
+              <InviteTeamSection client:load tournamentId={tournament.id} />
+            )}
+          </div>
 
           <section class="hero-panel">
             <!-- Hero compacto: sin área vacía innecesaria -->
@@ -393,6 +402,7 @@ for (const match of tournament?.fixtureMatches ?? []) {
   .user-dot { width: 6px; height: 6px; border-radius: 50%; background: hsl(35 100% 55%); }
   .page-content { flex: 1; max-width: 1100px; width: 100%; margin: 0 auto; padding: 2.5rem 1.25rem; }
   .tournament-detail { display: flex; flex-direction: column; gap: 1.25rem; }
+  .detail-top-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
   .link-back, .btn-back { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: hsl(35 100% 55%); text-decoration: none; width: fit-content; }
   .hero-panel { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; align-items: stretch; }
   .hero-main, .signup-panel, .info-item, .detail-section { background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; }
