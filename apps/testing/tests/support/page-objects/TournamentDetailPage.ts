@@ -58,6 +58,20 @@ const HYDRATION_SENTINEL: MockTournamentPlayer = buildMockTournamentPlayer({
  *   class names as a documented fallback.
  * - Previously fixed bugs: none relevant.
  *
+ * US #47 — Abandonar torneo (capitán):
+ * - LeaveTournamentButton is rendered server-side in [id].astro when:
+ *     captainEnrolledTeam !== null AND tournament.status === 'REGISTRATION'.
+ *   `client:load` hydrates it for interactivity (modal state).
+ * - LeaveTournamentDialog posts to /api/graphql-auth → mutation `LeaveTournament`.
+ *   This is browser-issued and IS interceptable with page.route().
+ * - After a successful mutation the dialog closes and the button is replaced by an
+ *   inline `.leave-success-msg`. A 1500ms (or 2500ms when CANCELLED) timer then
+ *   triggers window.location.reload()/redirect — tests assert the intermediate
+ *   state before the timer fires (like joinTournament pattern).
+ * - twoTeamsWarning targets the `.leave-warning--critical` element because both
+ *   warnings use role="alert" (the always-shown destructive one + the critical
+ *   2-teams variant). CSS class is the only stable way to differentiate them.
+ *
  * US #35 locators (detail view — all SSR-rendered, no hydration wait needed):
  *   - heroDescription: `.hero-description` paragraph
  *   - heroMeta: `.hero-meta` spans (format, club, organizer pills)
@@ -136,6 +150,20 @@ export class TournamentDetailPage {
   readonly fixtureSection: Locator;
   readonly fixtureEmptyState: Locator;
 
+  /* ── Leave tournament — US #47 ── */
+  readonly leaveTournamentButton: Locator;
+  readonly leaveDialog: Locator;
+  readonly leaveDialogTitle: Locator;
+  readonly leaveDialogCloseButton: Locator;
+  readonly cancelLeaveButton: Locator;
+  readonly submitLeaveButton: Locator;
+  readonly confirmCheckbox: Locator;
+  readonly reasonTextarea: Locator;
+  readonly twoTeamsWarning: Locator;
+  readonly leaveErrorBanner: Locator;
+  readonly leaveSuccessMessage: Locator;
+  readonly leaveExtraMessage: Locator;
+
   constructor(page: Page, tournamentId: string) {
     this.page = page;
     this.tournamentId = tournamentId;
@@ -206,6 +234,86 @@ export class TournamentDetailPage {
     this.fixtureEmptyState = page
       .locator('.fixture-section')
       .getByText(/el fixture todavia no fue generado/i);
+
+    /* ── US #47 leave-tournament locators ── */
+    // LeaveTournamentButton renders an aria-labelled button: `Retirar equipo ${teamName} del torneo`.
+    // Use the regex on aria-label so we don't depend on the team name (depends on seed).
+    this.leaveTournamentButton = page.getByRole('button', { name: /retirar equipo .* del torneo/i });
+
+    // LeaveTournamentDialog is a role="dialog" labelled by id="leave-dialog-title".
+    this.leaveDialog = page.getByRole('dialog', { name: /retirar equipo del torneo/i });
+    this.leaveDialogTitle = this.leaveDialog.getByRole('heading', {
+      name: /retirar equipo del torneo/i,
+    });
+
+    // Close button (header X) and Cancel footer button.
+    this.leaveDialogCloseButton = this.leaveDialog.getByRole('button', { name: /^cerrar$/i });
+    this.cancelLeaveButton = this.leaveDialog.getByRole('button', { name: /^cancelar$/i });
+
+    // Submit / confirm action: the inner footer button "Retirar equipo" (not the trigger).
+    // Scoped to the dialog so it doesn't clash with the outer trigger button which uses
+    // the same label string ("Retirar equipo" prefix).
+    this.submitLeaveButton = this.leaveDialog.getByRole('button', { name: /^retirar equipo$/i });
+
+    // Confirmation checkbox — only one checkbox in the dialog body.
+    this.confirmCheckbox = this.leaveDialog.getByRole('checkbox');
+
+    // Reason textarea — labelled by <label for="leave-reason">.
+    this.reasonTextarea = page.getByLabel('Motivo del retiro (opcional)');
+
+    // Two-teams warning is the SECOND .leave-warning div (critical variant). The first
+    // warning is the always-shown destructive notice. CSS class fallback is documented
+    // because the warning is not addressable by role+name uniquely (both are role="alert").
+    this.twoTeamsWarning = this.leaveDialog.locator('.leave-warning--critical');
+
+    // Inline error banner inside dialog. Matches the .leave-error <p> with role="alert".
+    this.leaveErrorBanner = this.leaveDialog.locator('.leave-error');
+
+    // Post-success messages live OUTSIDE the dialog (the dialog gets closed by handleSuccess).
+    // .leave-success-msg / .leave-extra-msg are rendered inline where the trigger used to be.
+    this.leaveSuccessMessage = page.locator('.leave-success-msg');
+    this.leaveExtraMessage = page.locator('.leave-extra-msg');
+  }
+
+  /* ── US #47 methods ── */
+
+  /**
+   * Opens the leave-tournament confirmation dialog by clicking the trigger button.
+   *
+   * The button is rendered as part of the SSR HTML but its onClick handler is
+   * attached only after the React `client:load` island hydrates. A single click
+   * fired before hydration is a no-op (native button with no form action), so we
+   * retry the click via expect.toPass() until the dialog appears.
+   */
+  async openLeaveDialog(): Promise<void> {
+    await expect(this.leaveTournamentButton).toBeVisible({ timeout: 15_000 });
+    await expect(async () => {
+      await this.leaveTournamentButton.click({ timeout: 1_000 });
+      await expect(this.leaveDialog).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 15_000, intervals: [250, 500, 1000] });
+  }
+
+  /** Asserts the leave button is NOT rendered (non-captain / wrong tournament status). */
+  async expectLeaveButtonHidden(): Promise<void> {
+    await expect(
+      this.leaveTournamentButton,
+      'El botón "Retirar equipo" no debe aparecer para este usuario / estado',
+    ).toHaveCount(0);
+  }
+
+  /** Fills the optional motivo textarea. */
+  async fillReason(value: string): Promise<void> {
+    await this.reasonTextarea.fill(value);
+  }
+
+  /** Ticks the mandatory confirmation checkbox (no-op if already ticked). */
+  async tickConfirm(): Promise<void> {
+    await this.confirmCheckbox.check();
+  }
+
+  /** Submits the leave action (caller is responsible for ticking the checkbox first). */
+  async submitLeave(): Promise<void> {
+    await this.submitLeaveButton.click();
   }
 
   async goto(): Promise<void> {
