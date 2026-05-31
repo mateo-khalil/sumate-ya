@@ -99,6 +99,15 @@ input CreateTournamentInput {
   schedule: [TournamentScheduleSlotInput!]!
 }
 
+input TournamentFilters {
+  status: TournamentStatus
+  format: MatchFormat
+  zone: String
+  dateFrom: String
+  dateTo: String
+  search: String
+}
+
 type CreateTournamentResult {
   success: Boolean!
   tournamentId: ID
@@ -131,7 +140,7 @@ input TournamentTeamMemberInput {
 }
 
 extend type Query {
-  tournaments: [Tournament!]!
+  tournaments(filters: TournamentFilters): [Tournament!]!
   tournament(id: ID!): Tournament
   tournamentEligiblePlayers(tournamentId: ID!, search: String): [TournamentPlayer!]!
 }

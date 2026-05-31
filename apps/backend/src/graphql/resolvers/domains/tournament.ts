@@ -73,7 +73,7 @@ function invalidLeaveResult(message: string) {
 }
 
 const Query: QueryResolvers = {
-  tournaments: async () => tournamentService.listRegistrationTournaments({}),
+  tournaments: async (_parent, args) => tournamentService.listTournaments({}, args.filters),
 
   tournament: async (_parent, args) => {
     const parsed = z.string().regex(UUID_REGEX, 'id invalido').safeParse(args.id);

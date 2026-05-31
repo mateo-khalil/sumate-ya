@@ -249,6 +249,15 @@ export interface TournamentMemberPlayerRow {
   } | null;
 }
 
+export interface TournamentFilterOptions {
+  status?: string;
+  format?: string;
+  zone?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+}
+
 function isMissingTournamentRpcError(message: string): boolean {
   return (
     message.includes('Could not find the function public.create_tournament_with_fixture') ||
@@ -504,22 +513,144 @@ export async function getTournamentById(
   return data as unknown as TournamentRow;
 }
 
-export async function getRegistrationTournaments(
+export async function getTournamentsWithFilters(
+  filters: TournamentFilterOptions = {},
   client: SupabaseClient = supabase,
 ): Promise<TournamentRow[]> {
-  const { data, error } = await client
+  if (filters.search) {
+    return getTournamentsWithSearch(filters, client);
+  }
+
+  const clubJoin = filters.zone ? `clubs!inner(${TOURNAMENT_CLUB_COLUMNS})` : `clubs(${TOURNAMENT_CLUB_COLUMNS})`;
+
+  let query = client
     .from('tournaments')
-    .select(`${TOURNAMENT_COLUMNS}, clubs(${TOURNAMENT_CLUB_COLUMNS}), registeredTeams:tournamentTeams(count)`)
-    .eq('status', 'registration')
-    .order('startDate', { ascending: true })
-    .order('createdAt', { ascending: false });
+    .select(`${TOURNAMENT_COLUMNS}, ${clubJoin}, registeredTeams:tournamentTeams(count)`);
+
+  query = query.eq('status', filters.status || 'registration');
+
+  if (filters.format) {
+    query = query.eq('format', filters.format);
+  }
+
+  if (filters.zone) {
+    query = query.eq('clubs.zone', filters.zone);
+  }
+
+  if (filters.dateFrom) {
+    query = query.gte('startDate', filters.dateFrom);
+  }
+
+  if (filters.dateTo) {
+    query = query.lte('startDate', filters.dateTo);
+  }
+
+  query = query.order('startDate', { ascending: true }).order('createdAt', { ascending: false });
+
+  const { data, error } = await query;
 
   if (error) {
-    console.error('[tournamentRepository.getRegistrationTournaments] Supabase error:', error.message);
+    console.error('[tournamentRepository.getTournamentsWithFilters] Supabase error:', error.message);
     throw new Error(error.message);
   }
 
   return (data as unknown as TournamentRow[]) ?? [];
+}
+
+async function getTournamentsWithSearch(
+  filters: TournamentFilterOptions,
+  client: SupabaseClient,
+): Promise<TournamentRow[]> {
+  const searchTerm = `%${filters.search}%`;
+  const baseStatus = filters.status || 'registration';
+
+  let nameQuery = client
+    .from('tournaments')
+    .select(`${TOURNAMENT_COLUMNS}, clubs(${TOURNAMENT_CLUB_COLUMNS}), registeredTeams:tournamentTeams(count)`)
+    .eq('status', baseStatus);
+
+  if (filters.format) {
+    nameQuery = nameQuery.eq('format', filters.format);
+  }
+  if (filters.dateFrom) {
+    nameQuery = nameQuery.gte('startDate', filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    nameQuery = nameQuery.lte('startDate', filters.dateTo);
+  }
+
+  let clubQuery = client
+    .from('tournaments')
+    .select(`${TOURNAMENT_COLUMNS}, clubs!inner(${TOURNAMENT_CLUB_COLUMNS}), registeredTeams:tournamentTeams(count)`)
+    .eq('status', baseStatus);
+
+  if (filters.format) {
+    clubQuery = clubQuery.eq('format', filters.format);
+  }
+  if (filters.dateFrom) {
+    clubQuery = clubQuery.gte('startDate', filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    clubQuery = clubQuery.lte('startDate', filters.dateTo);
+  }
+
+  let q1 = nameQuery.ilike('name', searchTerm).order('startDate', { ascending: true }).order('createdAt', { ascending: false });
+  let q2 = clubQuery.ilike('clubs.name', searchTerm).order('startDate', { ascending: true }).order('createdAt', { ascending: false });
+
+  if (filters.zone) {
+    let nameZoneQuery = client
+      .from('tournaments')
+      .select(`${TOURNAMENT_COLUMNS}, clubs!inner(${TOURNAMENT_CLUB_COLUMNS}), registeredTeams:tournamentTeams(count)`)
+      .eq('status', baseStatus);
+
+    if (filters.format) {
+      nameZoneQuery = nameZoneQuery.eq('format', filters.format);
+    }
+    if (filters.dateFrom) {
+      nameZoneQuery = nameZoneQuery.gte('startDate', filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      nameZoneQuery = nameZoneQuery.lte('startDate', filters.dateTo);
+    }
+
+    q1 = nameZoneQuery
+      .ilike('name', searchTerm)
+      .eq('clubs.zone', filters.zone)
+      .order('startDate', { ascending: true })
+      .order('createdAt', { ascending: false });
+    q2 = q2.eq('clubs.zone', filters.zone);
+  }
+
+  const [nameResult, clubResult] = await Promise.all([q1, q2]);
+
+  if (nameResult.error) {
+    throw new Error(`Failed to fetch tournaments by name: ${nameResult.error.message}`);
+  }
+  if (clubResult.error) {
+    throw new Error(`Failed to fetch tournaments by club: ${clubResult.error.message}`);
+  }
+
+  const tournamentMap = new Map<string, TournamentRow>();
+  for (const tournament of (nameResult.data as unknown as TournamentRow[]) ?? []) {
+    tournamentMap.set(tournament.id, tournament);
+  }
+  for (const tournament of (clubResult.data as unknown as TournamentRow[]) ?? []) {
+    if (!tournamentMap.has(tournament.id)) {
+      tournamentMap.set(tournament.id, tournament);
+    }
+  }
+
+  return Array.from(tournamentMap.values()).sort((a, b) => {
+    const byStartDate = (a.startDate ?? '').localeCompare(b.startDate ?? '');
+    if (byStartDate !== 0) return byStartDate;
+    return (b.createdAt ?? '').localeCompare(a.createdAt ?? '');
+  });
+}
+
+export async function getRegistrationTournaments(
+  client: SupabaseClient = supabase,
+): Promise<TournamentRow[]> {
+  return getTournamentsWithFilters({ status: 'registration' }, client);
 }
 
 export async function getTournamentTeams(
@@ -880,6 +1011,7 @@ export const tournamentRepository = {
   joinTournamentRpc,
   insertFixtureMatches,
   getTournamentById,
+  getTournamentsWithFilters,
   getRegistrationTournaments,
   getTournamentTeams,
   getTournamentMemberPlayerIds,

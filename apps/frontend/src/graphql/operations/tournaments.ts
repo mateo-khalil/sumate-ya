@@ -13,6 +13,15 @@ import type { MatchFormat } from './matches';
 export type TournamentStatus = 'REGISTRATION' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type FixtureMatchStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
+export interface TournamentFilters {
+  status?: TournamentStatus;
+  format?: MatchFormat;
+  zone?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+}
+
 export interface TournamentScheduleSlotInput {
   slotId: string;
   date: string;
@@ -145,8 +154,8 @@ export interface TournamentTeamRegistrationResult {
 }
 
 export const GET_TOURNAMENTS = /* GraphQL */ `
-  query GetTournaments {
-    tournaments {
+  query GetTournaments($filters: TournamentFilters) {
+    tournaments(filters: $filters) {
       id
       name
       format

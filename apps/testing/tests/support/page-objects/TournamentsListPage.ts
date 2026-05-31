@@ -7,17 +7,18 @@ import { TORNEOS_URL } from '../constants';
  * Decision Context:
  * - The page shell is SSR (prerender = false), but TournamentList hydrates
  *   client-side with client:visible. Tournament data is fetched via useEffect
- *   through /api/graphql — interceptable with mockGraphQLAll(GRAPHQL_PROXY_ROUTE)
+ *   through /api/graphql, interceptable with mockGraphQLAll(GRAPHQL_PROXY_ROUTE)
  *   before goto().
  * - isAuthenticated is injected server-side from Astro.locals.user. The CTA
- *   shown in each card ("Anotar equipo" vs "Iniciar sesión para anotar") depends
+ *   shown in each card ("Anotar equipo" vs "Iniciar sesion para anotar") depends
  *   on the session at SSR time. Auth state must be controlled via
  *   test.use({ storageState }) at the describe level.
- * - The client-side keepRegistrationOnly() filter runs after the fetch, so
- *   tournaments with status !== REGISTRATION sent in mocks do not render as cards.
+ * - Tournament filters are controlled in TournamentsView and persisted in URL params.
+ *   The list forwards them to tournaments(filters) and mirrors them client-side so
+ *   mocks that return mixed statuses still behave like the real API.
  * - Loading skeletons are plain <div> elements; cards are <article> elements.
  *   expectListSettled() waits for the first <article>, empty state, or error panel
- *   — all reliable hydration proxies.
+ *   - all reliable hydration proxies.
  * - joinTournament mutations go to /api/graphql-auth. Specs that test form
  *   submission mock that route via mockGraphQLAll(GRAPHQL_AUTH_ROUTE, ...).
  * - Previously fixed bugs: none relevant.
@@ -31,20 +32,34 @@ export class TournamentsListPage {
   readonly retryButton: Locator;
   readonly teamNameInput: Locator;
   readonly cancelButton: Locator;
+  readonly statusSelect: Locator;
+  readonly searchInput: Locator;
+  readonly formatSelect: Locator;
+  readonly zoneSelect: Locator;
+  readonly dateFromInput: Locator;
+  readonly dateToInput: Locator;
+  readonly clearButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.heading = page.getByRole('heading', { name: /Torneos Disponibles/i });
-    this.subtitle = page.getByText(/Encontrá una copa abierta/i);
-    this.emptyState = page.getByText('No hay torneos en inscripción');
+    this.subtitle = page.getByText(/Encontr.*copa abierta/i);
+    this.emptyState = page.getByText(/No hay torneos en (inscripcion|curso)/i);
     this.errorPanel = page.getByText('No pudimos cargar los torneos');
     this.retryButton = page.getByRole('button', { name: /Reintentar/i });
     this.teamNameInput = page.getByPlaceholder('Nombre del equipo');
     this.cancelButton = page.getByRole('button', { name: 'Cancelar' });
+    this.statusSelect = page.getByLabel('Estado');
+    this.searchInput = page.getByLabel(/Buscar torneos/i);
+    this.formatSelect = page.getByLabel('Formato');
+    this.zoneSelect = page.getByLabel('Zona');
+    this.dateFromInput = page.getByLabel('Fecha desde');
+    this.dateToInput = page.getByLabel('Fecha hasta');
+    this.clearButton = page.getByRole('button', { name: /Limpiar/i });
   }
 
-  async goto(): Promise<void> {
-    await this.page.goto(TORNEOS_URL);
+  async goto(url: string = TORNEOS_URL): Promise<void> {
+    await this.page.goto(url);
     await this.page.locator('.tournaments-section').scrollIntoViewIfNeeded();
   }
 
@@ -70,14 +85,19 @@ export class TournamentsListPage {
     return this.page.getByRole('button', { name: 'Anotar equipo' });
   }
 
-  /** "Iniciar sesión para anotar" CTA button (anonymous user). */
+  /** "Iniciar sesion para anotar" CTA button (anonymous user). */
   loginToRegisterButton(): Locator {
-    return this.page.getByRole('button', { name: /Iniciar sesión para anotar/i });
+    return this.page.getByRole('button', { name: /Iniciar sesi/i });
   }
 
   /** "Completo" disabled button (tournament at full capacity). */
   completoButton(): Locator {
     return this.page.getByRole('button', { name: /Completo/i });
+  }
+
+  /** "Inscripcion cerrada" disabled button (non-registration tournament). */
+  registrationClosedButton(): Locator {
+    return this.page.getByRole('button', { name: /Inscripcion cerrada/i });
   }
 
   /** Submit button inside the inline registration form (text "Anotar"). */

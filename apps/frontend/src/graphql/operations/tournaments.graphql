@@ -1,7 +1,7 @@
 # Tournament creation
 
-query GetTournaments {
-  tournaments {
+query GetTournaments($filters: TournamentFilters) {
+  tournaments(filters: $filters) {
     id
     name
     format
