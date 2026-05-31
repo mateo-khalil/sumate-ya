@@ -12,12 +12,13 @@
  */
 export const prerender = false;
 
-import { Trophy, Volleyball } from 'lucide-react';
+import { Trophy, Volleyball, Shield } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import CreateTournamentFlow from '../../components/tournaments/create/CreateTournamentFlow';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { ACCESS_TOKEN_COOKIE } from '../../lib/auth';
 import { GET_CLUBS, type ClubDetail } from '../../graphql/operations/matches';
+import { MY_TEAMS, type TeamData } from '../../graphql/operations/teams';
 
 const user = Astro.locals.user;
 
@@ -49,6 +50,20 @@ try {
 
 const displayName = user.displayName || user.email;
 const backHref = user.role === 'club_admin' ? '/panel-club/dashboard' : '/partidos';
+
+// F9: verificar capitanía SSR — non-captains ven gate screen en lugar del form
+let isCaptain = false;
+try {
+  const teamsRes = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+    body: JSON.stringify({ query: MY_TEAMS }),
+  });
+  const teamsJson = await teamsRes.json() as { data?: { myTeams: TeamData[] } };
+  isCaptain = (teamsJson.data?.myTeams ?? []).some(t => t.captainId === user.id);
+} catch {
+  isCaptain = true; // fail open: el backend rechazará igualmente si no es capitán
+}
 ---
 
 <Layout title="Crear Torneo - Sumate Ya">
@@ -86,7 +101,21 @@ const backHref = user.role === 'club_admin' ? '/panel-club/dashboard' : '/partid
         <p class="section-sub">Round-robin con horarios reservados desde el inicio</p>
       </header>
 
-      {clubs.length > 0 ? (
+      {!isCaptain ? (
+        <section class="captain-gate" role="status">
+          <Shield size={52} strokeWidth={1.5} aria-hidden="true" style={{ color: 'hsl(35 100% 55%)', marginBottom: '1rem' }} />
+          <h2 class="gate-title">Solo capitanes pueden crear torneos</h2>
+          <p class="gate-desc">
+            Para crear un torneo en Sumate Ya, primero tenés que ser capitán de al menos un equipo.
+          </p>
+          <div class="gate-actions">
+            <a href="/equipos" class="btn-primary-gate">
+              Ir a Mis Equipos
+            </a>
+            <a href="/partidos" class="btn-secondary-gate">Volver a Partidos</a>
+          </div>
+        </section>
+      ) : clubs.length > 0 ? (
         <CreateTournamentFlow
           client:load
           initialClubs={clubs}
@@ -106,6 +135,26 @@ const backHref = user.role === 'club_admin' ? '/panel-club/dashboard' : '/partid
 
 <style>
   .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .captain-gate {
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center; padding: 4rem 1.5rem; max-width: 480px; margin: 0 auto;
+  }
+  .gate-title { font-size: 1.4rem; font-weight: 700; margin: 0 0 0.75rem; }
+  .gate-desc { color: var(--color-muted-foreground); font-size: 0.9rem; margin: 0 0 1.5rem; line-height: 1.6; }
+  .gate-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+  .btn-primary-gate {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.65rem 1.25rem; background: var(--color-primary); color: hsl(0 0% 5%);
+    border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.875rem;
+    transition: opacity 0.15s;
+  }
+  .btn-primary-gate:hover { opacity: 0.9; }
+  .btn-secondary-gate {
+    padding: 0.65rem 1.25rem; background: var(--color-muted); color: var(--color-foreground);
+    border-radius: 8px; text-decoration: none; font-size: 0.875rem;
+    border: 1px solid var(--color-border); transition: border-color 0.15s;
+  }
+  .btn-secondary-gate:hover { border-color: var(--color-primary); }
   .topbar {
     position: sticky; top: 0; z-index: 50;
     background: rgba(7,15,31,0.85);

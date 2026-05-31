@@ -1,0 +1,306 @@
+---
+/**
+ * /panel-club/configuracion — Ajustes de cuenta para el administrador de club.
+ *
+ * Decision Context:
+ * - Rol exclusivo club_admin: misma protección que dashboard.astro.
+ * - ChangePasswordForm es role-agnostic (llama al backend /api/auth/change-password
+ *   que solo necesita el JWT del usuario activo, sin importar el rol).
+ * - Layout idéntico al dashboard (Topbar + ClubSidebar + main) para coherencia
+ *   dentro del panel de administración.
+ * - La sección de privacidad de PrivacySettingsContainer es específica de jugadores
+ *   (showStats, showPosition, etc.) y no aplica a club_admin, por eso se omite.
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
+import { KeyRound, ShieldCheck, User, Bell, ChevronLeft, ChevronRight, Volleyball } from 'lucide-react';
+import Layout from '../../layouts/Layout.astro';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import ClubSidebar from '../../components/panel-club/ClubSidebar.astro';
+import ClubMobileNav from '../../components/panel-club/ClubMobileNav.tsx';
+import ChangePasswordForm from '../../components/settings/ChangePasswordForm.tsx';
+import { readAccessToken } from '../../lib/auth.js';
+
+const user = Astro.locals.user;
+if (!user || user.role !== 'club_admin') {
+  return Astro.redirect('/login?reason=role-required');
+}
+
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
+const nombre = user.displayName || user.email;
+---
+
+<Layout title="Configuración de Cuenta — Panel de Club — Sumate Ya">
+  <div class="app-shell">
+    <!-- Topbar del panel de club (igual que dashboard) -->
+    <nav class="topbar">
+      <div class="topbar-inner">
+        <!-- Flechas de historial -->
+        <div class="nav-arrows">
+          <button class="nav-arrow" data-nav="back" title="Volver" aria-label="Volver">
+            <ChevronLeft size={16} strokeWidth={2.5} aria-hidden="true" />
+          </button>
+          <button class="nav-arrow" data-nav="forward" title="Adelante" aria-label="Adelante">
+            <ChevronRight size={16} strokeWidth={2.5} aria-hidden="true" />
+          </button>
+        </div>
+
+        <a href="/partidos" class="topbar-brand" style="text-decoration:none">
+          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
+          <span class="topbar-name">SUMATE YA</span>
+          <span class="topbar-role-pill">CLUB</span>
+        </a>
+
+        <ClubMobileNav client:load currentPath={Astro.url.pathname} userName={nombre} />
+
+        <div class="topbar-actions">
+          <span class="user-badge">
+            <span class="user-dot"></span>
+            {nombre}
+          </span>
+          <ThemeToggle client:load />
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="btn-logout">Salir</button>
+          </form>
+        </div>
+      </div>
+      <div class="topbar-accent"></div>
+    </nav>
+
+    <!-- Layout principal: sidebar + contenido -->
+    <div class="page-layout">
+      <ClubSidebar currentPath={Astro.url.pathname} />
+
+      <main class="page-content">
+        <header class="section-header">
+          <div class="section-label">CUENTA</div>
+          <h1 class="section-title">Configuración</h1>
+          <p class="section-sub">Administrá la seguridad y los datos de tu cuenta de club</p>
+        </header>
+
+        <div class="settings-layout">
+
+          <!-- Sidebar de navegación interna -->
+          <nav class="settings-nav" aria-label="Secciones">
+            <a href="#cuenta" class="settings-nav-item settings-nav-item--active">
+              <User size={15} strokeWidth={2} aria-hidden="true" />
+              Mi Cuenta
+            </a>
+            <a href="#seguridad" class="settings-nav-item">
+              <ShieldCheck size={15} strokeWidth={2} aria-hidden="true" />
+              Seguridad
+            </a>
+            <span class="settings-nav-item settings-nav-item--disabled" aria-disabled="true">
+              <Bell size={15} strokeWidth={2} aria-hidden="true" />
+              Notificaciones
+              <span class="coming-pill">Próximo</span>
+            </span>
+          </nav>
+
+          <!-- Panel de contenido -->
+          <div class="settings-panel">
+
+            <!-- Mi Cuenta -->
+            <section id="cuenta" class="settings-section">
+              <div class="settings-section-header">
+                <div class="icon-wrap">
+                  <User size={18} strokeWidth={2} aria-hidden="true" />
+                </div>
+                <div>
+                  <h2 class="settings-section-title">Mi Cuenta</h2>
+                  <p class="settings-section-sub">
+                    Información de tu cuenta de administrador de club
+                  </p>
+                </div>
+              </div>
+
+              <div class="account-info-card">
+                <div class="account-row">
+                  <span class="account-label">Email</span>
+                  <span class="account-value">{user.email}</span>
+                </div>
+                <div class="account-row">
+                  <span class="account-label">Nombre</span>
+                  <span class="account-value">{user.displayName || '—'}</span>
+                </div>
+                <div class="account-row">
+                  <span class="account-label">Rol</span>
+                  <span class="account-value account-role">Administrador de Club</span>
+                </div>
+              </div>
+            </section>
+
+            <div class="section-divider"></div>
+
+            <!-- Seguridad -->
+            <section id="seguridad" class="settings-section">
+              <div class="settings-section-header">
+                <div class="icon-wrap">
+                  <KeyRound size={18} strokeWidth={2} aria-hidden="true" />
+                </div>
+                <div>
+                  <h2 class="settings-section-title">Seguridad</h2>
+                  <p class="settings-section-sub">
+                    Actualizá tu contraseña. Usamos tu sesión activa para verificar el cambio.
+                  </p>
+                </div>
+              </div>
+
+              <ChangePasswordForm
+                client:load
+                accessToken={accessToken}
+                backendUrl={backendUrl}
+              />
+            </section>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  document.querySelectorAll('[data-nav="back"]').forEach(btn =>
+    btn.addEventListener('click', () => history.back())
+  );
+  document.querySelectorAll('[data-nav="forward"]').forEach(btn =>
+    btn.addEventListener('click', () => history.forward())
+  );
+
+  // Highlight settings-nav-item al hacer scroll hacia las secciones
+  const sections = document.querySelectorAll('.settings-section');
+  const navItems = document.querySelectorAll('.settings-nav-item:not(.settings-nav-item--disabled)');
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = entry.target.id;
+          navItems.forEach(item => {
+            const href = item.getAttribute('href');
+            if (href === `#${id}`) {
+              item.classList.add('settings-nav-item--active');
+            } else {
+              item.classList.remove('settings-nav-item--active');
+            }
+          });
+        }
+      });
+    },
+    { threshold: 0.5 }
+  );
+  sections.forEach(s => observer.observe(s));
+</script>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Topbar (igual que dashboard) ── */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(7,15,31,0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .topbar-inner {
+    max-width: 1280px; margin: 0 auto; padding: 0 1.25rem;
+    height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  }
+  .nav-arrows { display: flex; gap: 0.2rem; flex-shrink: 0; }
+  .nav-arrow {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09);
+    color: hsl(215 20% 55%); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; transition: background .15s;
+  }
+  .nav-arrow:hover { background: rgba(255,255,255,0.13); color: hsl(215 20% 80%); }
+  .topbar-brand { display: flex; align-items: center; gap: 0.5rem; }
+  .topbar-ball { line-height:1; display:inline-flex; color:hsl(42 100% 60%); }
+  .topbar-name { font-family:'Bebas Neue',sans-serif; font-size:1.35rem; letter-spacing:.1em; color:#fff; }
+  .topbar-role-pill {
+    font-family:'Barlow Condensed',sans-serif; font-size:.65rem; font-weight:700;
+    letter-spacing:.12em; text-transform:uppercase;
+    background:rgba(246,164,0,.15); border:1px solid rgba(246,164,0,.35);
+    color:hsl(42 100% 60%); border-radius:4px; padding:.125rem .5rem;
+  }
+  .topbar-actions { display:flex; align-items:center; gap:.75rem; }
+  .topbar-accent { height:2px; background:linear-gradient(90deg,hsl(42 100% 55%),hsl(216 85% 45%),transparent); }
+  .user-badge { display:flex; align-items:center; gap:.4rem; background:rgba(246,164,0,.1); border:1px solid rgba(246,164,0,.22); color:hsl(42 100% 65%); border-radius:20px; padding:.25rem .875rem; font-size:.8125rem; font-weight:600; font-family:'Barlow Condensed',sans-serif; }
+  .user-dot { width:6px; height:6px; border-radius:50%; background:hsl(42 100% 58%); }
+  .btn-logout { background:transparent; border:1px solid rgba(255,255,255,.12); border-radius:6px; padding:.3rem .75rem; font-size:.8125rem; font-family:'Barlow',sans-serif; font-weight:500; cursor:pointer; color:hsl(215 20% 60%); transition:background .15s; }
+  .btn-logout:hover { background:rgba(255,255,255,.07); color:hsl(210 20% 90%); }
+
+  /* ── Page layout ── */
+  .page-layout { flex:1; display:flex; max-width:1280px; width:100%; margin:0 auto; padding:2rem 1.25rem; gap:2rem; }
+  .page-content { flex:1; min-width:0; }
+  .section-header { margin-bottom:1.75rem; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,.06); }
+  .section-label { font-family:'Barlow Condensed',sans-serif; font-size:.75rem; font-weight:700; letter-spacing:.2em; color:hsl(42 100% 55%); text-transform:uppercase; margin-bottom:.4rem; }
+  .section-title { font-family:'Bebas Neue',sans-serif; font-size:clamp(1.6rem,5vw,2.2rem); font-weight:400; letter-spacing:.04em; color:#fff; margin:0 0 .3rem; line-height:1; }
+  .section-sub { margin:0; color:hsl(215 20% 50%); font-size:.875rem; }
+
+  /* ── Settings layout ── */
+  .settings-layout { display:grid; grid-template-columns:200px 1fr; gap:2rem; }
+  @media (max-width:900px) { .settings-layout { grid-template-columns:1fr; } }
+
+  /* Settings nav */
+  .settings-nav { display:flex; flex-direction:column; gap:3px; }
+  .settings-nav-item {
+    display:flex; align-items:center; gap:.55rem; padding:.5rem .75rem;
+    border-radius:8px; font-size:.86rem; font-weight:500; color:hsl(215 20% 55%);
+    text-decoration:none; border:1px solid transparent; transition:background .12s,color .12s;
+    cursor:pointer;
+  }
+  .settings-nav-item:hover:not(.settings-nav-item--disabled) { background:rgba(255,255,255,.06); color:hsl(210 20% 82%); }
+  .settings-nav-item--active { background:rgba(246,164,0,.1); color:hsl(42 100% 65%); border-color:rgba(246,164,0,.2); font-weight:600; }
+  .settings-nav-item--disabled { opacity:.45; cursor:not-allowed; }
+  .coming-pill { margin-left:auto; font-size:.62rem; font-weight:700; text-transform:uppercase; background:rgba(255,255,255,.06); color:hsl(215 20% 45%); border-radius:4px; padding:.1rem .35rem; }
+
+  /* Settings panel */
+  .settings-panel { display:flex; flex-direction:column; gap:2rem; }
+
+  .settings-section { display:flex; flex-direction:column; gap:1.25rem; }
+  .settings-section-header { display:flex; align-items:flex-start; gap:1rem; }
+  .icon-wrap {
+    width:38px; height:38px; border-radius:9px; flex-shrink:0;
+    background:rgba(246,164,0,.1); border:1px solid rgba(246,164,0,.18);
+    display:flex; align-items:center; justify-content:center; color:hsl(42 100% 65%);
+  }
+  .settings-section-title { font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; font-weight:700; letter-spacing:.04em; color:#fff; margin:0 0 .2rem; }
+  .settings-section-sub { margin:0; font-size:.82rem; color:hsl(215 20% 52%); }
+
+  /* Account info card */
+  .account-info-card { background:hsl(220 55% 11%); border:1px solid rgba(255,255,255,.07); border-radius:10px; overflow:hidden; }
+  .account-row { display:flex; align-items:center; gap:1rem; padding:.75rem 1.1rem; border-bottom:1px solid rgba(255,255,255,.05); }
+  .account-row:last-child { border-bottom:none; }
+  .account-label { font-size:.78rem; font-weight:700; font-family:'Barlow Condensed',sans-serif; letter-spacing:.1em; text-transform:uppercase; color:hsl(215 20% 45%); min-width:80px; }
+  .account-value { font-size:.875rem; color:hsl(210 20% 85%); }
+  .account-role { color:hsl(42 100% 62%); font-weight:600; }
+
+  /* Divider */
+  .section-divider { height:1px; background:rgba(255,255,255,.06); }
+
+  /* ── Tema claro ── */
+  :global(html.light) .topbar { background:rgba(255,255,255,.93); border-bottom-color:rgba(0,0,0,.08); }
+  :global(html.light) .topbar-name { color:hsl(220 72% 10%); }
+  :global(html.light) .user-badge { color:hsl(220 20% 30%); background:rgba(0,0,0,.04); border-color:rgba(0,0,0,.1); }
+  :global(html.light) .btn-logout { color:hsl(220 20% 40%); border-color:rgba(0,0,0,.12); }
+  :global(html.light) .nav-arrow { background:rgba(0,0,0,.05); border-color:rgba(0,0,0,.1); color:hsl(220 20% 45%); }
+  :global(html.light) .section-title { color:hsl(220 72% 10%); }
+  :global(html.light) .section-sub { color:hsl(215 16% 38%); }
+  :global(html.light) .section-header { border-bottom-color:rgba(0,0,0,.07); }
+  :global(html.light) .settings-nav-item { color:hsl(220 16% 42%); }
+  :global(html.light) .settings-nav-item:hover:not(.settings-nav-item--disabled) { background:rgba(0,0,0,.05); color:hsl(220 72% 10%); }
+  :global(html.light) .settings-nav-item--active { background:hsl(35 100% 92%); color:hsl(35 100% 30%); border-color:hsl(35 80% 78%); }
+  :global(html.light) .account-info-card { background:hsl(0 0% 100%); border-color:rgba(0,0,0,.08); }
+  :global(html.light) .account-row { border-bottom-color:rgba(0,0,0,.05); }
+  :global(html.light) .account-value { color:hsl(220 20% 25%); }
+  :global(html.light) .account-role { color:hsl(35 100% 32%); }
+  :global(html.light) .section-divider { background:rgba(0,0,0,.06); }
+  :global(html.light) .icon-wrap { background:hsl(35 100% 95%); border-color:hsl(35 80% 80%); color:hsl(35 100% 38%); }
+
+  @media (max-width:767px) {
+    .topbar-actions { display:none; }
+    .page-layout { padding:1rem; gap:0; }
+  }
+</style>

@@ -1,0 +1,203 @@
+---
+/**
+ * /equipos/[id] — Detalle de equipo permanente.
+ *
+ * Decision Context:
+ * - SSR porque necesita datos frescos y contexto de auth para mostrar controles del capitán.
+ * - Si el usuario es capitán: monta TeamDashboard (isla React, client:load) con todos los tabs.
+ * - Si es miembro: monta solo el tab de disponibilidad.
+ * - Si es visitante: solo info pública (nombre, formato, miembros).
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
+import { Users, Shield, UserRound } from 'lucide-react';
+import Layout from '../../layouts/Layout.astro';
+import Topbar from '../../components/shared/Topbar.astro';
+import { TeamDashboard } from '../../components/teams/TeamDashboard';
+import { GET_TEAM, type TeamData } from '../../graphql/operations/teams';
+import { readAccessToken } from '../../lib/auth';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const id = Astro.params.id ?? '';
+if (!id || !UUID_REGEX.test(id)) return Astro.redirect('/equipos');
+
+const user = Astro.locals.user;
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+const backendUrl =
+  import.meta.env.PRIVATE_BACKEND_URL ||
+  (typeof process !== 'undefined' ? process.env.PRIVATE_BACKEND_URL : undefined) ||
+  'http://localhost:4000';
+
+let team: TeamData | null = null;
+let fetchError: string | null = null;
+
+try {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const res = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ query: GET_TEAM, variables: { id } }),
+  });
+  const json = await res.json() as { data?: { team: TeamData | null }; errors?: { message: string }[] };
+  if (json.errors?.length) fetchError = json.errors[0].message;
+  else team = json.data?.team ?? null;
+} catch {
+  fetchError = 'No se pudo cargar el equipo';
+}
+
+if (!team && !fetchError) return Astro.redirect('/equipos');
+
+const userId = user?.id ?? null;
+const isCaptain = !!userId && team?.captainId === userId;
+const isMember = !!userId && (team?.members.some(m => m.player.id === userId) ?? false);
+
+const FORMAT_LABEL: Record<string, string> = {
+  FIVE_VS_FIVE: '5 vs 5', SEVEN_VS_SEVEN: '7 vs 7',
+  TEN_VS_TEN: '10 vs 10', ELEVEN_VS_ELEVEN: '11 vs 11',
+};
+---
+
+<Layout title={team?.name ?? 'Equipo'}>
+  <div class="page-shell">
+    <Topbar user={user} />
+    <div class="page-container">
+
+    {fetchError && (
+      <div class="error-banner" role="alert">{fetchError}</div>
+    )}
+
+    {team && (
+      <>
+        <!-- Hero -->
+        <div class="team-hero">
+          <div class="team-logo-wrap">
+            {team.logoUrl
+              ? <img src={team.logoUrl} alt={`Logo de ${team.name}`} class="logo-img" />
+              : <Shield size={36} strokeWidth={1.5} aria-hidden="true" />
+            }
+          </div>
+          <div class="team-hero-info">
+            <div class="team-name-row">
+              <h1>{team.name}</h1>
+              {isCaptain && (
+                <span class="captain-badge">
+                  <Shield size={14} strokeWidth={2} aria-hidden="true" /> Capitán
+                </span>
+              )}
+              {isMember && !isCaptain && (
+                <span class="member-badge">Miembro</span>
+              )}
+            </div>
+            <p class="team-meta">
+              {FORMAT_LABEL[team.format] ?? team.format} &middot;
+              <Users size={14} strokeWidth={2} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'middle' }} />
+              {' '}{team.memberCount} {team.memberCount === 1 ? 'jugador' : 'jugadores'}
+            </p>
+            {team.description && <p class="team-desc">{team.description}</p>}
+          </div>
+        </div>
+
+        {/* Dashboard interactivo para capitán y miembros */}
+        {(isCaptain || isMember) && (
+          <TeamDashboard
+            client:load
+            team={team}
+            userId={userId}
+            isCaptain={isCaptain}
+          />
+        )}
+
+        {/* Vista pública de miembros para visitantes no-miembros */}
+        {!isCaptain && !isMember && (
+          <div class="public-members">
+            <h2 class="section-title">
+              <Users size={18} strokeWidth={2} aria-hidden="true" /> Jugadores
+            </h2>
+            <div class="members-list">
+              {team.members.map(entry => (
+                <div class="member-row">
+                  <div class="member-avatar">
+                    {entry.player.avatarUrl
+                      ? <img src={entry.player.avatarUrl} alt={entry.player.displayName} />
+                      : <UserRound size={20} strokeWidth={1.5} aria-hidden="true" />
+                    }
+                  </div>
+                  <span class="member-name">{entry.player.displayName}</span>
+                  {entry.role === 'CAPTAIN' && (
+                    <span class="inline-captain">
+                      <Shield size={12} strokeWidth={2} aria-hidden="true" /> Capitán
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </>
+    )}
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .page-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .page-container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; flex: 1; }
+
+  .error-banner {
+    background: hsl(0 60% 15%); border: 1px solid hsl(0 72% 40%);
+    color: hsl(0 80% 70%); padding: 0.75rem 1rem; border-radius: 8px;
+  }
+
+  .team-hero {
+    display: flex; align-items: flex-start; gap: 1.5rem; margin-bottom: 2rem;
+    background: var(--color-card); border: 1px solid var(--color-border);
+    border-radius: 12px; padding: 1.5rem;
+  }
+  .team-logo-wrap {
+    width: 72px; height: 72px; border-radius: 10px; flex-shrink: 0;
+    background: var(--color-muted); display: flex; align-items: center;
+    justify-content: center; color: var(--color-muted-foreground); overflow: hidden;
+  }
+  .logo-img { width: 100%; height: 100%; object-fit: cover; }
+  .team-hero-info { flex: 1; min-width: 0; }
+  .team-name-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .team-name-row h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+  .captain-badge, .member-badge {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+  }
+  .captain-badge { background: hsl(35 100% 20%); color: hsl(35 100% 65%); }
+  .member-badge { background: hsl(216 60% 18%); color: hsl(216 80% 65%); }
+  .team-meta {
+    display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+    margin: 0.4rem 0 0; color: var(--color-muted-foreground); font-size: 0.875rem;
+  }
+  .team-desc { margin: 0.5rem 0 0; font-size: 0.875rem; color: var(--color-muted-foreground); }
+
+  .public-members { margin-top: 1.5rem; }
+  .section-title {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 1rem; font-weight: 600; margin: 0 0 1rem;
+  }
+  .members-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .member-row {
+    display: flex; align-items: center; gap: 0.75rem;
+    background: var(--color-card); border: 1px solid var(--color-border);
+    border-radius: 8px; padding: 0.75rem 1rem;
+  }
+  .member-avatar {
+    width: 36px; height: 36px; border-radius: 50%; overflow: hidden;
+    background: var(--color-muted); display: flex; align-items: center;
+    justify-content: center; color: var(--color-muted-foreground); flex-shrink: 0;
+  }
+  .member-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .member-name { flex: 1; font-size: 0.9rem; font-weight: 500; }
+  .inline-captain {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem;
+    border-radius: 999px; background: hsl(35 100% 20%); color: hsl(35 100% 65%);
+  }
+</style>

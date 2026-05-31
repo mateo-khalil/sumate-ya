@@ -406,4 +406,34 @@ if (Astro.request.method === 'POST') {
     .reg-wrapper { padding: 1rem; align-items: flex-start; padding-top: 2rem; }
     .brand-name { font-size: 1.75rem; }
   }
+
+  /* ── Tema claro — overrides para contraste legible ── */
+  :global(html.light) .reg-wrapper {
+    background: hsl(210 20% 93%);
+  }
+  :global(html.light) .reg-card {
+    background: hsl(0 0% 100%);
+    border-color: rgba(0, 0, 0, 0.09);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  }
+  :global(html.light) .brand-name { color: hsl(220 72% 12%); }
+  :global(html.light) .reg-subtitle { color: hsl(215 16% 40%); }
+
+  :global(html.light) .field label {
+    color: hsl(220 20% 30%);
+  }
+  :global(html.light) .field input {
+    background: hsl(210 20% 96%);
+    border-color: rgba(0, 0, 0, 0.12);
+    color: hsl(220 72% 10%);
+  }
+  :global(html.light) .field input::placeholder { color: hsl(215 16% 55%); }
+  :global(html.light) .field input:focus {
+    background: hsl(216 60% 97%);
+    border-color: hsl(216 85% 50%);
+    box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.12);
+  }
+  :global(html.light) .login-link { color: hsl(215 16% 38%); }
+  :global(html.light) .login-link a { color: hsl(35 100% 38%); }
+  :global(html.light) .stadium-arc { border-color: rgba(246, 164, 0, 0.08); }
 </style>

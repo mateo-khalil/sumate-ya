@@ -730,10 +730,14 @@ export async function getPlayerProfilesByIds(
 ): Promise<TournamentPlayerRow[]> {
   if (playerIds.length === 0) return [];
 
+  // Decision Context (fix): filtro .eq('role','player') eliminado intencionalmente.
+  // Un club_admin puede ser capitán de un equipo permanente (issue #137) y por tanto
+  // debe poder inscribir a su equipo en torneos. El spec dice explícitamente:
+  // "Tanto un player como un club_admin pueden ser capitán de un equipo."
+  // Previously fixed bugs: la restricción de rol bloqueaba al club_admin de anotar su equipo.
   const { data, error } = await client
     .from('profiles')
     .select(TOURNAMENT_PLAYER_COLUMNS)
-    .eq('role', 'player')
     .in('id', playerIds);
 
   if (error) {

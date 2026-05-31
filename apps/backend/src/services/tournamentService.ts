@@ -6,7 +6,11 @@
  *   full insert happens transactionally under auth.uid() without direct table RLS friction.
  * - Once tournamentTeams reaches teamCount, generateFixtureIfRegistrationComplete() fills
  *   those fixture rows with round-robin pairings and marks the tournament in_progress.
+ * - F9 (issue #137): solo capitanes de equipo permanente pueden crear torneos. La validación
+ *   usa teamRepository.getTeamsByCaptainId para no introducir una dependencia circular entre
+ *   servicios (tournamentService → teamRepository es aceptable; → teamService no lo es).
  * - Services return data only; resolvers decide how to shape success/error responses.
+ * - Previously fixed bugs: none relevant.
  */
 
 import { supabase } from '../config/supabase.js';
@@ -40,6 +44,7 @@ import {
   type TournamentTeamRow,
 } from '../repositories/tournamentRepository.js';
 import { clubRepository } from '../repositories/clubRepository.js';
+import { teamRepository } from '../repositories/teamRepository.js';
 import { dateToDayOfWeek } from './clubService.js';
 import type { ServiceContext } from '../types/context.js';
 
@@ -406,7 +411,7 @@ async function validateJoinRoster(
   const foundIds = new Set(players.map((player) => player.id));
   const missing = playerIds.filter((playerId) => !foundIds.has(playerId));
   if (missing.length > 0) {
-    throw new Error('Uno o mas jugadores no existen o no tienen rol de jugador');
+    throw new Error('Uno o más jugadores no se encontraron en el sistema');
   }
 
   const usedPlayerIds = await tournamentRepository.getTournamentMemberPlayerIds(tournament.id);
@@ -478,6 +483,12 @@ export async function createTournament(
   const db = ctx.supabase;
   if (!db) throw new Error('User-scoped client required for write operations');
 
+  // F9: solo capitanes de equipo permanente pueden crear torneos
+  const captainTeams = await teamRepository.getTeamsByCaptainId(ctx.userId);
+  if (captainTeams.length === 0) {
+    throw new Error('Solo capitanes de equipo pueden crear torneos. Primero creá un equipo y convertite en capitán.');
+  }
+
   const name = input.name.trim();
   if (name.length < 3) throw new Error('El nombre del torneo debe tener al menos 3 caracteres');
   if (input.teamCount < 2) throw new Error('El torneo debe tener al menos 2 equipos');
@@ -508,6 +519,25 @@ export async function createTournament(
     },
     db,
   );
+
+  // Auto-inscripción: si el creador es capitán de un equipo permanente, se lo anota
+  // automáticamente al torneo que acaba de crear. Comportamiento solicitado en issue #137.
+  // Falla silenciosamente (solo log) para no impedir la creación del torneo.
+  if (ctx.userId && db) {
+    const captainTeams = await teamRepository.getTeamsByCaptainId(ctx.userId);
+    if (captainTeams.length > 0) {
+      const captainTeam = captainTeams[0];
+      try {
+        await teamRepository.enrollPermanentTeamInTournament(
+          { teamId: captainTeam.id, tournamentId, name: captainTeam.name, captainId: ctx.userId },
+          db,
+        );
+        console.info(`[tournamentService.createTournament] Auto-inscripto teamId=${captainTeam.id} en tournamentId=${tournamentId}`);
+      } catch (enrollErr) {
+        console.warn(`[tournamentService.createTournament] Auto-inscripción fallida para teamId=${captainTeam.id}:`, enrollErr);
+      }
+    }
+  }
 
   await generateFixtureIfRegistrationComplete({ userId: ctx.userId, supabase: db }, tournamentId);
   await invalidateTournamentListCaches();
@@ -706,6 +736,18 @@ export async function leaveTournament(
   input: LeaveTournamentInput,
   ctx: ServiceContext,
 ): Promise<LeaveTournamentResult> {
+  /*
+   * Decision Context:
+   * - withdrawTeamById usa ctx.supabase (user-scoped) para respetar RLS.
+   * - REQUIERE política UPDATE en tournamentTeams: "captainId = auth.uid()".
+   *   Sin esa política, Supabase devuelve { error: null, data: [] } (0 rows)
+   *   silenciosamente — countActiveTeams sigue retornando > 0 y el torneo
+   *   nunca se cancela aunque queden 0 equipos activos.
+   * - Fix aplicado 2026-05-31: migración fix_tournament_teams_update_delete_rls
+   *   agrega las políticas UPDATE/DELETE faltantes en tournamentTeams y
+   *   DELETE en tournamentTeamMembers.
+   * - Previously fixed bugs: policies RLS faltantes → retiro silencioso sin cancelación.
+   */
   // VALIDACIÓN 1 — Autenticación (requireAuth en resolver, pero se verifica acá también)
   if (!ctx.userId) throw new Error('Authentication required');
 

@@ -3,46 +3,76 @@
  * ClubSidebar — shared navigation sidebar for the club admin panel
  *
  * Decision Context:
- * - Extracted from per-page inline sidebars to eliminate duplication across
- *   dashboard.astro, horarios.astro, and crear-partido.astro.
- * - "Crear partido" is a real implemented route (/panel-club/crear-partido), added in
- *   the panel-club-crear-partido branch. It uses sidebar-link--highlight style to stand
- *   out as the primary CTA action — same treatment it had in the pre-extraction sidebars.
- * - Active detection: strict equality on pathname so /panel-club/horarios doesn't
- *   accidentally activate /panel-club.
- * - Placeholder routes (#): Canchas, Reservas, Configuración, Estadísticas are not yet
- *   implemented. They stay in the nav with muted style to show the intended structure.
+ * - Sección NAVEGACIÓN (azul FIFA): links al hub principal de la app (Partidos & Torneos,
+ *   Equipos). Usa azul para distinguirlos visualmente de las acciones internas del panel.
+ * - Sección GESTIÓN (naranja FIFA): acciones del panel. "Crear partido" es el CTA
+ *   principal con estilo filled/sólido. "Crear torneo" usa el estilo highlight secundario.
+ * - Sección REPORTES: items placeholder para futura implementación, claramente marcados.
+ * - Todos los estilos usan fallbacks HSL + overrides html.light para tema claro/oscuro.
  * - Previously fixed bugs:
- *   - "Crear partido" link was missing after sidebar extraction, making the match
- *     creation feature unreachable from navigation. Fixed by adding it here.
+ *   - "Crear partido" link was missing after sidebar extraction. Fixed by adding it here.
  */
 
-import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3, Trophy } from 'lucide-react';
+import { LayoutDashboard, Calendar, Plus, Volleyball, Users, Settings, BarChart3, Trophy, Volleyball as Ball, Home, Shield } from 'lucide-react';
 
 const { currentPath } = Astro.props;
 
 function isActive(href: string): boolean {
   return currentPath === href;
 }
+function startsWithPath(prefix: string): boolean {
+  return currentPath.startsWith(prefix);
+}
 ---
 
 <aside class="sidebar">
+
+  <!-- ── NAVEGACIÓN — links al hub principal de la app ── -->
   <div class="sidebar-section">
-    <div class="sidebar-label">GESTIÓN</div>
+    <div class="sidebar-label sidebar-label--nav">
+      <span class="label-bar label-bar--blue"></span>
+      NAVEGACIÓN
+    </div>
     <nav class="sidebar-nav">
+      <a
+        href="/partidos"
+        class={`sidebar-link sidebar-link--nav${isActive('/partidos') ? ' sidebar-link--nav-active' : ''}`}
+      >
+        <span class="sidebar-icon"><Home size={15} strokeWidth={2} aria-hidden="true" /></span>
+        Partidos &amp; Torneos
+      </a>
+      <a
+        href="/equipos"
+        class={`sidebar-link sidebar-link--nav${startsWithPath('/equipos') ? ' sidebar-link--nav-active' : ''}`}
+      >
+        <span class="sidebar-icon"><Shield size={15} strokeWidth={2} aria-hidden="true" /></span>
+        Equipos
+      </a>
+    </nav>
+  </div>
+
+  <!-- ── GESTIÓN — acciones internas del panel ── -->
+  <div class="sidebar-section">
+    <div class="sidebar-label sidebar-label--mgmt">
+      <span class="label-bar label-bar--orange"></span>
+      GESTIÓN
+    </div>
+    <nav class="sidebar-nav">
+
       <a
         href="/panel-club/dashboard"
         class={`sidebar-link${isActive('/panel-club/dashboard') ? ' sidebar-link--active' : ''}`}
       >
-        <span class="sidebar-icon"><LayoutDashboard size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><LayoutDashboard size={15} strokeWidth={2} aria-hidden="true" /></span>
         Dashboard
       </a>
 
+      <!-- Crear partido: mismo estilo card unificado que el resto de Gestión -->
       <a
         href="/panel-club/crear-partido"
-        class={`sidebar-link sidebar-link--highlight${isActive('/panel-club/crear-partido') ? ' sidebar-link--active' : ''}`}
+        class={`sidebar-link${isActive('/panel-club/crear-partido') ? ' sidebar-link--active' : ''}`}
       >
-        <span class="sidebar-icon"><Plus size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><Plus size={15} strokeWidth={2.5} aria-hidden="true" /></span>
         Crear partido
       </a>
 
@@ -50,142 +80,275 @@ function isActive(href: string): boolean {
         href="/panel-club/horarios"
         class={`sidebar-link${isActive('/panel-club/horarios') ? ' sidebar-link--active' : ''}`}
       >
-        <span class="sidebar-icon"><Calendar size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><Calendar size={15} strokeWidth={2} aria-hidden="true" /></span>
         Horarios
       </a>
 
+      <!-- Crear torneo: mismo estilo card unificado -->
       <a
         href="/torneos/crear"
         class={`sidebar-link${isActive('/torneos/crear') ? ' sidebar-link--active' : ''}`}
       >
-        <span class="sidebar-icon"><Trophy size={16} strokeWidth={2} aria-hidden="true" /></span>
+        <span class="sidebar-icon"><Trophy size={15} strokeWidth={2} aria-hidden="true" /></span>
         Crear torneo
       </a>
 
-      <a href="#" class="sidebar-link sidebar-link--placeholder">
-        <span class="sidebar-icon"><Volleyball size={16} strokeWidth={2} aria-hidden="true" /></span>
+      <div class="sidebar-divider"></div>
+
+      <a href="#" class="sidebar-link sidebar-link--placeholder" tabindex="-1" aria-disabled="true">
+        <span class="sidebar-icon"><Ball size={15} strokeWidth={2} aria-hidden="true" /></span>
         Canchas
+        <span class="coming-pill">Próximo</span>
       </a>
 
-      <a href="#" class="sidebar-link sidebar-link--placeholder">
-        <span class="sidebar-icon"><Users size={16} strokeWidth={2} aria-hidden="true" /></span>
+      <a href="#" class="sidebar-link sidebar-link--placeholder" tabindex="-1" aria-disabled="true">
+        <span class="sidebar-icon"><Users size={15} strokeWidth={2} aria-hidden="true" /></span>
         Reservas
+        <span class="coming-pill">Próximo</span>
       </a>
 
-      <a href="#" class="sidebar-link sidebar-link--placeholder">
-        <span class="sidebar-icon"><Settings size={16} strokeWidth={2} aria-hidden="true" /></span>
+      <a
+        href="/panel-club/configuracion"
+        class={`sidebar-link${isActive('/panel-club/configuracion') ? ' sidebar-link--active' : ''}`}
+      >
+        <span class="sidebar-icon"><Settings size={15} strokeWidth={2} aria-hidden="true" /></span>
         Configuración
       </a>
+
     </nav>
   </div>
 
+  <!-- ── REPORTES ── -->
   <div class="sidebar-section">
-    <div class="sidebar-label">REPORTES</div>
+    <div class="sidebar-label sidebar-label--mgmt">
+      <span class="label-bar label-bar--orange"></span>
+      REPORTES
+    </div>
     <nav class="sidebar-nav">
-      <a href="#" class="sidebar-link sidebar-link--placeholder">
-        <span class="sidebar-icon"><BarChart3 size={16} strokeWidth={2} aria-hidden="true" /></span>
+      <a href="#" class="sidebar-link sidebar-link--placeholder" tabindex="-1" aria-disabled="true">
+        <span class="sidebar-icon"><BarChart3 size={15} strokeWidth={2} aria-hidden="true" /></span>
         Estadísticas
+        <span class="coming-pill">Próximo</span>
       </a>
     </nav>
   </div>
+
 </aside>
 
 <style>
+  /* ── Shell ── */
   .sidebar {
-    width: 220px;
+    width: 230px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1.25rem;
+    padding: 0.25rem 0;
   }
 
-  @media (max-width: 767px) {
-    .sidebar { display: none; }
-  }
+  @media (max-width: 767px) { .sidebar { display: none; } }
 
-  .sidebar-section {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-  }
+  /* ── Section ── */
+  .sidebar-section { display: flex; flex-direction: column; gap: 0.3rem; }
 
+  /* ── Labels ── */
   .sidebar-label {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    color: hsl(215 20% 40%);
-    text-transform: uppercase;
-    padding: 0 0.75rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .sidebar-nav {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 0 0.5rem;
+    margin-bottom: 0.2rem;
   }
+  .sidebar-label--nav  { color: hsl(216 60% 55%); }
+  .sidebar-label--mgmt { color: hsl(35 80% 50%); }
+  .label-bar {
+    width: 3px; height: 12px; border-radius: 2px; flex-shrink: 0;
+  }
+  .label-bar--blue   { background: hsl(216 85% 55%); }
+  .label-bar--orange { background: hsl(35 100% 48%); }
 
+  /* ── Nav ── */
+  .sidebar-nav { display: flex; flex-direction: column; gap: 3px; }
+
+  /*
+   * Decision Context — estilos unificados por solicitud del usuario:
+   * Modo oscuro: TODOS los links de Gestión/Reportes → card naranja-oscuro (igual que
+   *   el estado "active" previo: background cálido + borde naranja sutil).
+   * Modo claro:  TODOS los links de Gestión/Reportes → card crema-naranja (igual que
+   *   "Crear torneo" en modo claro previo: background crema + borde naranja).
+   * El active en cada tema es una versión más saturada del mismo card para distinguir
+   *   cuál es la ruta actual.
+   * Los links de NAVEGACIÓN (azul) y el CTA de Crear partido (naranja sólido)
+   *   conservan sus propios estilos ya que son visualmente distintos por diseño.
+   */
+
+  /* ── Base link — DARK MODE: card naranja-oscuro (= previo active) ── */
   .sidebar-link {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
+    gap: 0.6rem;
     padding: 0.5rem 0.75rem;
-    border-radius: 8px;
-    font-size: 0.875rem;
+    border-radius: 9px;
+    font-size: 0.86rem;
     font-family: 'Barlow', sans-serif;
     font-weight: 500;
-    color: hsl(215 20% 55%);
+    color: hsl(42 80% 62%);
     text-decoration: none;
-    border: 1px solid transparent;
-    transition: background 0.12s, color 0.12s;
+    background: rgba(246, 164, 0, 0.08);
+    border: 1px solid rgba(246, 164, 0, 0.16);
+    transition: background 0.13s, color 0.13s, border-color 0.13s, box-shadow 0.13s;
+    position: relative;
   }
-
   .sidebar-link:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: hsl(210 20% 85%);
-  }
-
-  .sidebar-link--active {
-    background: rgba(246, 164, 0, 0.1);
-    color: hsl(42 100% 65%);
-    border-color: rgba(246, 164, 0, 0.18);
-  }
-
-  .sidebar-link--active:hover {
     background: rgba(246, 164, 0, 0.14);
     color: hsl(42 100% 70%);
+    border-color: rgba(246, 164, 0, 0.28);
   }
 
-  /* Crear partido — CTA destacado */
-  .sidebar-link--highlight {
-    color: hsl(35 100% 58%);
-    border-color: rgba(246, 120, 0, 0.22);
+  /* ── Active — versión más saturada del card ── */
+  .sidebar-link--active {
+    background: rgba(246, 164, 0, 0.18);
+    color: hsl(42 100% 72%);
+    border-color: rgba(246, 164, 0, 0.38);
+    font-weight: 700;
+    box-shadow: 0 0 0 1px rgba(246, 164, 0, 0.12) inset;
+  }
+  .sidebar-link--active:hover {
+    background: rgba(246, 164, 0, 0.22);
+    color: hsl(42 100% 76%);
   }
 
-  .sidebar-link--highlight:hover {
-    background: rgba(246, 120, 0, 0.1);
-    color: hsl(35 100% 68%);
-    border-color: rgba(246, 120, 0, 0.35);
+  /* ── NAVEGACIÓN links — blue FIFA (conservan estilo azul propio) ── */
+  .sidebar-link--nav {
+    color: hsl(216 70% 60%);
+    background: rgba(27, 105, 224, 0.07);
+    border-color: rgba(27, 105, 224, 0.16);
+    font-weight: 600;
+  }
+  .sidebar-link--nav:hover {
+    background: rgba(27, 105, 224, 0.14);
+    color: hsl(216 90% 72%);
+    border-color: rgba(27, 105, 224, 0.30);
+  }
+  .sidebar-link--nav-active {
+    background: rgba(27, 105, 224, 0.20);
+    color: hsl(216 90% 76%);
+    border-color: rgba(27, 105, 224, 0.38);
   }
 
-  /* Placeholder routes — slightly dimmed */
+  /* sidebar-link--cta y sidebar-link--secondary eliminados:
+     todos los links de Gestión/Reportes usan .sidebar-link base unificado. */
+
+  /* ── Divider ── */
+  .sidebar-divider {
+    height: 1px;
+    background: rgba(246, 164, 0, 0.12);
+    margin: 0.25rem 0.5rem;
+  }
+
+  /* ── Placeholders ── */
   .sidebar-link--placeholder {
-    opacity: 0.55;
+    opacity: 0.38;
     cursor: not-allowed;
+    pointer-events: none;
   }
 
-  .sidebar-link--placeholder:hover {
-    background: transparent;
-    color: hsl(215 20% 55%);
-    opacity: 0.55;
+  /* ── Coming soon pill ── */
+  .coming-pill {
+    margin-left: auto;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(246, 164, 0, 0.10);
+    color: hsl(42 80% 55%);
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid rgba(246, 164, 0, 0.18);
   }
 
+  /* ── Icon ── */
   .sidebar-icon {
     line-height: 1;
     display: inline-flex;
     align-items: center;
-    color: inherit;
     flex-shrink: 0;
+    color: inherit;
+    opacity: 0.9;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     TEMA CLARO — TODOS los links de Gestión/Reportes → card crema-naranja
+     (igual que "Crear torneo" en modo claro previo a esta unificación)
+     ══════════════════════════════════════════════════════════════════ */
+
+  :global(html.light) .sidebar-label--nav  { color: hsl(216 70% 40%); }
+  :global(html.light) .sidebar-label--mgmt { color: hsl(35 80% 38%); }
+  :global(html.light) .label-bar--blue   { background: hsl(216 85% 48%); }
+  :global(html.light) .label-bar--orange { background: hsl(35 100% 42%); }
+
+  /* Links base — crema con borde naranja */
+  :global(html.light) .sidebar-link {
+    background: hsl(35 100% 95%);
+    border-color: hsl(35 80% 80%);
+    color: hsl(35 80% 35%);
+  }
+  :global(html.light) .sidebar-link:hover {
+    background: hsl(35 100% 91%);
+    border-color: hsl(35 80% 66%);
+    color: hsl(35 100% 26%);
+  }
+
+  /* Active — crema más saturada */
+  :global(html.light) .sidebar-link--active {
+    background: hsl(35 100% 87%);
+    color: hsl(35 100% 22%);
+    border-color: hsl(35 80% 58%);
+    box-shadow: 0 0 0 1px hsl(35 80% 78%) inset;
+  }
+  :global(html.light) .sidebar-link--active:hover {
+    background: hsl(35 100% 83%);
+  }
+
+  /* Nav links — azul claro */
+  :global(html.light) .sidebar-link--nav {
+    color: hsl(216 70% 38%);
+    background: hsl(216 100% 96%);
+    border-color: hsl(216 60% 82%);
+  }
+  :global(html.light) .sidebar-link--nav:hover {
+    background: hsl(216 100% 91%);
+    color: hsl(216 80% 28%);
+    border-color: hsl(216 60% 68%);
+  }
+  :global(html.light) .sidebar-link--nav-active {
+    background: hsl(216 100% 88%);
+    color: hsl(216 80% 24%);
+    border-color: hsl(216 60% 60%);
+  }
+
+  /* sidebar-link--cta y sidebar-link--secondary eliminados de light mode también. */
+
+  /* Divider */
+  :global(html.light) .sidebar-divider { background: hsl(35 80% 85%); }
+
+  /* Placeholders */
+  :global(html.light) .sidebar-link--placeholder { opacity: 0.32; }
+
+  /* Coming pill */
+  :global(html.light) .coming-pill {
+    background: hsl(35 80% 90%);
+    color: hsl(35 80% 40%);
+    border-color: hsl(35 80% 76%);
+  }
+  :global(html.light) .sidebar-link--nav-active {
+    background: hsl(216 100% 88%);
+    color: hsl(216 80% 28%);
+    border-color: hsl(216 60% 65%);
   }
 </style>
