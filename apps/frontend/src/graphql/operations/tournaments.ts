@@ -13,6 +13,34 @@ import type { MatchFormat } from './matches';
 export type TournamentStatus = 'REGISTRATION' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type FixtureMatchStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
+// Issue #132: nuevos tipos de torneo
+export type TournamentType = 'ROUND_ROBIN' | 'SINGLE_ELIMINATION' | 'GROUP_STAGE_ELIMINATION';
+export type DurationMode = 'SINGLE_DAY' | 'MULTI_DAY';
+export type FixturePhase = 'GROUP_STAGE' | 'ROUND_OF_16' | 'QUARTERFINAL' | 'SEMIFINAL' | 'THIRD_PLACE' | 'FINAL';
+export type TournamentInvitationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
+
+export interface TournamentInvitationData {
+  id: string;
+  tournamentId: string;
+  tournamentName: string;
+  teamId: string | null;
+  teamName: string;
+  invitedBy: { id: string; displayName: string; avatarUrl: string | null };
+  captain: { id: string; displayName: string; avatarUrl: string | null };
+  status: TournamentInvitationStatus;
+  message: string | null;
+  expiresAt: string;
+  respondedAt: string | null;
+  createdAt: string;
+}
+
+export interface SchedulePreviewDay {
+  matchday: number;
+  date: string;
+  matchCount: number;
+  isPast: boolean;
+}
+
 export interface TournamentFilters {
   status?: TournamentStatus;
   format?: MatchFormat;
@@ -34,7 +62,16 @@ export interface CreateTournamentInput {
   teamCount: number;
   playersPerTeam: number;
   description?: string | null;
-  schedule: TournamentScheduleSlotInput[];
+  schedule?: TournamentScheduleSlotInput[];
+  // Issue #132: nuevos campos de auto-schedule
+  tournamentType?: TournamentType;
+  durationMode?: DurationMode;
+  firstMatchday?: string;
+  cadenceDays?: number;
+  specificDays?: number[];
+  groupCount?: number;
+  teamsPerGroup?: number;
+  advancingPerGroup?: number;
 }
 
 export interface TournamentFixtureMatch {
@@ -48,6 +85,11 @@ export interface TournamentFixtureMatch {
   courtId: string | null;
   scheduledAt: string | null;
   status: FixtureMatchStatus;
+  // Issue #132: nuevos campos
+  phase: FixturePhase | null;
+  groupName: string | null;
+  matchday: number | null;
+  isPast: boolean;
   scoreHome: number | null;
   scoreAway: number | null;
 }
@@ -98,6 +140,14 @@ export interface TournamentData {
   } | null;
   teams: TournamentTeam[];
   fixtureMatches: TournamentFixtureMatch[];
+  // Issue #132: nuevos campos de tipo y scheduling
+  tournamentType: TournamentType;
+  durationMode: DurationMode;
+  firstMatchday: string | null;
+  cadenceDays: number | null;
+  groupCount: number | null;
+  teamsPerGroup: number | null;
+  advancingPerGroup: number | null;
 }
 
 export interface TournamentListItem {
@@ -246,7 +296,18 @@ export const GET_TOURNAMENT_DETAIL = /* GraphQL */ `
         status
         scoreHome
         scoreAway
+        phase
+        groupName
+        matchday
+        isPast
       }
+      tournamentType
+      durationMode
+      firstMatchday
+      cadenceDays
+      groupCount
+      teamsPerGroup
+      advancingPerGroup
     }
   }
 `;
@@ -527,6 +588,66 @@ export const LEAVE_TOURNAMENT = /* GraphQL */ `
       message
       tournamentStatus
       remainingTeams
+    }
+  }
+`;
+
+// Issue #132: nuevas operaciones
+
+export interface SchedulePreviewInput {
+  tournamentType: TournamentType;
+  teamCount: number;
+  firstMatchday: string;
+  cadenceDays?: number;
+  durationMode: DurationMode;
+  groupCount?: number;
+  teamsPerGroup?: number;
+}
+
+export const SCHEDULE_PREVIEW = /* GraphQL */ `
+  query SchedulePreview($input: SchedulePreviewInput!) {
+    schedulePreview(input: $input) {
+      matchday
+      date
+      matchCount
+      isPast
+    }
+  }
+`;
+
+export const MY_TOURNAMENT_INVITATIONS = /* GraphQL */ `
+  query MyTournamentInvitations {
+    myTournamentInvitations {
+      id
+      tournamentId
+      tournamentName
+      teamId
+      teamName
+      status
+      message
+      expiresAt
+      createdAt
+      invitedBy { id displayName avatarUrl }
+      captain   { id displayName avatarUrl }
+    }
+  }
+`;
+
+export const INVITE_TEAM_TO_TOURNAMENT = /* GraphQL */ `
+  mutation InviteTeamToTournament($input: InviteTeamToTournamentInput!) {
+    inviteTeamToTournament(input: $input) {
+      success
+      message
+      invitation { id status expiresAt }
+    }
+  }
+`;
+
+export const RESPOND_TOURNAMENT_INVITATION = /* GraphQL */ `
+  mutation RespondTournamentInvitation($invitationId: ID!, $accept: Boolean!) {
+    respondTournamentInvitation(invitationId: $invitationId, accept: $accept) {
+      success
+      message
     }
   }
 `;

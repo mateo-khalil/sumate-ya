@@ -24,6 +24,8 @@ import Layout from '../../layouts/Layout.astro';
 import Topbar from '../../components/shared/Topbar.astro';
 import { TournamentRegistrationForm } from '../../components/tournaments/TournamentRegistrationForm';
 import { LeaveTournamentButton } from '../../components/tournaments/LeaveTournamentButton';
+import { TournamentBracket } from '../../components/tournaments/TournamentBracket';
+import { GroupStandings } from '../../components/tournaments/GroupStandings';
 import { GET_TOURNAMENT_DETAIL, type TournamentData, type TournamentFixtureMatch } from '../../graphql/operations/tournaments';
 import { readAccessToken } from '../../lib/auth';
 
@@ -261,24 +263,88 @@ for (const match of tournament?.fixtureMatches ?? []) {
               )}
             </div>
 
+            {/* T1: mostrar tabla de grupos si es group_stage_elimination */}
+            {tournament.tournamentType === 'GROUP_STAGE_ELIMINATION' && (
+              <div class="detail-section">
+                <div class="section-heading">
+                  <h2>Tabla de Grupos</h2>
+                </div>
+                <GroupStandings
+                  client:visible
+                  matches={tournament.fixtureMatches}
+                  teams={tournament.teams}
+                  advancingPerGroup={tournament.advancingPerGroup}
+                />
+              </div>
+            )}
+
             <div class="detail-section fixture-section">
               <div class="section-heading">
-                <h2>Fixture</h2>
+                <h2>
+                  {tournament.tournamentType === 'SINGLE_ELIMINATION' ? 'Bracket' :
+                   tournament.tournamentType === 'GROUP_STAGE_ELIMINATION' ? 'Fixture de Grupos' :
+                   'Fixture'}
+                </h2>
                 <span>{tournament.fixtureMatches.length} partidos</span>
               </div>
 
               {tournament.fixtureMatches.length === 0 ? (
                 <div class="empty-state">El fixture todavia no fue generado.</div>
+              ) : tournament.tournamentType === 'SINGLE_ELIMINATION' ? (
+                /* T1: bracket visual para eliminación directa */
+                <TournamentBracket
+                  client:visible
+                  matches={tournament.fixtureMatches}
+                />
+              ) : tournament.tournamentType === 'GROUP_STAGE_ELIMINATION' ? (
+                /* T1: primero grupos, luego bracket de eliminación */
+                <div>
+                  {/* Partidos de grupos por jornada */}
+                  <div class="rounds-list">
+                    {[...fixtureByRound.entries()]
+                      .filter(([, ms]) => ms.some(m => m.phase === 'GROUP_STAGE'))
+                      .map(([round, matches]) => (
+                        <section class="round-block">
+                          <h3>Jornada {round}</h3>
+                          <div class="matches-stack">
+                            {matches.filter(m => m.phase === 'GROUP_STAGE').map((match) => {
+                              const played = match.status === 'COMPLETED';
+                              return (
+                                <article class={`fixture-match ${played ? 'fixture-match--played' : ''} ${match.isPast ? 'fixture-match--past' : ''}`}>
+                                  {match.groupName && <span class="group-badge">Grupo {match.groupName}</span>}
+                                  <div class="fixture-time"><Clock size={14} aria-hidden="true" />{formatDateTime(match.scheduledAt)}</div>
+                                  <div class="fixture-line">
+                                    <span>{teamName(match, 'home')}</span>
+                                    <strong>{played && match.scoreHome !== null && match.scoreAway !== null ? `${match.scoreHome} - ${match.scoreAway}` : 'vs'}</strong>
+                                    <span>{teamName(match, 'away')}</span>
+                                  </div>
+                                  {played && <div class="played-mark"><CheckCircle size={13} aria-hidden="true" /> Jugado</div>}
+                                </article>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                  </div>
+                  {/* Bracket de eliminación */}
+                  {tournament.fixtureMatches.some(m => m.phase && m.phase !== 'GROUP_STAGE') && (
+                    <div class="elim-bracket-section">
+                      <h3 class="elim-bracket-title">Fase de Eliminación</h3>
+                      <TournamentBracket client:visible matches={tournament.fixtureMatches} eliminationOnly={true} />
+                    </div>
+                  )}
+                </div>
               ) : (
+                /* Round robin: vista de jornadas original con T4 (isPast → fixture-match--past) */
                 <div class="rounds-list">
                   {[...fixtureByRound.entries()].map(([round, matches]) => (
                     <section class="round-block">
-                      <h3>Fecha {round}</h3>
+                      <h3>Jornada {round}</h3>
                       <div class="matches-stack">
                         {matches.map((match) => {
                           const played = match.status === 'COMPLETED';
                           return (
-                            <article class={`fixture-match ${played ? 'fixture-match--played' : ''}`}>
+                            <article class={`fixture-match ${played ? 'fixture-match--played' : ''} ${match.isPast ? 'fixture-match--past' : ''}`}>
                               <div class="fixture-time">
                                 <Clock size={14} aria-hidden="true" />
                                 {formatDateTime(match.scheduledAt)}
@@ -415,6 +481,35 @@ for (const match of tournament?.fixtureMatches ?? []) {
   .fixture-line strong { color: hsl(35 100% 58%); font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.05em; }
   .played-mark { margin-top: 0.45rem; color: hsl(142 72% 65%); }
   .empty-state, .not-found { color: hsl(215 20% 55%); border: 1px dashed rgba(255,255,255,0.14); border-radius: 10px; padding: 1.5rem; text-align: center; }
+
+  /* T4: fechas pasadas atenuadas en gris — issue #132 */
+  .fixture-match--past {
+    opacity: 0.55;
+    filter: grayscale(0.5);
+    pointer-events: none;
+  }
+  .fixture-match--past .fixture-time,
+  .fixture-match--past .fixture-line { color: hsl(215 10% 55%); }
+
+  /* Grupo badge */
+  .group-badge {
+    display: inline-flex; align-items: center;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    background: rgba(27,105,224,0.12); color: hsl(216 70% 65%);
+    border-radius: 4px; padding: 0.1rem 0.45rem; margin-bottom: 0.25rem;
+  }
+
+  /* Sección bracket de eliminación */
+  .elim-bracket-section { margin-top: 1.5rem; }
+  .elim-bracket-title {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.8rem; font-weight: 700;
+    letter-spacing: 0.15em; text-transform: uppercase; color: hsl(42 100% 55%);
+    margin: 0 0 0.75rem;
+  }
+
+  /* Overrides light mode para T4 */
+  :global(html.light) .fixture-match--past { opacity: 0.45; filter: grayscale(0.6); }
+  :global(html.light) .group-badge { background: hsl(216 100% 93%); color: hsl(216 70% 35%); }
   .nf-title { font-family: 'Bebas Neue', sans-serif; color: white; font-size: 2rem; margin: 0 0 0.35rem; }
   .nf-sub { margin: 0 0 1rem; }
   @media (max-width: 850px) {
