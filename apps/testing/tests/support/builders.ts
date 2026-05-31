@@ -455,6 +455,68 @@ export function buildTournament(
   };
 }
 
+/* ── Leave-tournament builders (US #47) ─────────────────────────────────── */
+
+/**
+ * Mock builders for leaveTournament mutation responses.
+ *
+ * Decision Context:
+ * - LeaveTournamentDialog posts to /api/graphql-auth with the LeaveTournament
+ *   mutation and reads `data.leaveTournament.{success,message,tournamentStatus,
+ *   remainingTeams}`. The component branches on:
+ *     · errors[0].message contains "authentication required" → redirect to /login.
+ *     · success=false → render `message` as inline error.
+ *     · success=true + tournamentStatus='CANCELLED' → extra yellow message + redirect
+ *       to /torneos after 2500ms.
+ *     · success=true otherwise → reload after 1500ms.
+ * - Builders centralise the shape so specs only override the fields under test.
+ * - Previously fixed bugs: none relevant.
+ */
+
+export type MockLeaveTournamentResult = {
+  success: boolean;
+  message: string;
+  tournamentStatus: string | null;
+  remainingTeams: number | null;
+};
+
+export function buildLeaveTournamentResponse(
+  overrides: Partial<MockLeaveTournamentResult> = {},
+): { data: { leaveTournament: MockLeaveTournamentResult } } {
+  return {
+    data: {
+      leaveTournament: {
+        success: true,
+        message: 'Equipo retirado del torneo',
+        tournamentStatus: 'REGISTRATION',
+        remainingTeams: 5,
+        ...overrides,
+      },
+    },
+  };
+}
+
+export function buildLeaveTournamentFailure(message: string): {
+  data: { leaveTournament: MockLeaveTournamentResult };
+} {
+  return {
+    data: {
+      leaveTournament: {
+        success: false,
+        message,
+        tournamentStatus: null,
+        remainingTeams: null,
+      },
+    },
+  };
+}
+
+export function buildLeaveTournamentErrors(messages: string[]): {
+  errors: Array<{ message: string }>;
+} {
+  return { errors: messages.map((message) => ({ message })) };
+}
+
 /** Mock eligible players response (tournamentEligiblePlayers query). */
 export function buildEligiblePlayersResponse(
   players: MockTournamentPlayer[] = [],
