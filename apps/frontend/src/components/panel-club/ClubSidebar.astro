@@ -175,7 +175,19 @@ function startsWithPath(prefix: string): boolean {
   /* ── Nav ── */
   .sidebar-nav { display: flex; flex-direction: column; gap: 3px; }
 
-  /* ── Base link ── */
+  /*
+   * Decision Context — estilos unificados por solicitud del usuario:
+   * Modo oscuro: TODOS los links de Gestión/Reportes → card naranja-oscuro (igual que
+   *   el estado "active" previo: background cálido + borde naranja sutil).
+   * Modo claro:  TODOS los links de Gestión/Reportes → card crema-naranja (igual que
+   *   "Crear torneo" en modo claro previo: background crema + borde naranja).
+   * El active en cada tema es una versión más saturada del mismo card para distinguir
+   *   cuál es la ruta actual.
+   * Los links de NAVEGACIÓN (azul) y el CTA de Crear partido (naranja sólido)
+   *   conservan sus propios estilos ya que son visualmente distintos por diseño.
+   */
+
+  /* ── Base link — DARK MODE: card naranja-oscuro (= previo active) ── */
   .sidebar-link {
     display: flex;
     align-items: center;
@@ -185,87 +197,81 @@ function startsWithPath(prefix: string): boolean {
     font-size: 0.86rem;
     font-family: 'Barlow', sans-serif;
     font-weight: 500;
-    color: hsl(215 20% 55%);
+    color: hsl(42 80% 62%);
     text-decoration: none;
-    border: 1px solid transparent;
-    transition: background 0.13s, color 0.13s, border-color 0.13s;
+    background: rgba(246, 164, 0, 0.08);
+    border: 1px solid rgba(246, 164, 0, 0.16);
+    transition: background 0.13s, color 0.13s, border-color 0.13s, box-shadow 0.13s;
     position: relative;
   }
   .sidebar-link:hover {
-    background: rgba(255,255,255,0.06);
-    color: hsl(210 20% 82%);
+    background: rgba(246, 164, 0, 0.14);
+    color: hsl(42 100% 70%);
+    border-color: rgba(246, 164, 0, 0.28);
   }
 
-  /* ── Active (GESTIÓN) — orange ── */
+  /* ── Active — versión más saturada del card ── */
   .sidebar-link--active {
-    background: rgba(246,164,0,0.12);
-    color: hsl(42 100% 65%);
-    border-color: rgba(246,164,0,0.22);
-    font-weight: 600;
+    background: rgba(246, 164, 0, 0.18);
+    color: hsl(42 100% 72%);
+    border-color: rgba(246, 164, 0, 0.38);
+    font-weight: 700;
+    box-shadow: 0 0 0 1px rgba(246, 164, 0, 0.12) inset;
   }
   .sidebar-link--active:hover {
-    background: rgba(246,164,0,0.17);
-    color: hsl(42 100% 70%);
+    background: rgba(246, 164, 0, 0.22);
+    color: hsl(42 100% 76%);
   }
 
-  /* ── NAVEGACIÓN links — blue FIFA ── */
+  /* ── NAVEGACIÓN links — blue FIFA (conservan estilo azul propio) ── */
   .sidebar-link--nav {
     color: hsl(216 70% 60%);
-    background: rgba(27,105,224,0.07);
-    border-color: rgba(27,105,224,0.15);
+    background: rgba(27, 105, 224, 0.07);
+    border-color: rgba(27, 105, 224, 0.16);
     font-weight: 600;
   }
   .sidebar-link--nav:hover {
-    background: rgba(27,105,224,0.14);
+    background: rgba(27, 105, 224, 0.14);
     color: hsl(216 90% 72%);
-    border-color: rgba(27,105,224,0.28);
+    border-color: rgba(27, 105, 224, 0.30);
   }
   .sidebar-link--nav-active {
-    background: rgba(27,105,224,0.18);
-    color: hsl(216 90% 75%);
-    border-color: rgba(27,105,224,0.35);
+    background: rgba(27, 105, 224, 0.20);
+    color: hsl(216 90% 76%);
+    border-color: rgba(27, 105, 224, 0.38);
   }
 
-  /* ── CTA principal: Crear partido — naranja sólido ── */
+  /* ── CTA principal: Crear partido — sólido naranja (conserva estilo propio) ── */
   .sidebar-link--cta {
     background: hsl(35 100% 48%);
     color: hsl(220 72% 7%);
     border-color: transparent;
     font-weight: 700;
-    box-shadow: 0 2px 8px rgba(246,120,0,0.25);
+    box-shadow: 0 2px 8px rgba(246, 120, 0, 0.28);
   }
   .sidebar-link--cta:hover {
     background: hsl(35 100% 55%);
     color: hsl(220 72% 5%);
-    box-shadow: 0 3px 12px rgba(246,120,0,0.35);
+    box-shadow: 0 3px 12px rgba(246, 120, 0, 0.38);
   }
   .sidebar-link--cta-active {
     background: hsl(35 100% 42%);
-    box-shadow: 0 2px 6px rgba(246,120,0,0.2);
+    box-shadow: 0 2px 6px rgba(246, 120, 0, 0.22);
   }
 
-  /* ── CTA secundario: Crear torneo — contorno naranja ── */
-  .sidebar-link--secondary {
-    color: hsl(35 90% 55%);
-    border-color: rgba(246,120,0,0.28);
-    font-weight: 600;
-  }
-  .sidebar-link--secondary:hover {
-    background: rgba(246,120,0,0.09);
-    color: hsl(35 100% 65%);
-    border-color: rgba(246,120,0,0.42);
-  }
+  /* ── Crear torneo — mismo estilo que base (ya unificado) ── */
+  .sidebar-link--secondary { font-weight: 600; }
 
   /* ── Divider ── */
   .sidebar-divider {
     height: 1px;
-    background: rgba(255,255,255,0.06);
+    background: rgba(246, 164, 0, 0.12);
     margin: 0.25rem 0.5rem;
   }
 
   /* ── Placeholders ── */
   .sidebar-link--placeholder {
-    opacity: 0.45;
+    opacity: 0.38;
     cursor: not-allowed;
     pointer-events: none;
   }
@@ -277,11 +283,11 @@ function startsWithPath(prefix: string): boolean {
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    background: rgba(255,255,255,0.07);
-    color: hsl(215 20% 50%);
+    background: rgba(246, 164, 0, 0.10);
+    color: hsl(42 80% 55%);
     border-radius: 4px;
     padding: 0.1rem 0.4rem;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(246, 164, 0, 0.18);
   }
 
   /* ── Icon ── */
@@ -291,38 +297,43 @@ function startsWithPath(prefix: string): boolean {
     align-items: center;
     flex-shrink: 0;
     color: inherit;
-    opacity: 0.85;
+    opacity: 0.9;
   }
 
-  /* ══════════════════════════════════════════════
-     TEMA CLARO — overrides html.light
-     ══════════════════════════════════════════════ */
+  /* ══════════════════════════════════════════════════════════════════
+     TEMA CLARO — TODOS los links de Gestión/Reportes → card crema-naranja
+     (igual que "Crear torneo" en modo claro previo a esta unificación)
+     ══════════════════════════════════════════════════════════════════ */
 
   :global(html.light) .sidebar-label--nav  { color: hsl(216 70% 40%); }
   :global(html.light) .sidebar-label--mgmt { color: hsl(35 80% 38%); }
   :global(html.light) .label-bar--blue   { background: hsl(216 85% 48%); }
   :global(html.light) .label-bar--orange { background: hsl(35 100% 42%); }
 
-  /* Links base */
+  /* Links base — crema con borde naranja */
   :global(html.light) .sidebar-link {
-    color: hsl(220 16% 42%);
+    background: hsl(35 100% 95%);
+    border-color: hsl(35 80% 80%);
+    color: hsl(35 80% 35%);
   }
   :global(html.light) .sidebar-link:hover {
-    background: rgba(0,0,0,0.05);
-    color: hsl(220 20% 18%);
+    background: hsl(35 100% 91%);
+    border-color: hsl(35 80% 66%);
+    color: hsl(35 100% 26%);
   }
 
-  /* Active gestión */
+  /* Active — crema más saturada */
   :global(html.light) .sidebar-link--active {
-    background: hsl(35 100% 92%);
-    color: hsl(35 100% 30%);
-    border-color: hsl(35 80% 78%);
+    background: hsl(35 100% 87%);
+    color: hsl(35 100% 22%);
+    border-color: hsl(35 80% 58%);
+    box-shadow: 0 0 0 1px hsl(35 80% 78%) inset;
   }
   :global(html.light) .sidebar-link--active:hover {
-    background: hsl(35 100% 88%);
+    background: hsl(35 100% 83%);
   }
 
-  /* Nav links */
+  /* Nav links — azul claro */
   :global(html.light) .sidebar-link--nav {
     color: hsl(216 70% 38%);
     background: hsl(216 100% 96%);
@@ -335,42 +346,38 @@ function startsWithPath(prefix: string): boolean {
   }
   :global(html.light) .sidebar-link--nav-active {
     background: hsl(216 100% 88%);
-    color: hsl(216 80% 28%);
-    border-color: hsl(216 60% 65%);
+    color: hsl(216 80% 24%);
+    border-color: hsl(216 60% 60%);
   }
 
-  /* CTA principal */
+  /* CTA Crear partido */
   :global(html.light) .sidebar-link--cta {
     background: hsl(35 100% 44%);
     color: #fff;
-    box-shadow: 0 2px 8px rgba(246,120,0,0.22);
+    box-shadow: 0 2px 8px rgba(246, 120, 0, 0.24);
   }
   :global(html.light) .sidebar-link--cta:hover {
     background: hsl(35 100% 38%);
   }
 
-  /* CTA secundario */
-  :global(html.light) .sidebar-link--secondary {
-    color: hsl(35 100% 35%);
-    border-color: hsl(35 80% 65%);
-    background: hsl(35 100% 96%);
-  }
-  :global(html.light) .sidebar-link--secondary:hover {
-    background: hsl(35 100% 91%);
-    color: hsl(35 100% 28%);
-    border-color: hsl(35 80% 52%);
-  }
+  /* Crear torneo — mismo estilo que base */
+  :global(html.light) .sidebar-link--secondary { font-weight: 600; }
 
   /* Divider */
-  :global(html.light) .sidebar-divider { background: rgba(0,0,0,0.06); }
+  :global(html.light) .sidebar-divider { background: hsl(35 80% 85%); }
 
   /* Placeholders */
-  :global(html.light) .sidebar-link--placeholder { opacity: 0.38; }
+  :global(html.light) .sidebar-link--placeholder { opacity: 0.32; }
 
   /* Coming pill */
   :global(html.light) .coming-pill {
-    background: rgba(0,0,0,0.05);
-    color: hsl(215 16% 52%);
-    border-color: rgba(0,0,0,0.07);
+    background: hsl(35 80% 90%);
+    color: hsl(35 80% 40%);
+    border-color: hsl(35 80% 76%);
+  }
+  :global(html.light) .sidebar-link--nav-active {
+    background: hsl(216 100% 88%);
+    color: hsl(216 80% 28%);
+    border-color: hsl(216 60% 65%);
   }
 </style>
