@@ -6,11 +6,20 @@
  *   and lazy-load Leaflet only when the user opens the map.
  * - TournamentList and TournamentMap fetch independently, matching the existing matches
  *   architecture and keeping registration updates scoped to the list card flow.
+ * - Filters are controlled here so list/map share one state and URL params stay in sync.
  */
 
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { List, Map as MapIcon } from 'lucide-react';
 import { TournamentList } from './TournamentList';
+import { TournamentFilters } from './TournamentFilters';
+import {
+  DEFAULT_TOURNAMENT_FILTERS,
+  normalizeTournamentFilters,
+  parseTournamentFiltersFromSearch,
+  writeTournamentFiltersToUrl,
+  type ClientTournamentFilters,
+} from '@/lib/tournament-filtering';
 
 const TournamentMap = lazy(() =>
   import('./TournamentMap').then((module) => ({ default: module.TournamentMap })),
@@ -24,9 +33,35 @@ interface TournamentsViewProps {
 
 export function TournamentsView({ isAuthenticated = false }: TournamentsViewProps) {
   const [view, setView] = useState<View>('list');
+  const [filters, setFilters] = useState<ClientTournamentFilters>(DEFAULT_TOURNAMENT_FILTERS);
+  const [urlReady, setUrlReady] = useState(false);
+
+  useEffect(() => {
+    const filtersFromUrl = parseTournamentFiltersFromSearch(window.location.search);
+    setFilters(filtersFromUrl);
+    setUrlReady(true);
+  }, []);
+
+  const handleFiltersChange = useCallback(
+    (newFilters: ClientTournamentFilters) => {
+      const normalized = normalizeTournamentFilters(newFilters);
+      setFilters(normalized);
+
+      if (urlReady) {
+        window.history.replaceState(
+          null,
+          '',
+          writeTournamentFiltersToUrl(normalized, window.location.href),
+        );
+      }
+    },
+    [urlReady],
+  );
 
   return (
     <div>
+      <TournamentFilters filters={filters} onFiltersChange={handleFiltersChange} />
+
       <div className="tournament-view-toggle" role="group" aria-label="Seleccionar vista de torneos">
         <button
           type="button"
@@ -53,7 +88,10 @@ export function TournamentsView({ isAuthenticated = false }: TournamentsViewProp
       </div>
 
       {view === 'list' ? (
-        <TournamentList isAuthenticated={isAuthenticated} />
+        <TournamentList
+          isAuthenticated={isAuthenticated}
+          filters={filters}
+        />
       ) : (
         <Suspense
           fallback={
@@ -62,7 +100,7 @@ export function TournamentsView({ isAuthenticated = false }: TournamentsViewProp
             </div>
           }
         >
-          <TournamentMap />
+          <TournamentMap filters={filters} />
         </Suspense>
       )}
 

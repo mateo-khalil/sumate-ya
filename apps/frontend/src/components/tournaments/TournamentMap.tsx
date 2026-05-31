@@ -7,6 +7,7 @@
  *   TournamentsView after hydration.
  * - Tournament pins come from the associated club coordinates: clubs.lat / clubs.lng.
  *   Clubs without coordinates are omitted from the marker layer without breaking the list.
+ * - Receives the same controlled filters as TournamentList and forwards them to GraphQL.
  */
 
 import 'leaflet/dist/leaflet.css';
@@ -19,6 +20,12 @@ import {
   type TournamentListItem,
 } from '@/graphql/operations/tournaments';
 import type { MatchFormat } from '@/graphql/operations/matches';
+import {
+  DEFAULT_TOURNAMENT_FILTERS,
+  filterTournaments,
+  toServerTournamentFilters,
+  type ClientTournamentFilters,
+} from '@/lib/tournament-filtering';
 
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -43,10 +50,6 @@ const FORMAT_LABELS: Record<MatchFormat, string> = {
 
 interface GetTournamentsPayload {
   tournaments: TournamentListItem[];
-}
-
-function keepRegistrationOnly(tournaments: TournamentListItem[]): TournamentListItem[] {
-  return tournaments.filter((tournament) => tournament.status === 'REGISTRATION');
 }
 
 function LocationButton() {
@@ -162,7 +165,11 @@ function EmptyMap({ message, mapStyle }: { message: string; mapStyle: CSSPropert
   );
 }
 
-export function TournamentMap() {
+interface TournamentMapProps {
+  filters?: ClientTournamentFilters;
+}
+
+export function TournamentMap({ filters = DEFAULT_TOURNAMENT_FILTERS }: TournamentMapProps) {
   const [tournaments, setTournaments] = useState<TournamentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -172,6 +179,8 @@ export function TournamentMap() {
     [],
   );
   const mapStyle = useMemo(() => ({ height: mapHeight, width: '100%' }), [mapHeight]);
+  const serverFilters = useMemo(() => toServerTournamentFilters(filters), [filters]);
+  const serverFiltersKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,14 +190,14 @@ export function TournamentMap() {
     fetch('/api/graphql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: GET_TOURNAMENTS }),
+      body: JSON.stringify({ query: GET_TOURNAMENTS, variables: { filters: serverFilters } }),
     })
       .then((response) => response.json())
       .then((payload: { data?: GetTournamentsPayload; errors?: Array<{ message: string }> }) => {
         if (cancelled) return;
         const graphQLError = payload.errors?.[0]?.message;
         if (graphQLError) throw new Error(graphQLError);
-        setTournaments(keepRegistrationOnly(payload.data?.tournaments ?? []));
+        setTournaments(filterTournaments(payload.data?.tournaments ?? [], filters));
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -203,7 +212,8 @@ export function TournamentMap() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverFiltersKey]);
 
   const geoTournaments = tournaments.filter((tournament) => {
     if (tournament.club?.lat == null || tournament.club?.lng == null) {
@@ -234,7 +244,7 @@ export function TournamentMap() {
   }
 
   if (tournaments.length === 0) {
-    return <EmptyMap message="No hay torneos en inscripcion" mapStyle={mapStyle} />;
+    return <EmptyMap message="No hay torneos para esos filtros" mapStyle={mapStyle} />;
   }
 
   if (geoTournaments.length === 0) {

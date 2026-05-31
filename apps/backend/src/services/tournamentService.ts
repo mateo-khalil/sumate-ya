@@ -23,6 +23,7 @@ import {
   type LeaveTournamentResult,
   type RegisterTournamentTeamInput,
   type Tournament,
+  type TournamentFilters,
   type TournamentFixtureMatch,
   type TournamentPlayer,
   type TournamentTeam,
@@ -32,6 +33,7 @@ import {
 import {
   tournamentRepository,
   type FixtureMatchRow,
+  type TournamentFilterOptions,
   type TournamentPlayerRow,
   type TournamentRow,
   type TournamentSlotRow,
@@ -66,6 +68,13 @@ const DB_TO_STATUS: Record<string, TournamentStatus> = {
   cancelled: TournamentStatus.Cancelled,
 };
 
+const STATUS_TO_DB: Record<TournamentStatus, string> = {
+  [TournamentStatus.Registration]: 'registration',
+  [TournamentStatus.InProgress]: 'in_progress',
+  [TournamentStatus.Completed]: 'completed',
+  [TournamentStatus.Cancelled]: 'cancelled',
+};
+
 const DB_TO_FIXTURE_STATUS: Record<string, FixtureMatchStatus> = {
   scheduled: FixtureMatchStatus.Scheduled,
   in_progress: FixtureMatchStatus.InProgress,
@@ -87,7 +96,6 @@ const FORMAT_ORDER: Record<string, number> = {
   '11v11': 4,
 };
 
-const TOURNAMENTS_REGISTRATION_CACHE_KEY = `${CACHE_PREFIX.TOURNAMENTS_LIST}:status:registration:v2`;
 const TOURNAMENT_DETAIL_CACHE_PREFIX = `${CACHE_PREFIX.TOURNAMENTS_LIST}:detail:v2:`;
 
 // =====================================================
@@ -211,6 +219,38 @@ function toTournament(row: TournamentRow): Tournament {
     teams: activeTeamRows.map(toTournamentTeam),
     fixtureMatches: fixtureMatches.map(toFixtureMatch),
   };
+}
+
+function dateOnly(value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return /^\d{4}-\d{2}-\d{2}/.test(trimmed) ? trimmed.slice(0, 10) : undefined;
+}
+
+function toTournamentFilterOptions(filters?: TournamentFilters | null): TournamentFilterOptions {
+  if (!filters) return { status: 'registration' };
+
+  return {
+    status: filters.status ? STATUS_TO_DB[filters.status] : 'registration',
+    format: filters.format ? FORMAT_TO_DB[filters.format] : undefined,
+    zone: filters.zone?.trim() || undefined,
+    dateFrom: dateOnly(filters.dateFrom),
+    dateTo: dateOnly(filters.dateTo),
+    search: filters.search?.trim() || undefined,
+  };
+}
+
+function getTournamentFiltersCacheKey(filters: TournamentFilterOptions): string {
+  const parts = [
+    `status:${filters.status || 'registration'}`,
+    filters.format ? `format:${filters.format}` : '',
+    filters.zone ? `zone:${filters.zone}` : '',
+    filters.dateFrom ? `from:${filters.dateFrom}` : '',
+    filters.dateTo ? `to:${filters.dateTo}` : '',
+    filters.search ? `search:${filters.search}` : '',
+  ].filter(Boolean);
+
+  return `${CACHE_PREFIX.TOURNAMENTS_LIST}:${parts.join('|')}:v3`;
 }
 
 async function normalizeAndValidateSchedule(
@@ -382,14 +422,24 @@ async function validateJoinRoster(
 // Service Functions
 // =====================================================
 
-export async function listRegistrationTournaments(_ctx: ServiceContext): Promise<Tournament[]> {
+export async function listTournaments(
+  _ctx: ServiceContext,
+  filters?: TournamentFilters | null,
+): Promise<Tournament[]> {
+  const filterOptions = toTournamentFilterOptions(filters);
+  const cacheKey = getTournamentFiltersCacheKey(filterOptions);
+
   const tournaments = await cacheGetOrSet<TournamentRow[]>(
-    TOURNAMENTS_REGISTRATION_CACHE_KEY,
-    () => tournamentRepository.getRegistrationTournaments(),
+    cacheKey,
+    () => tournamentRepository.getTournamentsWithFilters(filterOptions),
     CACHE_TTL.DYNAMIC_DATA,
   );
 
   return tournaments.map(toTournament);
+}
+
+export async function listRegistrationTournaments(ctx: ServiceContext): Promise<Tournament[]> {
+  return listTournaments(ctx, { status: TournamentStatus.Registration });
 }
 
 export async function getTournamentById(
@@ -765,6 +815,7 @@ export async function leaveTournament(
 }
 
 export const tournamentService = {
+  listTournaments,
   listRegistrationTournaments,
   getTournamentById,
   searchTournamentEligiblePlayers,

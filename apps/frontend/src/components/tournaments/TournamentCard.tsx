@@ -7,6 +7,8 @@
  * - Registration stays inline because there is no tournament detail page yet; a player can
  *   find a tournament and submit the team name without losing their place in the list.
  * - Mutations go through /api/graphql-auth so the HttpOnly session cookie can be forwarded.
+ * - In-progress tournaments can appear through filters, so the CTA distinguishes closed
+ *   registration from a genuinely full registration tournament.
  */
 
 import { type SyntheticEvent, useMemo, useState } from 'react';
@@ -16,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import {
   JOIN_TOURNAMENT,
   type TournamentListItem,
+  type TournamentStatus,
   type TournamentTeamRegistrationResult,
 } from '@/graphql/operations/tournaments';
 import type { MatchFormat } from '@/graphql/operations/matches';
@@ -25,6 +28,13 @@ const FORMAT_LABELS: Record<MatchFormat, string> = {
   SEVEN_VS_SEVEN: '7v7',
   TEN_VS_TEN: '10v10',
   ELEVEN_VS_ELEVEN: '11v11',
+};
+
+const STATUS_LABELS: Record<TournamentStatus, string> = {
+  REGISTRATION: 'Inscripcion abierta',
+  IN_PROGRESS: 'En curso',
+  COMPLETED: 'Finalizado',
+  CANCELLED: 'Cancelado',
 };
 
 interface TournamentCardProps {
@@ -59,7 +69,16 @@ export function TournamentCard({
   const [success, setSuccess] = useState<string | null>(null);
 
   const registeredTeams = Math.min(tournament.registeredTeamsCount, tournament.teamCount);
-  const isFull = registeredTeams >= tournament.teamCount || tournament.status !== 'REGISTRATION';
+  const isRegistration = tournament.status === 'REGISTRATION';
+  const isAtCapacity = registeredTeams >= tournament.teamCount;
+  const registrationClosed = !isRegistration || isAtCapacity;
+  const actionLabel = !isRegistration
+    ? 'Inscripcion cerrada'
+    : isAtCapacity
+      ? 'Completo'
+      : isAuthenticated
+        ? 'Anotar equipo'
+        : 'Iniciar sesion para anotar';
   const progress = useMemo(
     () => (tournament.teamCount > 0 ? Math.round((registeredTeams / tournament.teamCount) * 100) : 0),
     [registeredTeams, tournament.teamCount],
@@ -74,7 +93,7 @@ export function TournamentCard({
 
     const name = teamName.trim();
     if (name.length < 2) {
-      setError('Ingresá al menos 2 caracteres para el equipo.');
+      setError('Ingresa al menos 2 caracteres para el equipo.');
       return;
     }
 
@@ -128,6 +147,9 @@ export function TournamentCard({
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
           <Badge>{FORMAT_LABELS[tournament.format]}</Badge>
           <Badge variant="secondary">{tournament.playersPerTeam} por equipo</Badge>
+          <Badge variant={isRegistration ? 'default' : 'secondary'}>
+            {STATUS_LABELS[tournament.status]}
+          </Badge>
         </div>
 
         <div className="flex items-start gap-3">
@@ -145,7 +167,7 @@ export function TournamentCard({
                 <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <span className="truncate">
                   {tournament.club.name}
-                  {tournament.club.zone && <span> · {tournament.club.zone}</span>}
+                  {tournament.club.zone && <span> - {tournament.club.zone}</span>}
                 </span>
               </p>
             )}
@@ -161,7 +183,7 @@ export function TournamentCard({
           </div>
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4" aria-hidden="true" />
-            <span className={isFull ? 'text-muted-foreground' : 'font-medium text-foreground'}>
+            <span className={registrationClosed ? 'text-muted-foreground' : 'font-medium text-foreground'}>
               {registeredTeams}/{tournament.teamCount} equipos
             </span>
           </div>
@@ -174,7 +196,7 @@ export function TournamentCard({
           />
         </div>
 
-        {formOpen && !isFull ? (
+        {formOpen && !registrationClosed ? (
           <form onSubmit={handleSubmit} className="flex flex-col gap-2">
             <input
               value={teamName}
@@ -197,8 +219,8 @@ export function TournamentCard({
           <Button
             type="button"
             size="sm"
-            variant={isFull ? 'secondary' : 'default'}
-            disabled={isFull}
+            variant={registrationClosed ? 'secondary' : 'default'}
+            disabled={registrationClosed}
             onClick={() => {
               if (!isAuthenticated) {
                 window.location.href = '/login';
@@ -208,7 +230,7 @@ export function TournamentCard({
             }}
             className="w-full"
           >
-            {isFull ? 'Completo' : isAuthenticated ? 'Anotar equipo' : 'Iniciar sesión para anotar'}
+            {actionLabel}
           </Button>
         )}
 
