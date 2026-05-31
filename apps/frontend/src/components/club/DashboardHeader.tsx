@@ -2,19 +2,22 @@
  * DashboardHeader — KPI cards for the club dashboard
  *
  * Decision Context:
- * - Why: Surfaces the six most actionable metrics for a club admin in a single glance.
- *   Follows the FIFA dark stadium aesthetic (same tokens as horarios.astro).
- * - Revenue format: uses Intl.NumberFormat with 'es-AR' locale for peso formatting
- *   ($1.500,00) without hardcoding separator chars.
- * - occupancyRate uses a radial-style percentage bar rendered with CSS conic-gradient
- *   (no SVG dependency, no extra library) capped at 100%.
- * - Each card uses an icon from lucide-react per design-system.md rules.
- * - Previously fixed bugs: none relevant (new feature).
+ * - Usa CSS variables (var(--color-card), var(--color-foreground), etc.) en lugar de
+ *   valores HSL hardcodeados para adaptarse automáticamente al tema claro/oscuro.
+ * - Los estilos de color de acento usan clases CSS (.kpi-value--orange, etc.) en vez de
+ *   inline styles para que html.light pueda sobreescribirlos (los inline styles tienen
+ *   mayor especificidad que los overrides de tema y no podían ser anulados desde el Astro
+ *   page — por eso se migran a clases CSS aquí).
+ * - Los overrides html.light van DENTRO del <style> del componente para garantizar que
+ *   se aplican DESPUÉS del cascade inicial, ganando al estilo base del dark mode.
+ * - Previously fixed bugs:
+ *   - Colores hardcodeados (hsl(220 55% 11%) en kpi-card, hsl(210 20% 90%) en club name)
+ *     no se adaptaban al tema claro: tarjetas permanecían oscuras y nombre del club
+ *     invisible. Fix: CSS variables + html.light dentro del componente.
  */
 
 import {
   Calendar,
-  TrendingUp,
   DollarSign,
   Users,
   Volleyball,
@@ -33,89 +36,45 @@ const currencyFmt = new Intl.NumberFormat('es-AR', {
   maximumFractionDigits: 0,
 });
 
+type AccentColor = 'orange' | 'blue' | 'green' | 'red';
+
 interface KpiCardProps {
   label: string;
   value: string;
   icon: React.ReactNode;
-  accent?: 'orange' | 'blue' | 'green' | 'red';
+  accent?: AccentColor;
   subtext?: string;
 }
 
 function KpiCard({ label, value, icon, accent = 'orange', subtext }: KpiCardProps) {
-  const accentColor = {
-    orange: 'hsl(42 100% 60%)',
-    blue: 'hsl(216 85% 60%)',
-    green: 'hsl(142 70% 45%)',
-    red: 'hsl(0 72% 55%)',
-  }[accent];
-
   return (
     <div className="kpi-card">
-      <div className="kpi-icon" style={{ color: accentColor }}>
+      <div className={`kpi-icon kpi-icon--${accent}`}>
         {icon}
       </div>
       <div className="kpi-body">
-        <div className="kpi-value" style={{ color: accentColor }}>
-          {value}
-        </div>
+        <div className={`kpi-value kpi-value--${accent}`}>{value}</div>
         <div className="kpi-label">{label}</div>
         {subtext && <div className="kpi-sub">{subtext}</div>}
       </div>
-      <style>{`
-        .kpi-card {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.875rem;
-          background: hsl(220 55% 11%);
-          border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 10px;
-          padding: 1rem 1.125rem;
-          transition: border-color 0.15s;
-        }
-        .kpi-card:hover { border-color: rgba(255,255,255,0.12); }
-        .kpi-icon {
-          display: inline-flex;
-          padding: 0.5rem;
-          background: rgba(255,255,255,0.05);
-          border-radius: 8px;
-          flex-shrink: 0;
-        }
-        .kpi-body { display: flex; flex-direction: column; gap: 0.125rem; }
-        .kpi-value { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; line-height: 1; }
-        .kpi-label { font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: hsl(215 20% 50%); }
-        .kpi-sub { font-family: 'Barlow', sans-serif; font-size: 0.78rem; color: hsl(215 20% 40%); margin-top: 0.125rem; }
-      `}</style>
     </div>
   );
 }
 
 function OccupancyCard({ rate }: { rate: number }) {
   const pct = Math.min(100, Math.round(rate));
-  const color =
-    pct >= 80
-      ? 'hsl(142 70% 45%)'
-      : pct >= 50
-        ? 'hsl(42 100% 60%)'
-        : 'hsl(216 85% 60%)';
+  const col =
+    pct >= 80 ? 'hsl(142 70% 45%)' : pct >= 50 ? 'hsl(42 100% 60%)' : 'hsl(216 85% 60%)';
 
   return (
     <div className="kpi-card occ-card">
-      <div className="occ-gauge" style={{ '--pct': `${pct}%`, '--col': color } as React.CSSProperties}>
-        <span className="occ-num" style={{ color }}>{pct}%</span>
+      <div className="occ-gauge" style={{ '--pct': `${pct}%`, '--col': col } as React.CSSProperties}>
+        <span className="occ-num" style={{ color: col }}>{pct}%</span>
       </div>
       <div className="kpi-body">
         <div className="kpi-label">Ocupación</div>
         <div className="kpi-sub">slots con partido / slots activos</div>
       </div>
-      <style>{`
-        .occ-card { align-items: center; }
-        .occ-gauge {
-          width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
-          background: conic-gradient(var(--col) var(--pct), rgba(255,255,255,0.07) 0);
-          display: flex; align-items: center; justify-content: center;
-        }
-        .occ-num { font-family: 'Bebas Neue', sans-serif; font-size: 1rem; line-height: 1; }
-      `}</style>
     </div>
   );
 }
@@ -164,20 +123,124 @@ export default function DashboardHeader({ club, metrics }: Props) {
       </div>
 
       <style>{`
+        /* ══ Header ══════════════════════════════════════════════ */
         .dash-header { display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 1.5rem; }
+
         .dash-club-label {
           font-family: 'Barlow Condensed', sans-serif; font-size: 0.7rem; font-weight: 700;
           letter-spacing: 0.2em; color: hsl(42 100% 55%); text-transform: uppercase;
         }
         .dash-club-title {
-          font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; font-weight: 400;
-          color: hsl(210 20% 90%); margin: 0; letter-spacing: 0.04em; line-height: 1;
+          font-family: 'Bebas Neue', sans-serif; font-size: 2rem; font-weight: 400;
+          color: var(--color-foreground, hsl(210 20% 94%));
+          margin: 0; letter-spacing: 0.04em; line-height: 1;
         }
+
+        /* ══ KPI Grid ════════════════════════════════════════════ */
         .kpi-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
           gap: 0.75rem;
         }
+
+        /* ══ KPI Card ════════════════════════════════════════════ */
+        .kpi-card {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.875rem;
+          background: var(--color-card, hsl(220 55% 11%));
+          border: 1px solid var(--color-border, rgba(255,255,255,0.06));
+          border-radius: 10px;
+          padding: 1rem 1.125rem;
+          transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .kpi-card:hover {
+          border-color: var(--color-ring, hsl(35 100% 48%));
+          box-shadow: 0 0 0 1px var(--color-ring, hsl(35 100% 48%)) inset;
+        }
+
+        /* ══ KPI Icon ════════════════════════════════════════════ */
+        .kpi-icon {
+          display: inline-flex; padding: 0.5rem; border-radius: 8px;
+          flex-shrink: 0; background: rgba(255,255,255,0.05);
+        }
+        .kpi-icon--orange { color: hsl(42 100% 60%); background: rgba(246,164,0,0.1); }
+        .kpi-icon--blue   { color: hsl(216 85% 60%); background: rgba(27,105,224,0.12); }
+        .kpi-icon--green  { color: hsl(142 70% 45%); background: rgba(34,197,94,0.1); }
+        .kpi-icon--red    { color: hsl(0 72% 55%);   background: rgba(220,38,38,0.1); }
+
+        /* ══ KPI Body ════════════════════════════════════════════ */
+        .kpi-body { display: flex; flex-direction: column; gap: 0.125rem; }
+
+        .kpi-value {
+          font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; line-height: 1;
+        }
+        .kpi-value--orange { color: hsl(42 100% 62%); }
+        .kpi-value--blue   { color: hsl(216 85% 65%); }
+        .kpi-value--green  { color: hsl(142 70% 48%); }
+        .kpi-value--red    { color: hsl(0 72% 60%); }
+
+        .kpi-label {
+          font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700;
+          letter-spacing: 0.1em; text-transform: uppercase;
+          color: var(--color-muted-foreground, hsl(215 20% 50%));
+        }
+        .kpi-sub {
+          font-family: 'Barlow', sans-serif; font-size: 0.78rem;
+          color: var(--color-muted-foreground, hsl(215 20% 40%));
+          margin-top: 0.125rem; opacity: 0.75;
+        }
+
+        /* ══ Occupancy ═══════════════════════════════════════════ */
+        .occ-card { align-items: center; }
+        .occ-gauge {
+          width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+          background: conic-gradient(var(--col) var(--pct), rgba(255,255,255,0.07) 0);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .occ-num { font-family: 'Bebas Neue', sans-serif; font-size: 1rem; line-height: 1; }
+
+        /* ══ TEMA CLARO — html.light overrides ═══════════════════
+           Van dentro del componente para garantizar que estos estilos
+           se apliquen DESPUÉS del estilo base (dark) en el cascade.
+           Los overrides en dashboard.astro eran sobreescritos por
+           los <style> del componente que se inyectan en hydration.
+           ════════════════════════════════════════════════════════ */
+        html.light .dash-club-title {
+          color: hsl(220 72% 10%);
+        }
+        html.light .dash-club-label {
+          color: hsl(35 100% 38%);
+        }
+
+        html.light .kpi-card {
+          background: hsl(0 0% 100%);
+          border-color: hsl(220 13% 88%);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        html.light .kpi-card:hover {
+          border-color: hsl(35 100% 60%);
+          box-shadow: 0 0 0 2px hsl(35 100% 60%) inset, 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        html.light .kpi-icon--orange { color: hsl(35 100% 38%); background: hsl(35 100% 94%); }
+        html.light .kpi-icon--blue   { color: hsl(216 85% 40%); background: hsl(216 100% 94%); }
+        html.light .kpi-icon--green  { color: hsl(142 70% 30%); background: hsl(142 60% 93%); }
+        html.light .kpi-icon--red    { color: hsl(0 72% 45%);   background: hsl(0 80% 94%); }
+
+        html.light .kpi-value--orange { color: hsl(35 100% 34%); }
+        html.light .kpi-value--blue   { color: hsl(216 85% 38%); }
+        html.light .kpi-value--green  { color: hsl(142 70% 28%); }
+        html.light .kpi-value--red    { color: hsl(0 72% 42%); }
+
+        html.light .kpi-label { color: hsl(215 16% 40%); }
+        html.light .kpi-sub   { color: hsl(215 16% 50%); opacity: 1; }
+
+        html.light .occ-gauge {
+          background: conic-gradient(var(--col) var(--pct), rgba(0,0,0,0.06) 0);
+          box-shadow: 0 0 0 3px hsl(220 13% 90%);
+        }
+        html.light .occ-num { color: inherit; }
       `}</style>
     </div>
   );
