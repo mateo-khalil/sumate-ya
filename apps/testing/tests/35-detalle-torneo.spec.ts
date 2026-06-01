@@ -614,22 +614,23 @@ test.describe('Navegación', () => {
       await po.goto();
       /*
        * Decision Context:
-       * - The detail page renders TWO links with text "Iniciar Sesion" for anonymous
-       *   visitors: one in the topbar (.btn-logout, href=/login) and one inline in the
-       *   page content area (.detail-login-button "Iniciar sesion para anotar equipo").
-       * - The page uses <nav class="topbar"> (NOT a semantic <header>), so scoping the
-       *   locator to `.topbar` is the correct way to restrict matching to the topbar
-       *   link only and avoid a strict-mode violation.
+       * - The detail page renders TWO links to /login for anonymous visitors: one in
+       *   the shared topbar (data-testid="topbar-login-link", text "Iniciar Sesión")
+       *   and one inline in the content area (.detail-login-button "Iniciar sesion
+       *   para anotar equipo").
+       * - The topbar was extracted into the shared <Topbar> component (class
+       *   `shared-topbar`, NOT the old `.topbar`), so we scope via the stable
+       *   data-testid the component now exposes instead of a class + text regex. The
+       *   accented "Sesión" also breaks a /iniciar sesion/i match, another reason to
+       *   avoid text matching here.
        * - Previously fixed bugs:
        *     1. getByRole('/iniciar sesion/i') without scoping matched 2 elements and
        *        caused "strict mode violation" failure.
-       *     2. page.locator('header') matched zero elements because the topbar is a
-       *        <nav>, not a <header>. Replaced with page.locator('.topbar').
-       * TODO: add data-testid="topbar-login-link" to the topbar <a> in the frontend
-       *   component so this test can use a stable, class-independent selector.
+       *     2. page.locator('.topbar') matched zero elements once the topbar became a
+       *        shared component with class `shared-topbar`. Replaced with the testid.
        */
       await expect(
-        page.locator('.topbar').getByRole('link', { name: /iniciar sesion/i }),
+        page.getByTestId('topbar-login-link'),
         'El link de login debe ser visible en el topbar para visitantes anónimos',
       ).toBeVisible({ timeout: 10_000 });
     } finally {

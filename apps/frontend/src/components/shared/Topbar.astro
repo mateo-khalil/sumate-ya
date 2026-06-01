@@ -95,7 +95,11 @@ const isClubAdmin = user?.role === 'club_admin';
       ) : (
         <>
           <ThemeToggle client:load />
-          <a href="/login" class="btn-login">Iniciar Sesión</a>
+          {/* data-testid is a stable hook for e2e (TournamentDetailPage / topbar specs):
+              pages render the inline "Iniciar sesion para anotar" CTA too, so scoping
+              by class alone was brittle after the topbar was extracted into this shared
+              component (class shared-topbar, not the old .topbar). */}
+          <a href="/login" class="btn-login" data-testid="topbar-login-link">Iniciar Sesión</a>
         </>
       )}
     </div>

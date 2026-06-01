@@ -17,6 +17,7 @@ export class HomePage {
   readonly loginLink: Locator;
   readonly registerLink: Locator;
   readonly viewAllMatchesLink: Locator;
+  readonly viewAllTournamentsLink: Locator;
   readonly searchInput: Locator;
 
   constructor(page: Page) {
@@ -24,7 +25,15 @@ export class HomePage {
     this.hero = page.getByRole('heading', { name: /sumate\s+al juego/i });
     this.loginLink = page.getByRole('link', { name: /iniciar sesi/i }).first();
     this.registerLink = page.getByRole('link', { name: /registrarse/i }).first();
-    this.viewAllMatchesLink = page.getByRole('link', { name: /ver todos/i });
+    // The home now renders two "Ver todos" links — one per section (matches ->
+    // /partidos, tournaments -> /torneos). Scope by href so the matcher is
+    // unambiguous instead of relying on DOM order.
+    this.viewAllMatchesLink = page
+      .getByRole('link', { name: /ver todos/i })
+      .and(page.locator('a[href="/partidos"]'));
+    this.viewAllTournamentsLink = page
+      .getByRole('link', { name: /ver todos/i })
+      .and(page.locator('a[href="/torneos"]'));
     this.searchInput = page.getByPlaceholder(/buscar partido o club/i);
   }
 

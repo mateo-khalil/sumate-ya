@@ -4,6 +4,7 @@ import {
   GRAPHQL_AUTH_ROUTE,
   GRAPHQL_PROXY_ROUTE,
   mockGraphQLAll,
+  mockGraphQLOperation,
   test,
   TEST_USERS,
 } from './support';
@@ -128,7 +129,9 @@ test.describe('Listado de torneos — layout y estados', () => {
     await tournamentsPage.expectListSettled();
 
     await expect(page.getByText('Club Palermo')).toBeVisible();
-    await expect(page.getByText(/Norte/)).toBeVisible();
+    // Scope the zone to the card: the new TournamentFilters Zona <select> also renders
+    // a "Norte" <option>, so an unscoped getByText(/Norte/) hits a strict-mode violation.
+    await expect(tournamentsPage.card('Copa Club').getByText(/Norte/)).toBeVisible();
   });
 
   test('muestra "Fecha a confirmar" cuando startDate es null', async ({
@@ -426,6 +429,14 @@ test.describe('Listado de torneos — usuario autenticado', () => {
     tournamentsPage,
     page,
   }) => {
+    // The shared Topbar's DynamicNavActions island issues a MY_TEAMS query to decide
+    // whether to show "Crear torneo" (captain-only, rule F9). The describe-level
+    // mockGraphQLAll would starve that query and hide the link, so here we mock ONLY
+    // the tournaments operation and let MY_TEAMS reach the real backend — seeded
+    // playerMateo is a captain, so the link renders.
+    await mockGraphQLOperation(page, GRAPHQL_PROXY_ROUTE, 'tournaments(', {
+      data: { tournaments: [buildTournament({ id: 'tour-auth-1', name: 'Copa Auth' })] },
+    });
     await tournamentsPage.goto();
 
     await expect(

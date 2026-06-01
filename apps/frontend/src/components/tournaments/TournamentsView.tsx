@@ -59,7 +59,12 @@ export function TournamentsView({ isAuthenticated = false }: TournamentsViewProp
   );
 
   return (
-    <div>
+    // `tournaments-section` is a stable structural/hydration anchor consumed by the e2e
+    // TournamentsListPage.goto() (scrollIntoView triggers the client:visible island).
+    // Previously fixed bugs: the /partidos unification (commit 432281a) dropped the
+    // wrapping <section class="tournaments-section">, which silently broke every
+    // tournaments spec's goto() wait. Keep this class on the island root.
+    <div className="tournaments-section">
       <TournamentFilters filters={filters} onFiltersChange={handleFiltersChange} />
 
       <div className="tournament-view-toggle" role="group" aria-label="Seleccionar vista de torneos">

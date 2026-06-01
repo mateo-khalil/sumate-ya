@@ -72,6 +72,9 @@ test.describe('Menu de vistazo rapido (/)', () => {
     await homePage.goto();
     await homePage.viewAllMatchesLink.click();
     await expect(page).toHaveURL(/\/partidos$/);
-    await expect(page.getByRole('heading', { name: /partidos disponibles/i })).toBeVisible();
+    // /partidos unified matches + tournaments under one h1 (commit 432281a):
+    // the destination heading is now "Partidos & Torneos", not "Partidos Disponibles"
+    // (that text only lives as the home section heading).
+    await expect(page.getByRole('heading', { name: /partidos\s*&\s*torneos/i })).toBeVisible();
   });
 });

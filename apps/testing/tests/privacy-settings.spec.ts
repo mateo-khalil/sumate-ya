@@ -188,7 +188,9 @@ async function expectOwnProfileCardVisible(page: Page, profile: Profile): Promis
   await expect(card.getByRole('heading', { name: profile.displayName })).toBeVisible();
 
   if (profile.division != null) {
-    await expect(card.getByText(`DIV ${profile.division}`)).toBeVisible();
+    // DivisionBadge.astro renders a "D{level}" mark + division name, replacing the
+    // old "DIV {n}" text label.
+    await expect(card.locator('.division-badge .division-mark')).toHaveText(`D${profile.division}`);
   }
 
   if (profile.preferredPosition) {
@@ -369,7 +371,11 @@ test.describe('Privacidad de perfil (/ajustes)', () => {
       await expect(card.locator('.stats-grid')).toHaveCount(0);
 
       if (ownerProfile.division != null) {
-        await expect(card.getByText(`DIV ${ownerProfile.division}`)).toBeVisible();
+        // DivisionBadge.astro renders a "D{level}" mark + division name, replacing the
+        // old "DIV {n}" text label.
+        await expect(card.locator('.division-badge .division-mark')).toHaveText(
+          `D${ownerProfile.division}`,
+        );
       }
 
       const viewerToken = await readAccessToken(viewerPage);

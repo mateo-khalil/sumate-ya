@@ -183,6 +183,9 @@ test.describe('Listado de partidos (/partidos)', () => {
     await matchesPage.goto();
 
     await expect(page.getByText('Error').first()).toBeVisible();
-    await expect(page.getByText('Server on fire')).toBeVisible();
+    // The unified /partidos also renders the Torneos tab's TournamentList, which gets
+    // the same mocked error — so "Server on fire" appears twice (matches + tournaments
+    // error panels). Scope to the first (matches) panel.
+    await expect(page.getByText('Server on fire').first()).toBeVisible();
   });
 });

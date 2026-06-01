@@ -34,7 +34,9 @@ test.describe('Vista mapa de partidos (/partidos)', () => {
     page,
   }) => {
     const tracker = await mockGraphQLAll(page, GRAPHQL_ANY_ROUTE, {
-      data: { matches: [buildMatch()] },
+      // MatchMap only renders a marker for clubs WITH coordinates (clubs without
+      // lat/lng are filtered out), so the default buildMatch() club must carry coords.
+      data: { matches: [buildMatch({ club: { name: 'Club Test', zone: 'Centro', address: 'Test 123', lat: -34.9011, lng: -56.1645 } })] },
     });
 
     await matchesMapPage.goto();
@@ -252,7 +254,12 @@ test.describe('Vista mapa de partidos (/partidos)', () => {
   }) => {
     await context.setGeolocation({ latitude: -34.9011, longitude: -56.1645 });
     await context.grantPermissions(['geolocation'], { origin: FRONTEND_URL });
-    await mockGraphQLAll(page, GRAPHQL_ANY_ROUTE, { data: { matches: [buildMatch()] } });
+    // The geolocation control only renders on a populated map; an empty map (no
+    // clubs with coords) falls back to EmptyMap which has no controls. Give the match
+    // a located club so MatchMap (and its "Centrar en mi ubicación" control) renders.
+    await mockGraphQLAll(page, GRAPHQL_ANY_ROUTE, {
+      data: { matches: [buildMatch({ club: { name: 'Club Test', zone: 'Centro', address: 'Test 123', lat: -34.9011, lng: -56.1645 } })] },
+    });
 
     await matchesMapPage.goto();
     await matchesMapPage.waitForListHydration();

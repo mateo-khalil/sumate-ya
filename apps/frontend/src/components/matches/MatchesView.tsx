@@ -94,7 +94,12 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
   );
 
   return (
-    <div>
+    // `matches-section` is a stable structural/hydration anchor consumed by the e2e
+    // MatchesListPage.goto() (scrollIntoView triggers the client:visible island).
+    // Previously fixed bugs: the /partidos unification (commit 432281a) dropped the
+    // wrapping <section class="matches-section">, which silently broke every matches
+    // spec's goto() wait. Keep this class on the island root.
+    <div className="matches-section">
       {/* Timeframe toggle: Próximos vs Pasados */}
       <div className="timeframe-toggle-row">
         <div className="view-toggle" role="tablist" aria-label="Seleccionar período de partidos">

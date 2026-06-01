@@ -324,7 +324,11 @@ try {
 
   /* ── Modo de creación tabs (issue #132) ── */
   .creation-modes { max-width: 680px; display: flex; flex-direction: column; gap: 1.25rem; }
-  .mode-tabs { display: flex; gap: 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.07); padding-bottom: 0; }
+  /* flex-wrap keeps the two mode tabs from overflowing horizontally on narrow
+     viewports (375px): "Modo clásico (horarios)" wraps to a second line instead of
+     pushing body scrollWidth past the viewport. Previously fixed bugs: the tabs row
+     forced ~64px of horizontal scroll on mobile. */
+  .mode-tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.07); padding-bottom: 0; }
   .mode-tab {
     display: flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1rem;
     background: none; border: none; border-bottom: 2px solid transparent;

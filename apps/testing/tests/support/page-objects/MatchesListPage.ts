@@ -33,7 +33,9 @@ export class MatchesListPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: /Partidos Disponibles/i });
+    // /partidos unified matches + tournaments under one h1 (commit 432281a):
+    // the page heading changed from "Partidos Disponibles" to "Partidos & Torneos".
+    this.heading = page.getByRole('heading', { name: /Partidos\s*&\s*Torneos/i });
     this.searchInput = page.getByPlaceholder(/Buscar partido o club/i);
     this.formatSelect = page.getByLabel('Formato');
     this.zoneSelect = page.getByLabel('Zona');

@@ -106,7 +106,10 @@ test.describe('Ver perfil de usuario (/perfil)', () => {
     await profilePage.goto();
 
     await expect(profilePage.card.getByRole('heading', { name: profile.displayName })).toBeVisible();
-    await expect(profilePage.card.getByText(`DIV ${profile.division}`)).toBeVisible();
+    // The division badge now renders a "D{level}" mark + division name (DivisionBadge.astro),
+    // replacing the old "DIV {n}" text label.
+    await expect(profilePage.divisionBadge).toBeVisible();
+    await expect(profilePage.divisionBadge.locator('.division-mark')).toHaveText(`D${profile.division}`);
     await profilePage.expectStatValue('Partidos', profile.matchesPlayed);
     await profilePage.expectStatValue('Victorias', profile.matchesWon);
 

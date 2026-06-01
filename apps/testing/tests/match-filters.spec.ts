@@ -110,7 +110,11 @@ test.describe('Filtrar Partidos (/partidos)', () => {
     await expect(matchesPage.dateToInput).toBeVisible();
     await expect(matchesPage.clearButton).toBeDisabled();
 
-    expect(tracker.requests[0]?.variables).toMatchObject({ filters: { status: 'OPEN' } });
+    // /partidos is now a unified hub: the hidden Torneos tab's TournamentList also
+    // fires a GetTournaments query (filters.status=REGISTRATION). Pick the matches
+    // request specifically instead of assuming requests[0] is the matches query.
+    const matchesRequests = tracker.requests.filter((r) => r.query?.includes('matches('));
+    expect(matchesRequests[0]?.variables).toMatchObject({ filters: { status: 'OPEN' } });
     await expect(matchesPage.card('Partido cancelado oculto')).toHaveCount(0);
   });
 
@@ -158,7 +162,10 @@ test.describe('Filtrar Partidos (/partidos)', () => {
     await expect(page).toHaveURL(/format=SEVEN_VS_SEVEN/);
     await expect(page).toHaveURL(/zone=Sur/);
     await expect(page).toHaveURL(/search=bravo/);
-    expect(tracker.requests).toHaveLength(1);
+    // Only the initial matches() fetch should hit the backend — client-side filters
+    // must not refetch. Count matches requests only; the unified /partidos hub also
+    // fires a GetTournaments query from the hidden Torneos tab.
+    expect(tracker.requests.filter((r) => r.query?.includes('matches('))).toHaveLength(1);
   });
 
   test('filtra por horario de noche y por rango nocturno cruzando medianoche', async ({

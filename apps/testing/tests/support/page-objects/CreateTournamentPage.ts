@@ -5,6 +5,15 @@ import { TORNEOS_CREAR_URL } from '../constants';
  * Page Object for /torneos/crear (tournament creation form).
  *
  * Decision Context:
+ * - /torneos/crear now exposes TWO creation modes behind tabs (commit 0ae5f3d /
+ *   PR #148 "mejorar-torneos-132"): "Modo automático" (NewTournamentWizard, the
+ *   default-active tab in #panel-wizard) and "Modo clásico (horarios)" (the legacy
+ *   CreateTournamentFlow in #panel-legacy, hidden via display:none until selected).
+ *   This PO drives the LEGACY flow, so goto() activates the "Modo clásico" tab and
+ *   every form-field locator is scoped to `#panel-legacy`. Scoping is mandatory:
+ *   the wizard renders fields with overlapping accessible names (e.g. "Equipos en el
+ *   torneo" vs legacy "Equipos", "Nombre del torneo" vs legacy "Nombre"), so an
+ *   unscoped getByLabel() would hit a strict-mode violation or the hidden wizard input.
  * - The form is a single-page React island (client:load) rendered inside an SSR
  *   Astro shell. Club list is SSR-prefetched and cannot be mocked via page.route();
  *   tests rely on the real backend for the initial page render.
@@ -58,31 +67,41 @@ export class CreateTournamentPage {
   readonly slotLoadingMessage: Locator;
   readonly emptySlotMessage: Locator;
 
+  /** The legacy "Modo clásico" panel — every form locator is scoped to it. */
+  readonly legacyPanel: Locator;
+  readonly legacyTab: Locator;
+
   constructor(page: Page) {
     this.page = page;
     this.heading = page.getByRole('heading', { name: /crear torneo/i });
 
+    // The legacy CreateTournamentFlow lives in #panel-legacy. Scoping every field
+    // locator here keeps getByLabel() from colliding with the wizard's overlapping
+    // field names (in the hidden #panel-wizard) — a strict-mode hazard.
+    this.legacyPanel = page.locator('#panel-legacy');
+    this.legacyTab = page.getByRole('tab', { name: /modo cl.sico/i });
+
     // Accessible name comes from the wrapping <label><span>Nombre</span><input/></label>
-    this.nameInput = page.getByLabel('Nombre');
-    this.clubSelect = page.getByLabel('Club');
-    this.teamsCountInput = page.getByLabel('Equipos');
-    this.playersPerTeamInput = page.getByLabel('Jugadores por equipo');
-    this.descriptionTextarea = page.getByLabel('Descripción');
+    this.nameInput = this.legacyPanel.getByLabel('Nombre');
+    this.clubSelect = this.legacyPanel.getByLabel('Club');
+    this.teamsCountInput = this.legacyPanel.getByLabel('Equipos');
+    this.playersPerTeamInput = this.legacyPanel.getByLabel('Jugadores por equipo');
+    this.descriptionTextarea = this.legacyPanel.getByLabel('Descripción');
     // TODO: use data-testid="tournament-slot-date" once added
-    this.slotDateInput = page.locator('input[type="date"]');
+    this.slotDateInput = this.legacyPanel.locator('input[type="date"]');
 
     // The button says "Crear torneo" when idle, "Creando..." when submitting.
     // Using exact /^crear torneo$/i avoids matching "Crear otro torneo".
-    this.submitButton = page.getByRole('button', { name: /^crear torneo$/i });
+    this.submitButton = this.legacyPanel.getByRole('button', { name: /^crear torneo$/i });
 
-    this.successTitle = page.getByText('TORNEO CREADO');
-    this.createAnotherButton = page.getByRole('button', { name: /crear otro torneo/i });
-    this.backButton = page.getByRole('link', { name: /volver/i });
+    this.successTitle = this.legacyPanel.getByText('TORNEO CREADO');
+    this.createAnotherButton = this.legacyPanel.getByRole('button', { name: /crear otro torneo/i });
+    this.backButton = this.legacyPanel.getByRole('link', { name: /volver/i });
 
     // TODO: use data-testid="tournament-submit-error" once added
-    this.submitError = page.locator('.submit-error');
-    this.slotLoadingMessage = page.getByText(/cargando horarios/i);
-    this.emptySlotMessage = page.getByText(/no hay horarios disponibles/i);
+    this.submitError = this.legacyPanel.locator('.submit-error');
+    this.slotLoadingMessage = this.legacyPanel.getByText(/cargando horarios/i);
+    this.emptySlotMessage = this.legacyPanel.getByText(/no hay horarios disponibles/i);
   }
 
   /**
@@ -90,7 +109,7 @@ export class CreateTournamentPage {
    * TODO: replace with getByTestId once data-testid="tournament-format-chip" is added.
    */
   formatChip(label: string): Locator {
-    return this.page.locator('.format-chip').filter({ hasText: label });
+    return this.legacyPanel.locator('.format-chip').filter({ hasText: label });
   }
 
   /**
@@ -123,8 +142,15 @@ export class CreateTournamentPage {
   async goto(): Promise<void> {
     await this.page.goto(TORNEOS_CREAR_URL);
     await expect(this.heading).toBeVisible();
-    // Wait for the React island to hydrate — nameInput is inside the island.
-    await expect(this.nameInput).toBeVisible();
+    // Switch from the default "Modo automático" (wizard) tab to "Modo clásico
+    // (horarios)" so the legacy CreateTournamentFlow this PO drives becomes visible.
+    // The tab-switch handler is an inline Astro <script>; retry until #panel-legacy
+    // is shown in case the click lands before the listener is attached.
+    await expect(this.legacyTab).toBeVisible({ timeout: 15_000 });
+    await expect(async () => {
+      await this.legacyTab.click({ timeout: 1_000 });
+      await expect(this.nameInput).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 15_000, intervals: [200, 500, 1000] });
   }
 
   /**
