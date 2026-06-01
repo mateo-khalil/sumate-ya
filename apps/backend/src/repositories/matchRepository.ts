@@ -612,10 +612,55 @@ export async function createMatch(
 
   if (error) {
     console.error('[matchRepository.createMatch] Supabase error:', error.message);
+    // 23505 = unique_violation. The partial unique index
+    // "matches_active_slot_schedule_unique" guarantees at most one active match per
+    // (clubSlotId, scheduledAt). Surface a user-friendly message instead of leaking
+    // the raw constraint name (defense-in-depth backstop for the double-booking fix).
+    if ((error as { code?: string }).code === '23505') {
+      throw new Error('Ya existe un partido en este horario para esa fecha');
+    }
     throw new Error(error.message);
   }
 
   return data as unknown as NewMatchRow;
+}
+
+/**
+ * Returns true if an active (non-cancelled) match already exists at the given slot and
+ * scheduled time. Used by matchService.createMatch as an application-layer guard against
+ * double-booking (the partial unique index is the DB-level backstop).
+ *
+ * Decision Context:
+ * - Why a date window instead of exact timestamp equality: scheduledAt is stored as
+ *   timestamptz; comparing against a "YYYY-MM-DDTHH:mm:ss" string is timezone-sensitive.
+ *   A slot maps to a single start time per calendar day, so "any non-cancelled match for
+ *   this slot whose scheduledAt falls on this date" is an unambiguous, tz-robust check.
+ * - Excludes 'cancelled' so a slot can be re-booked after a cancellation.
+ * - Previously fixed bugs: player path (matchService.createMatch) had NO duplicate check,
+ *   allowing N matches on the same slot+date. The club-admin path already guarded this.
+ */
+export async function hasActiveMatchAtSlotOnDate(
+  clubSlotId: string,
+  date: string, // YYYY-MM-DD
+  client: SupabaseClient = supabase,
+): Promise<boolean> {
+  const { count, error } = await client
+    .from('matches')
+    .select('id', { count: 'exact', head: true })
+    .eq('clubSlotId', clubSlotId)
+    .neq('status', 'cancelled')
+    .gte('scheduledAt', `${date}T00:00:00`)
+    .lte('scheduledAt', `${date}T23:59:59`);
+
+  if (error) {
+    console.error(
+      `[matchRepository.hasActiveMatchAtSlotOnDate] Supabase error slot=${clubSlotId} date=${date}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return (count ?? 0) > 0;
 }
 
 /**
@@ -972,6 +1017,7 @@ export const matchRepository = {
   countParticipants,
   deleteMatch,
   createMatch,
+  hasActiveMatchAtSlotOnDate,
   createMatchParticipant,
   getCompletedMatchesByUser,
   getClubSlotsAndMatches,

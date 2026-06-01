@@ -441,13 +441,24 @@ export async function findConflictingSlots(
 }
 
 /**
- * Deletes slots that are AVAILABLE (not blocked, no match) and overlap with the
+ * Soft-deletes slots that are AVAILABLE (not blocked, no match) and overlap with the
  * given time range. Used when a slot is expanded to consume others.
+ *
+ * Decision Context:
+ * - Why soft-delete (isActive=false) and NOT physical .delete(): the project invariant is
+ *   that slots are never physically removed (they back match foreign keys and the audit
+ *   trail). The previous implementation hard-deleted the absorbed rows, which (a) violated
+ *   that invariant, (b) left no audit history, and (c) was silent. Now we set isActive=false
+ *   and RETURN the affected ids so the service can write a 'deleted' audit entry per slot and
+ *   surface the count to the admin.
+ * - Returns the ids (not just a count) so the caller can audit each absorbed slot.
+ * - Previously fixed bugs: expanding a slot silently HARD-DELETED adjacent available slots
+ *   with no audit entry and a misleading "actualizado correctamente" message.
  */
-export async function deleteAvailableOverlappingSlots(
+export async function softDeleteAvailableOverlappingSlots(
   params: OverlapCheckParams,
   client: SupabaseClient = supabase,
-): Promise<number> {
+): Promise<string[]> {
   const { courtId, dayOfWeek, startTime, endTime, excludeSlotId } = params;
 
   // 1. Find all active slots that overlap the target range
@@ -466,37 +477,37 @@ export async function deleteAvailableOverlappingSlots(
 
   const { data: overlappingSlots, error: overlapError } = await baseQuery;
   if (overlapError) {
-    console.error(`[deleteAvailableOverlappingSlots] Error finding overlaps:`, overlapError.message);
+    console.error(`[softDeleteAvailableOverlappingSlots] Error finding overlaps:`, overlapError.message);
     throw new Error(overlapError.message);
   }
   if (!overlappingSlots || overlappingSlots.length === 0) {
-    return 0;
+    return [];
   }
   const overlappingSlotIds = (overlappingSlots as { id: string }[]).map((s) => s.id);
 
-  // 2. Find which of those are conflicting (and thus should NOT be deleted)
+  // 2. Find which of those are conflicting (and thus must NOT be absorbed)
   const conflictingSlotIds = await findConflictingSlots(params, client);
   const conflictingSet = new Set(conflictingSlotIds);
 
-  // 3. The difference is the set of available slots to be deleted
+  // 3. The difference is the set of available slots to be soft-deleted
   const toDeleteIds = overlappingSlotIds.filter((id) => !conflictingSet.has(id));
 
   if (toDeleteIds.length === 0) {
-    return 0;
+    return [];
   }
 
-  // 4. Perform the delete
-  const { count, error: deleteError } = await client
+  // 4. Soft-delete (preserve rows, FKs and audit history)
+  const { error: deleteError } = await client
     .from('clubSlots')
-    .delete({ count: 'exact' })
+    .update({ isActive: false, updatedAt: new Date().toISOString() })
     .in('id', toDeleteIds);
 
   if (deleteError) {
-    console.error(`[deleteAvailableOverlappingSlots] Supabase error:`, deleteError.message);
+    console.error(`[softDeleteAvailableOverlappingSlots] Supabase error:`, deleteError.message);
     throw new Error(deleteError.message);
   }
 
-  return count ?? 0;
+  return toDeleteIds;
 }
 
 // =====================================================
@@ -647,6 +658,43 @@ export async function getPlayerCountForMatches(
   // Unique player count via playerId dedupe
   const playerIds = new Set((data ?? []).map((r: { playerId: string }) => r.playerId));
   return playerIds.size;
+}
+
+/**
+ * Returns the distinct participant count per match, keyed by matchId, for the given matches.
+ * Used to enrich SlotImpactPreview.matchDetails so each affected match shows its own player
+ * count (the aggregate playersToNotify dedupes across all matches and cannot be shown per row).
+ * Previously fixed bugs: matchDetails.participantCount was hardcoded to 0, so the block
+ * confirmation dialog always rendered "0 jugador(es)" next to each match.
+ */
+export async function getParticipantCountsByMatch(
+  matchIds: string[],
+  client: SupabaseClient = supabase,
+): Promise<Record<string, number>> {
+  if (matchIds.length === 0) return {};
+
+  const { data, error } = await client
+    .from('matchParticipants')
+    .select(PARTICIPANTS_COUNT_COLUMNS)
+    .in('matchId', matchIds);
+
+  if (error) {
+    console.error(
+      '[clubSlotManagementRepository.getParticipantCountsByMatch] Supabase error:',
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  // Dedupe playerId within each match, then count.
+  const byMatch = new Map<string, Set<string>>();
+  for (const row of (data ?? []) as { matchId: string; playerId: string }[]) {
+    if (!byMatch.has(row.matchId)) byMatch.set(row.matchId, new Set());
+    byMatch.get(row.matchId)!.add(row.playerId);
+  }
+  const counts: Record<string, number> = {};
+  for (const [matchId, players] of byMatch) counts[matchId] = players.size;
+  return counts;
 }
 
 // =====================================================
@@ -812,6 +860,45 @@ export async function insertAuditLogEntry(
 }
 
 // =====================================================
+// Audit author resolution (improvement: changedBy was a stub)
+// =====================================================
+
+export interface AuditProfileRow {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+/**
+ * Batch-fetch minimal profile info for audit-log attribution.
+ *
+ * Decision Context:
+ * - Why: rowToAuditLog previously returned changedBy with displayName='' (a stub), so the
+ *   audit UI showed blank authors. We resolve the actual profiles in one batched query
+ *   (no N+1) keyed by the distinct changedBy ids.
+ * - Explicit columns only (egress prevention). Empty input short-circuits.
+ * - Previously fixed bugs: audit log changedBy.displayName/avatarUrl were never populated.
+ */
+export async function getProfilesByIds(
+  ids: string[],
+  client: SupabaseClient = supabase,
+): Promise<AuditProfileRow[]> {
+  if (ids.length === 0) return [];
+
+  const { data, error } = await client
+    .from('profiles')
+    .select('id, "displayName", "avatarUrl"')
+    .in('id', ids);
+
+  if (error) {
+    console.error(`[clubSlotManagementRepository.getProfilesByIds] Supabase error:`, error.message);
+    throw new Error(error.message);
+  }
+
+  return (data as unknown as AuditProfileRow[]) ?? [];
+}
+
+// =====================================================
 // Court pricing
 // =====================================================
 
@@ -883,17 +970,19 @@ export const clubSlotManagementRepository = {
   getManagedSlotById,
   checkSlotOverlap,
   findConflictingSlots,
-  deleteAvailableOverlappingSlots,
+  softDeleteAvailableOverlappingSlots,
   createSlot,
   updateSlot,
   softDeleteSlot,
   getMatchesAtSlots,
   getPlayerCountForMatches,
+  getParticipantCountsByMatch,
   cancelMatchesBySlotIds,
   getParticipantsByMatchIds,
   insertCancellationNotifications,
   getAuditLogBySlotId,
   insertAuditLogEntry,
+  getProfilesByIds,
   getCourtPricing,
   upsertCourtPricing,
 };

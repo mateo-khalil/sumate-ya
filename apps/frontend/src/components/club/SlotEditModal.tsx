@@ -38,6 +38,7 @@ type Tab = 'info' | 'edit' | 'block' | 'history';
 interface SlotEditModalProps {
   slot: ManagedClubSlot | null;
   courts: CourtOption[];
+  accessToken: string;
   onClose: () => void;
   onSaveCreate: (input: CreateClubSlotInput) => Promise<{ success: boolean; message: string }>;
   onSaveUpdate: (input: UpdateClubSlotInput) => Promise<{ success: boolean; message: string }>;
@@ -45,7 +46,7 @@ interface SlotEditModalProps {
   onDelete: (slotId: string) => void;
 }
 
-export function SlotEditModal({ slot, courts, onClose, onSaveCreate, onSaveUpdate, onBlock }: SlotEditModalProps) {
+export function SlotEditModal({ slot, courts, accessToken, onClose, onSaveCreate, onSaveUpdate, onBlock }: SlotEditModalProps) {
   const isCreate = slot === null;
   const [tab, setTab] = useState<Tab>(isCreate ? 'edit' : 'info');
   const [saving, setSaving] = useState(false);
@@ -149,7 +150,7 @@ export function SlotEditModal({ slot, courts, onClose, onSaveCreate, onSaveUpdat
               blockType={blockType} setBlockType={setBlockType}
             />
           )}
-          {tab === 'history' && slot && <SlotHistoryTab slotId={slot.id} />}
+          {tab === 'history' && slot && <SlotHistoryTab slotId={slot.id} accessToken={accessToken} />}
         </div>
 
         {error && <div className="modal-error">{error}</div>}

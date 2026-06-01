@@ -797,6 +797,21 @@ export async function createMatch(
     );
   }
 
+  // 5b. Double-booking guard: reject if an active match already exists at this slot+date.
+  // Decision Context:
+  // - Why: a clubSlot is a recurring weekly template; booking it for a date must be exclusive.
+  //   isBlocked alone did NOT prevent a second player from booking the same slot+date, so the
+  //   same physical court/time could be sold twice. The club-admin path already guarded this;
+  //   the player path did not (the bug this fixes).
+  // - Defense-in-depth: the DB partial unique index "matches_active_slot_schedule_unique" is the
+  //   authoritative backstop (handles the race between this check and the insert); this app-layer
+  //   check produces a clean message in the common case.
+  // - Previously fixed bugs: player createMatch allowed N matches on one slot+date.
+  const alreadyBooked = await matchRepository.hasActiveMatchAtSlotOnDate(input.slotId, input.date, db);
+  if (alreadyBooked) {
+    throw new Error('Ya existe un partido en este horario para esa fecha');
+  }
+
   // 6. Compute scheduledAt = "YYYY-MM-DDTHH:MM:SS"
   const scheduledAt = `${input.date}T${slot.startTime}`;
 

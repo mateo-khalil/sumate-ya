@@ -48,6 +48,36 @@ async function requireClubAdminRole(userId: string): Promise<void> {
   }
 }
 
+// Patterns that mark a raw database/Postgres/RLS error. When a thrown message matches one of
+// these, we return a generic message instead of leaking table names, constraint names, or the
+// existence of RLS policies to the client. Service-layer validation errors (friendly Spanish)
+// do not match these patterns and pass through unchanged.
+// Previously fixed bugs: raw errors like 'violates foreign key constraint "clubSlots_courtId_fkey"',
+// 'new row violates row-level security policy for table "courtPricing"', and
+// 'date/time field value out of range' were surfaced verbatim to the client.
+const DB_ERROR_MARKERS = [
+  'violates',
+  'constraint',
+  'row-level security',
+  'duplicate key',
+  'date/time field',
+  'invalid input syntax',
+  'null value in column',
+  'permission denied',
+  'PGRST',
+  'relation "',
+  'column "',
+];
+
+function toClientMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const lower = error.message.toLowerCase();
+  if (DB_ERROR_MARKERS.some((m) => lower.includes(m.toLowerCase()))) {
+    return fallback;
+  }
+  return error.message;
+}
+
 function userClientFrom(ctx: GraphQLContext) {
   return ctx.accessToken ? createUserClient(ctx.accessToken) : undefined;
 }
@@ -119,7 +149,7 @@ const Mutation: MutationResolvers = {
       );
       return { success: true, slot, message: 'Slot creado correctamente', impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error al crear el slot';
+      const msg = toClientMessage(error, 'Error al crear el slot');
       console.error('[club-slot.resolver.createClubSlot] Error:', msg);
       return { success: false, slot: null, message: msg, impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
     }
@@ -131,13 +161,17 @@ const Mutation: MutationResolvers = {
     const userClient = userClientFrom(ctx);
 
     try {
-      const { slot } = await clubSlotManagementService.updateClubSlot(
+      const { slot, consumedCount } = await clubSlotManagementService.updateClubSlot(
         { userId: ctx.user!.id, supabase: userClient },
         args.input,
       );
-      return { success: true, slot, message: 'Slot actualizado correctamente', impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
+      const message =
+        consumedCount > 0
+          ? `Slot actualizado correctamente. Se absorbieron ${consumedCount} horario(s) disponible(s) contiguo(s).`
+          : 'Slot actualizado correctamente';
+      return { success: true, slot, message, impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error al actualizar el slot';
+      const msg = toClientMessage(error, 'Error al actualizar el slot');
       console.error('[club-slot.resolver.updateClubSlot] Error:', msg);
       return { success: false, slot: null, message: msg, impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
     }
@@ -155,7 +189,7 @@ const Mutation: MutationResolvers = {
       );
       return { success: true, slot, message: 'Slot eliminado correctamente', impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error al eliminar el slot';
+      const msg = toClientMessage(error, 'Error al eliminar el slot');
       console.error('[club-slot.resolver.deleteClubSlot] Error:', msg);
       return { success: false, slot: null, message: msg, impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
     }
@@ -199,7 +233,7 @@ const Mutation: MutationResolvers = {
         notifiedPlayersCount: result.notifiedPlayersCount,
       };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error al cambiar estado del slot';
+      const msg = toClientMessage(error, 'Error al cambiar estado del slot');
       console.error('[club-slot.resolver.toggleSlotBlock] Error:', msg);
       return { success: false, slot: null, message: msg, impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
     }
@@ -233,7 +267,7 @@ const Mutation: MutationResolvers = {
         notifiedPlayersCount: result.notifiedPlayersCount,
       };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error en operación masiva';
+      const msg = toClientMessage(error, 'Error en operación masiva');
       console.error('[club-slot.resolver.bulkBlockSlots] Error:', msg);
       return { success: false, affectedCount: 0, skippedCount: 0, message: msg, impactPreview: null, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
     }
@@ -251,7 +285,7 @@ const Mutation: MutationResolvers = {
       );
       return { success: true, courtPricing, message: null };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error al actualizar el precio de la cancha';
+      const msg = toClientMessage(error, 'Error al actualizar el precio de la cancha');
       console.error('[club-slot.resolver.updateCourtPricing] Error:', msg);
       return { success: false, courtPricing: null, message: msg };
     }

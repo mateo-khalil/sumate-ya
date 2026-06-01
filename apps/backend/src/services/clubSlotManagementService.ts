@@ -185,6 +185,22 @@ async function requireClubOwnership(ctx: ServiceContext): Promise<{ clubId: stri
 }
 
 /**
+ * Verifies that a court belongs to the admin's club (via the courts table, not via slots).
+ * Throws a user-friendly error otherwise. Used before create-slot and pricing writes so the
+ * DB foreign key / RLS is no longer the only barrier against cross-club operations.
+ */
+async function requireCourtOwnership(
+  courtId: string,
+  clubId: string,
+  db: typeof supabase,
+): Promise<void> {
+  const courts = await clubSlotManagementRepository.getCourtsByClubId(clubId, db);
+  if (!courts.some((c) => c.id === courtId)) {
+    throw new Error('Esta cancha no pertenece a tu club');
+  }
+}
+
+/**
  * Verifies that a slot belongs to the admin's club.
  * Returns the slot row.
  */
@@ -214,14 +230,47 @@ function validateDayOfWeek(day: string): void {
   }
 }
 
-/** Validates HH:mm format and that end > start */
-function validateTimeRange(startTime: string, endTime: string): void {
-  const timeRe = /^\d{2}:\d{2}$/;
-  if (!timeRe.test(startTime) || !timeRe.test(endTime)) {
+/**
+ * Parses an HH:mm or HH:mm:ss string into minutes-since-midnight, validating real
+ * hour/minute ranges.
+ *
+ * Decision Context:
+ * - Accepts an optional ":ss" suffix because slot times are stored as Postgres `time`
+ *   (returned as "HH:mm:ss"). When updating only one of startTime/endTime, the service
+ *   backfills the other from the stored value, which previously failed the strict
+ *   `^\d{2}:\d{2}$` regex — making partial time edits impossible.
+ * - Validates hours 0–23 and minutes 0–59 so values like "99:99" are rejected at the app
+ *   layer instead of leaking a raw "date/time field value out of range" error from Postgres.
+ * - Previously fixed bugs: (a) partial time update broken by HH:mm:ss vs HH:mm mismatch;
+ *   (b) "99:99" passed the regex and reached the DB.
+ */
+function parseTimeToMinutes(value: string): number {
+  const m = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if (!m) {
     throw new Error('startTime y endTime deben tener formato HH:mm');
   }
-  if (endTime <= startTime) {
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (hh > 23 || mm > 59) {
+    throw new Error('Hora inválida: usá HH:mm entre 00:00 y 23:59');
+  }
+  return hh * 60 + mm;
+}
+
+/** Validates HH:mm(:ss) format, real hour/minute ranges, and that end > start */
+function validateTimeRange(startTime: string, endTime: string): void {
+  const start = parseTimeToMinutes(startTime);
+  const end = parseTimeToMinutes(endTime);
+  if (end <= start) {
     throw new Error('endTime debe ser mayor que startTime');
+  }
+}
+
+/** Validates a slot/court price is within [0, 999999]. Shared by create and update. */
+function validatePrice(priceArs: number | null | undefined): void {
+  if (priceArs === null || priceArs === undefined) return;
+  if (priceArs < 0 || priceArs > 999999) {
+    throw new Error('El precio debe estar entre $U 0 y $U 999.999');
   }
 }
 
@@ -247,12 +296,15 @@ async function buildImpactPreview(
   const matches = await clubSlotManagementRepository.getMatchesAtSlots(slotIds, db);
   const matchIds = matches.map((m) => m.id);
   const playerCount = await clubSlotManagementRepository.getPlayerCountForMatches(matchIds, db);
+  // Per-match distinct participant counts so each affected match shows its own number.
+  // playersToNotify (above) dedupes players across ALL matches, so it cannot be reused per row.
+  const countsByMatch = await clubSlotManagementRepository.getParticipantCountsByMatch(matchIds, db);
 
   const matchDetails: AffectedMatch[] = matches.map((m) => ({
     matchId: m.id,
     title: m.description ?? 'Partido programado',
     scheduledAt: m.scheduledAt,
-    participantCount: 0, // enriched by player count across all matches
+    participantCount: countsByMatch[m.id] ?? 0,
   }));
 
   return {
@@ -365,7 +417,25 @@ export async function getSlotAuditLog(
   }
 
   const rows = await clubSlotManagementRepository.getAuditLogBySlotId(slotId, limit, offset, db);
-  return rows.map(rowToAuditLog);
+  const entries = rows.map(rowToAuditLog);
+
+  // Resolve real author profiles (changedBy was previously a blank stub).
+  const authorIds = [...new Set(rows.map((r) => r.changedBy).filter((id): id is string => !!id))];
+  if (authorIds.length > 0) {
+    const profiles = await clubSlotManagementRepository.getProfilesByIds(authorIds, db);
+    const byId = new Map(profiles.map((p) => [p.id, p]));
+    for (const entry of entries) {
+      if (entry.changedBy) {
+        const p = byId.get(entry.changedBy.id);
+        if (p) {
+          entry.changedBy.displayName = p.displayName;
+          entry.changedBy.avatarUrl = p.avatarUrl;
+        }
+      }
+    }
+  }
+
+  return entries;
 }
 
 /**
@@ -410,12 +480,17 @@ export async function createClubSlot(
   if (duration < 30 || duration > 240) {
     throw new Error('duration debe estar entre 30 y 240 minutos');
   }
-  if (input.priceArs !== null && input.priceArs !== undefined && input.priceArs > 999999) {
-    throw new Error('El precio no puede superar $U 999.999');
-  }
+  validatePrice(input.priceArs);
 
   const { clubId } = await requireClubOwnership(ctx);
   const db = ctx.supabase ?? supabase;
+
+  // Court-ownership check (defense-in-depth, not just the DB foreign key).
+  // Decision Context: createClubSlot previously inserted with the admin's clubId but an
+  // arbitrary courtId, relying solely on the clubSlots_courtId_fkey constraint (which leaked
+  // a raw FK error) and RLS. We now verify the court belongs to the admin's club up front.
+  // Previously fixed bugs: no app-layer verification that courtId belonged to the club.
+  await requireCourtOwnership(input.courtId, clubId, db);
 
   // Overlap check (improvement 18)
   const overlaps = await clubSlotManagementRepository.checkSlotOverlap(
@@ -479,7 +554,7 @@ export async function updateClubSlot(
     priceArs?: number | null;
     allowOnlineBooking?: boolean | null;
   },
-): Promise<{ slot: ManagedClubSlot }> {
+): Promise<{ slot: ManagedClubSlot; consumedCount: number }> {
   validateUuid(input.slotId, 'slotId');
   if (input.startTime && input.endTime) {
     validateTimeRange(input.startTime, input.endTime);
@@ -487,15 +562,21 @@ export async function updateClubSlot(
   if (input.duration !== null && input.duration !== undefined && (input.duration < 30 || input.duration > 240)) {
     throw new Error('duration debe estar entre 30 y 240 minutos');
   }
+  validatePrice(input.priceArs);
 
   const { clubId } = await requireClubOwnership(ctx);
   const db = ctx.supabase ?? supabase;
   const existing = await requireSlotOwnership(input.slotId, clubId, ctx);
 
-  // If time is changing, implement the new overlap logic
+  // If time is changing, implement the new overlap logic.
+  // Decision Context: expanding a slot can absorb adjacent AVAILABLE slots. Those are now
+  // SOFT-deleted (isActive=false) and each gets a 'deleted' audit entry, and the count is
+  // returned so the admin is told. Previously they were silently HARD-deleted with no audit.
+  let consumedCount = 0;
   if (input.startTime || input.endTime) {
-    const newStart = input.startTime ?? existing.startTime;
-    const newEnd = input.endTime ?? existing.endTime;
+    // Normalize the backfilled value to HH:mm so a stored "HH:mm:ss" doesn't break validation.
+    const newStart = (input.startTime ?? existing.startTime).slice(0, 5);
+    const newEnd = (input.endTime ?? existing.endTime).slice(0, 5);
     validateTimeRange(newStart, newEnd);
 
     const overlapParams = {
@@ -506,14 +587,28 @@ export async function updateClubSlot(
       excludeSlotId: input.slotId,
     };
 
-    // 1. Check for conflicts with occupied slots
+    // 1. Check for conflicts with occupied slots (blocked or with a match)
     const conflictingSlots = await clubSlotManagementRepository.findConflictingSlots(overlapParams, db);
     if (conflictingSlots.length > 0) {
       throw new Error('No se puede modificar el horario porque colisiona con una reserva o partido existente.');
     }
 
-    // 2. Delete available slots that are now overlapped
-    await clubSlotManagementRepository.deleteAvailableOverlappingSlots(overlapParams, db);
+    // 2. Soft-delete available slots that are now overlapped, auditing each one
+    const consumedIds = await clubSlotManagementRepository.softDeleteAvailableOverlappingSlots(overlapParams, db);
+    consumedCount = consumedIds.length;
+    for (const consumedId of consumedIds) {
+      await clubSlotManagementRepository.insertAuditLogEntry(
+        {
+          slotId: consumedId,
+          action: 'deleted',
+          previousValue: { isActive: true },
+          newValue: { isActive: false, absorbedBySlotId: input.slotId },
+          changedBy: ctx.userId!,
+          reason: 'Absorbido al expandir un horario contiguo',
+        },
+        db,
+      );
+    }
   }
 
   const previousSnapshot = { startTime: existing.startTime, endTime: existing.endTime, priceArs: existing.priceArs };
@@ -544,8 +639,10 @@ export async function updateClubSlot(
 
   await invalidateSlotCaches(clubId, existing.courtId);
 
-  console.info(`[clubSlotManagementService.updateClubSlot] Updated slot ${input.slotId}`);
-  return { slot: rowToManagedSlot(row) };
+  console.info(
+    `[clubSlotManagementService.updateClubSlot] Updated slot ${input.slotId} (absorbed ${consumedCount} available slot(s))`,
+  );
+  return { slot: rowToManagedSlot(row), consumedCount };
 }
 
 /**
@@ -631,6 +728,23 @@ export async function toggleSlotBlock(
     }
   }
 
+  // Ordering: apply the block FIRST, then cancel affected matches.
+  // Decision Context (transactional safety): these two writes are not in a single DB
+  // transaction (the block uses the user-scoped client; the cancellation uses service-role
+  // to bypass organizer RLS). The previous order cancelled matches first — if the block then
+  // failed, players lost their match for nothing (cancelled but slot still open). By blocking
+  // first, the worst case is "slot blocked but a few matches not yet cancelled" — a safe,
+  // recoverable state (no NEW matches can be created on a blocked slot) the admin can retry.
+  // Previously fixed bugs: cancel-then-block could orphan cancellations on partial failure.
+  const updates: UpdateSlotData = {
+    isBlocked: input.isBlocked,
+    blockReason: input.isBlocked ? (input.blockReason ?? null) : null,
+    blockType: input.isBlocked && input.blockType ? BLOCK_TYPE_TO_DB[input.blockType] ?? null : null,
+    updatedBy: ctx.userId ?? null,
+  };
+
+  const row = await clubSlotManagementRepository.updateSlot(input.slotId, updates, db);
+
   // Cancel affected matches when blocking with confirmForce=true (improvement 19 complete)
   let cancelledMatchesCount = 0;
   let notifiedPlayersCount = 0;
@@ -653,15 +767,6 @@ export async function toggleSlotBlock(
       );
     }
   }
-
-  const updates: UpdateSlotData = {
-    isBlocked: input.isBlocked,
-    blockReason: input.isBlocked ? (input.blockReason ?? null) : null,
-    blockType: input.isBlocked && input.blockType ? BLOCK_TYPE_TO_DB[input.blockType] ?? null : null,
-    updatedBy: ctx.userId ?? null,
-  };
-
-  const row = await clubSlotManagementRepository.updateSlot(input.slotId, updates, db);
 
   await clubSlotManagementRepository.insertAuditLogEntry(
     {
@@ -730,29 +835,9 @@ export async function bulkBlockSlots(
     return { affectedCount: 0, skippedCount: input.slotIds.length, impactPreview: preview, cancelledMatchesCount: 0, notifiedPlayersCount: 0 };
   }
 
-  // Cancel all affected matches before applying the bulk block (improvement 19 complete)
-  let cancelledMatchesCount = 0;
-  let notifiedPlayersCount = 0;
-  if (input.isBlocked && preview && preview.matchesAffected > 0) {
-    const { cancelledMatchIds, cancelledCount } =
-      await clubSlotManagementRepository.cancelMatchesBySlotIds(
-        input.slotIds,
-        input.blockReason ?? null,
-      );
-    cancelledMatchesCount = cancelledCount;
-
-    if (cancelledMatchIds.length > 0) {
-      const participants = await clubSlotManagementRepository.getParticipantsByMatchIds(cancelledMatchIds);
-      notifiedPlayersCount = await clubSlotManagementRepository.insertCancellationNotifications(
-        participants,
-        input.blockReason ?? null,
-      );
-      console.info(
-        `[clubSlotManagementService.bulkBlockSlots] Cancelled ${cancelledCount} matches, notified ${notifiedPlayersCount} players`,
-      );
-    }
-  }
-
+  // Ordering: apply the blocks FIRST, then cancel affected matches (same transactional-safety
+  // rationale as toggleSlotBlock — block-then-cancel leaves a safer state on partial failure).
+  // Previously fixed bugs: cancel-then-block could orphan cancellations if the block loop failed.
   let affectedCount = 0;
   let skippedCount = 0;
 
@@ -780,6 +865,29 @@ export async function bulkBlockSlots(
     } catch (error) {
       console.warn(`[clubSlotManagementService.bulkBlockSlots] Skipped slot ${slotId}:`, error);
       skippedCount++;
+    }
+  }
+
+  // Cancel all affected matches AFTER applying the bulk block (improvement 19 complete)
+  let cancelledMatchesCount = 0;
+  let notifiedPlayersCount = 0;
+  if (input.isBlocked && preview && preview.matchesAffected > 0) {
+    const { cancelledMatchIds, cancelledCount } =
+      await clubSlotManagementRepository.cancelMatchesBySlotIds(
+        input.slotIds,
+        input.blockReason ?? null,
+      );
+    cancelledMatchesCount = cancelledCount;
+
+    if (cancelledMatchIds.length > 0) {
+      const participants = await clubSlotManagementRepository.getParticipantsByMatchIds(cancelledMatchIds);
+      notifiedPlayersCount = await clubSlotManagementRepository.insertCancellationNotifications(
+        participants,
+        input.blockReason ?? null,
+      );
+      console.info(
+        `[clubSlotManagementService.bulkBlockSlots] Cancelled ${cancelledCount} matches, notified ${notifiedPlayersCount} players`,
+      );
     }
   }
 
@@ -814,16 +922,23 @@ export async function updateCourtPricing(
   if (multiplier < 0.1 || multiplier > 10) {
     throw new Error('peakMultiplier debe estar entre 0.1 y 10');
   }
+  // Validate peakDays are valid day-of-week ints (0=Sun … 6=Sat) and dedupe.
+  // Previously fixed bugs: arbitrary values like [99, -3] were stored unchecked.
+  const peakDays = input.peakDays
+    ? [...new Set(input.peakDays)].filter((d) => Number.isInteger(d))
+    : [];
+  if (peakDays.some((d) => d < 0 || d > 6)) {
+    throw new Error('peakDays debe contener días válidos (0=Domingo … 6=Sábado)');
+  }
 
   const { clubId } = await requireClubOwnership(ctx);
   const db = ctx.supabase ?? supabase;
 
-  // Verify court belongs to this club via a slot lookup (defense-in-depth)
-  const slotsForCourt = await clubSlotManagementRepository.getManagedSlotsByCourtId(input.courtId, db);
-  const belongsToClub = slotsForCourt.some((s) => s.clubId === clubId);
-  if (slotsForCourt.length > 0 && !belongsToClub) {
-    throw new Error('Esta cancha no pertenece a tu club');
-  }
+  // Verify the court belongs to this club via the courts table (not via slots).
+  // Decision Context: the previous slot-based guard (`slotsForCourt.length > 0 && !belongsToClub`)
+  // was BYPASSABLE for a court with no slots (length 0 ⇒ check skipped), leaving RLS as the only
+  // barrier against cross-club pricing writes. requireCourtOwnership closes that gap.
+  await requireCourtOwnership(input.courtId, clubId, db);
 
   const row = await clubSlotManagementRepository.upsertCourtPricing(
     {
@@ -831,7 +946,7 @@ export async function updateCourtPricing(
       basePrice: input.basePrice,
       peakStart: input.peakStart ?? null,
       peakEnd: input.peakEnd ?? null,
-      peakDays: input.peakDays ?? [],
+      peakDays,
       peakMultiplier: multiplier,
       offPeakDiscount: input.offPeakDiscount ?? 0.0,
     },

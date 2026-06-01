@@ -23,6 +23,11 @@
  *     proxy could not reliably read the HttpOnly cookie. Fix: SSR-hydrated initialSlots.
  *   - Create Slot form required manual UUID entry for "ID de cancha". Fixed by deriving
  *     CourtOption[] from slots and rendering a named <select> in SlotEditModal.
+ *   - Single-slot "block with scheduled match" force-cancel was broken: handleSingleBlock
+ *     opened the bulk confirm dialog but did not carry the slot id, so handleBulkConfirm
+ *     fell back to the (empty) multi-select `selectedIds` and called bulkBlockSlots with
+ *     slotIds:[] → backend rejected with "Debes seleccionar al menos un slot" and nothing
+ *     was cancelled/blocked. Fixed by threading `slotId` through the 'bulk' ModalState.
  */
 
 import { useState, useCallback, useMemo } from 'react';
@@ -40,7 +45,10 @@ type ModalState =
   | { type: 'none' }
   | { type: 'create' }
   | { type: 'edit'; slot: ManagedClubSlot }
-  | { type: 'bulk'; isBlocked: boolean; impactPreview: SlotImpactPreview | null };
+  // `slotId` is set only when the dialog is opened from the single-slot block path
+  // (SlotEditModal / calendar cell). It carries the one slot to force-block so the
+  // confirm step does not fall back to the (empty) multi-select `selectedIds`.
+  | { type: 'bulk'; isBlocked: boolean; impactPreview: SlotImpactPreview | null; slotId?: string };
 
 interface SlotManagerProps {
   initialSlots?: ManagedClubSlot[];
@@ -100,8 +108,10 @@ export default function SlotManager({ initialSlots = [], initialError = null, ac
     async (input: BlockSlotInput) => {
       const result = await toggleBlock(input);
       if (result.impactPreview && !input.confirmForce) {
-        // Matches exist — show confirmation dialog
-        setModal({ type: 'bulk', isBlocked: input.isBlocked, impactPreview: result.impactPreview });
+        // Matches exist — show confirmation dialog. Carry the single slot's id so the
+        // confirm step force-blocks THIS slot (previously it routed through the bulk
+        // path with an empty selectedIds set, so the force-cancel never ran).
+        setModal({ type: 'bulk', isBlocked: input.isBlocked, impactPreview: result.impactPreview, slotId: input.slotId });
       } else if (result.success) {
         showMsg(input.isBlocked ? 'Slot bloqueado' : 'Slot desbloqueado');
         closeModal();
@@ -132,7 +142,8 @@ export default function SlotManager({ initialSlots = [], initialError = null, ac
   const handleBulkConfirm = useCallback(
     async (reason: string, blockType: string) => {
       if (modal.type !== 'bulk') return;
-      const slotIds = selectedIds.size > 0 ? Array.from(selectedIds) : [];
+      // Single-slot path: the dialog carries one slotId. Multi-select path: use selectedIds.
+      const slotIds = modal.slotId ? [modal.slotId] : Array.from(selectedIds);
       const result = await bulkBlock({
         slotIds,
         isBlocked: modal.isBlocked,
@@ -254,6 +265,7 @@ export default function SlotManager({ initialSlots = [], initialError = null, ac
         <SlotEditModal
           slot={modal.type === 'edit' ? modal.slot : null}
           courts={courts}
+          accessToken={accessToken}
           onClose={closeModal}
           onSaveCreate={createSlot}
           onSaveUpdate={updateSlot}
@@ -265,7 +277,7 @@ export default function SlotManager({ initialSlots = [], initialError = null, ac
         <BulkBlockDialog
           isBlocked={modal.isBlocked}
           impactPreview={modal.impactPreview}
-          selectedCount={selectedIds.size}
+          selectedCount={modal.slotId ? 1 : selectedIds.size}
           onConfirm={handleBulkConfirm}
           onClose={closeModal}
         />

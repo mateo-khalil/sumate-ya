@@ -5,6 +5,7 @@ import { CreateTournamentPage } from './page-objects/CreateTournamentPage';
 import { ClubDashboardPage } from './page-objects/ClubDashboardPage';
 import { ClubMatchWizardPage } from './page-objects/ClubMatchWizardPage';
 import { HomePage } from './page-objects/HomePage';
+import { HorariosPage } from './page-objects/HorariosPage';
 import { LoginPage } from './page-objects/LoginPage';
 import { MatchDetailPage } from './page-objects/MatchDetailPage';
 import { MatchResultsSectionPage } from './page-objects/MatchResultsSectionPage';
@@ -50,6 +51,8 @@ type Fixtures = {
   createMatchPage: CreateMatchPage;
   createTournamentPage: CreateTournamentPage;
   clubDashboardPage: ClubDashboardPage;
+  /** Club slot management (/panel-club/horarios). US — bloquear/liberar horarios. */
+  horariosPage: HorariosPage;
   clubMatchWizardPage: ClubMatchWizardPage;
   profilePage: ProfilePage;
   settingsPage: SettingsPage;
@@ -97,6 +100,9 @@ export const test = base.extend<Fixtures>({
   },
   clubDashboardPage: async ({ page }, use) => {
     await use(new ClubDashboardPage(page));
+  },
+  horariosPage: async ({ page }, use) => {
+    await use(new HorariosPage(page));
   },
   clubMatchWizardPage: async ({ page }, use) => {
     await use(new ClubMatchWizardPage(page));

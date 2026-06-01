@@ -4,9 +4,9 @@
  * Decision Context:
  * - Why separate file: SlotEditModal was approaching the 250-line soft limit. Extracting
  *   this tab keeps both files focused and under the 600-line hard limit.
- * - Fetch on mount: uses urqlClient.query directly (not the useClubSlots hook) because
- *   the history is lazy-loaded only when the "Historial" tab is opened, avoiding
- *   unnecessary round-trips while the user is on other tabs.
+ * - Fetch on mount: posts to the authenticated /api/graphql-auth proxy (not the shared
+ *   urqlClient, and not the useClubSlots hook) because the history is lazy-loaded only when
+ *   the "Historial" tab is opened, avoiding unnecessary round-trips on other tabs.
  * - changedBy.displayName is currently '' (stub) until audit log enrichment is wired;
  *   the fallback shows "Administrador" since only club admins can mutate slots.
  * - Diff visual: previousValue and newValue are JSON strings. We parse them and show
@@ -14,12 +14,16 @@
  *   as added/removed with '—' for the missing side.
  * - formatRelativeDate: lightweight implementation without date-fns to avoid adding a
  *   dependency just for one use case.
- * - Previously fixed bugs: none relevant (new component for P2 audit fix).
+ * - Previously fixed bugs:
+ *   - History always showed "No se pudo cargar el historial". The shared urqlClient posts
+ *     to the unauthenticated /api/graphql proxy, which cannot read the HttpOnly cookie, so
+ *     slotAuditLog failed with "Authentication required". Fixed by posting to
+ *     /api/graphql-auth with the SSR-provided accessToken as a Bearer header — the same
+ *     strategy every mutation in useClubSlots already uses.
  */
 
 import { useEffect, useState } from 'react';
 import { Loader2, Clock, TriangleAlert } from 'lucide-react';
-import { urqlClient } from '../../lib/urql-client';
 import type { SlotAuditLog } from '../../graphql/operations/club-slots';
 import { SLOT_AUDIT_LOG, SLOT_ACTION_LABELS } from '../../graphql/operations/club-slots';
 
@@ -80,9 +84,10 @@ function DiffView({ prev, next }: { prev: string | null; next: string | null }) 
 
 interface SlotHistoryTabProps {
   slotId: string;
+  accessToken: string;
 }
 
-export function SlotHistoryTab({ slotId }: SlotHistoryTabProps) {
+export function SlotHistoryTab({ slotId, accessToken }: SlotHistoryTabProps) {
   const [entries, setEntries] = useState<SlotAuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,17 +97,23 @@ export function SlotHistoryTab({ slotId }: SlotHistoryTabProps) {
     setLoading(true);
     setError(null);
 
-    urqlClient
-      .query(SLOT_AUDIT_LOG, { slotId, limit: 30, offset: 0 })
-      .toPromise()
-      .then((result) => {
+    // Post to the authenticated proxy with an explicit Bearer token — the HttpOnly cookie
+    // is not readable from JS, so the shared urqlClient (/api/graphql) fails auth here.
+    fetch('/api/graphql-auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ query: SLOT_AUDIT_LOG, variables: { slotId, limit: 30, offset: 0 } }),
+    })
+      .then((res) => res.json())
+      .then((json: { data?: { slotAuditLog: SlotAuditLog[] }; errors?: Array<{ message: string }> }) => {
         if (cancelled) return;
-        if (result.error) {
-          setError(result.error.message);
+        if (json.errors?.length) {
+          setError(json.errors[0].message);
         } else {
-          setEntries(
-            (result.data as { slotAuditLog: SlotAuditLog[] })?.slotAuditLog ?? [],
-          );
+          setEntries(json.data?.slotAuditLog ?? []);
         }
       })
       .catch((err: unknown) => {
@@ -114,7 +125,7 @@ export function SlotHistoryTab({ slotId }: SlotHistoryTabProps) {
       });
 
     return () => { cancelled = true; };
-  }, [slotId]);
+  }, [slotId, accessToken]);
 
   if (loading) {
     return (
