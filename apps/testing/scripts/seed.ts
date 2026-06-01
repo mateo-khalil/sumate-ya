@@ -680,6 +680,203 @@ const SEED_TOURNAMENT_WITH_FIXTURE_ID = 'c0000000-0000-0000-0000-000000000003';
  */
 const CAPTAIN_USER_ID = TEST_USER_ID; // playerMateo (mateoduran2010@gmail.com)
 
+const SEED_PERMANENT_TEAMS = {
+  captainTeamId: 'a3000000-0000-0000-0000-000000000001',
+  claimableTeamId: 'a3000000-0000-0000-0000-000000000002',
+  pendingInvitationId: 'a3000000-0000-0000-0000-000000000101',
+} as const;
+
+async function signInTestPlayerRicardo(): Promise<{ userId: string }> {
+  const email = process.env.TEST_PLAYER_RICARDO_EMAIL ?? 'ricardo@gmail.com';
+  const password = process.env.TEST_PLAYER_RICARDO_PASSWORD ?? 'bbbb1234';
+  const authClient = createClient(requiredEnv('SUPABASE_URL'), requiredEnv('SUPABASE_ANON_KEY'), {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+
+  if (error || !data.user) {
+    throw new Error(
+      `[seed] No se pudo autenticar playerRicardo (${email}): ${error?.message ?? 'sin usuario'}`,
+    );
+  }
+
+  return { userId: data.user.id };
+}
+
+async function ensureProfileDisplayName(
+  client: SupabaseClient,
+  userId: string,
+  displayName: string,
+  role = 'player',
+): Promise<void> {
+  const { data: profile, error: selectError } = await client
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle();
+  if (selectError) {
+    throw new Error(`[seed] Error consultando profile ${userId}: ${selectError.message}`);
+  }
+
+  if (!profile) {
+    const { error: insertError } = await client.from('profiles').insert({
+      id: userId,
+      displayName,
+      role,
+      division: 1,
+      matchesPlayed: 0,
+      matchesWon: 0,
+    });
+    if (insertError) {
+      throw new Error(`[seed] No se pudo crear profile ${userId}: ${insertError.message}`);
+    }
+    return;
+  }
+
+  const { error: updateError } = await client
+    .from('profiles')
+    .update({ displayName, role })
+    .eq('id', userId);
+  if (updateError) {
+    throw new Error(`[seed] No se pudo ajustar profile ${userId}: ${updateError.message}`);
+  }
+}
+
+async function seedPermanentTeams(client: SupabaseClient): Promise<void> {
+  /*
+   * Permanent teams for issue #137 E2E coverage.
+   *
+   * T1: Mateo is captain, Ricardo is member. Used for dashboard, invitations,
+   * availability, tournament enrollment, config, navbar and non-captain gates.
+   * T2: Mateo is a member but captainId=null. Used to verify claimCaptain.
+   */
+  const { userId: ricardoId } = await signInTestPlayerRicardo();
+  await ensureProfileDisplayName(client, TEST_USER_ID, 'Mateo Duran E2E');
+  await ensureProfileDisplayName(client, ricardoId, 'Ricardo E2E');
+
+  const teamIds = [
+    SEED_PERMANENT_TEAMS.captainTeamId,
+    SEED_PERMANENT_TEAMS.claimableTeamId,
+  ];
+
+  await client
+    .from('playerAvailability')
+    .delete()
+    .in('teamId', teamIds);
+  await client
+    .from('teamInvitations')
+    .delete()
+    .in('teamId', teamIds);
+
+  const { data: tournamentTeamRows } = await client
+    .from('tournamentTeams')
+    .select('id')
+    .in('permanentTeamId', teamIds);
+  if (tournamentTeamRows && tournamentTeamRows.length > 0) {
+    const tournamentTeamIds = tournamentTeamRows.map((row: { id: string }) => row.id);
+    await client
+      .from('tournamentTeamMembers')
+      .delete()
+      .in('teamId', tournamentTeamIds);
+    await client
+      .from('tournamentTeams')
+      .delete()
+      .in('id', tournamentTeamIds);
+  }
+
+  await client
+    .from('teamMembers')
+    .delete()
+    .in('teamId', teamIds);
+
+  const now = new Date().toISOString();
+  const teamPayloads = [
+    {
+      id: SEED_PERMANENT_TEAMS.captainTeamId,
+      name: 'Equipo Capitan Permanente E2E',
+      captainId: TEST_USER_ID,
+      logoUrl: null,
+      format: '7v7',
+      description: 'Equipo permanente para pruebas E2E de capitan y administrador.',
+      isActive: true,
+      createdBy: TEST_USER_ID,
+      updatedAt: now,
+    },
+    {
+      id: SEED_PERMANENT_TEAMS.claimableTeamId,
+      name: 'Equipo Sin Capitan E2E',
+      captainId: null,
+      logoUrl: null,
+      format: '5v5',
+      description: 'Equipo sin capitan para probar reclamo de capitania.',
+      isActive: true,
+      createdBy: TEST_USER_ID,
+      updatedAt: now,
+    },
+  ];
+
+  const { error: teamError } = await client
+    .from('teams')
+    .upsert(teamPayloads, { onConflict: 'id' });
+  if (teamError) {
+    throw new Error(`[seed] No se pudieron crear equipos permanentes: ${teamError.message}`);
+  }
+
+  const memberPayloads = [
+    {
+      teamId: SEED_PERMANENT_TEAMS.captainTeamId,
+      playerId: TEST_USER_ID,
+      role: 'captain',
+    },
+    {
+      teamId: SEED_PERMANENT_TEAMS.captainTeamId,
+      playerId: ricardoId,
+      role: 'member',
+    },
+    {
+      teamId: SEED_PERMANENT_TEAMS.claimableTeamId,
+      playerId: TEST_USER_ID,
+      role: 'member',
+    },
+  ];
+  const { error: memberError } = await client
+    .from('teamMembers')
+    .insert(memberPayloads);
+  if (memberError) {
+    throw new Error(`[seed] No se pudieron crear miembros de equipos permanentes: ${memberError.message}`);
+  }
+
+  const { error: availabilityError } = await client.from('playerAvailability').insert([
+    {
+      teamId: SEED_PERMANENT_TEAMS.captainTeamId,
+      playerId: TEST_USER_ID,
+      dayOfWeek: 1,
+      startTime: '19:00',
+      endTime: '21:00',
+      isRecurrent: true,
+    },
+    {
+      teamId: SEED_PERMANENT_TEAMS.captainTeamId,
+      playerId: ricardoId,
+      dayOfWeek: 1,
+      startTime: '19:00',
+      endTime: '20:00',
+      isRecurrent: true,
+    },
+    {
+      teamId: SEED_PERMANENT_TEAMS.captainTeamId,
+      playerId: ricardoId,
+      dayOfWeek: 3,
+      startTime: '20:00',
+      endTime: '22:00',
+      isRecurrent: true,
+    },
+  ]);
+  if (availabilityError) {
+    throw new Error(`[seed] No se pudo crear disponibilidad permanente: ${availabilityError.message}`);
+  }
+}
+
 async function ensureTournamentExists(
   client: SupabaseClient,
   id: string,
@@ -1021,9 +1218,10 @@ async function seed(): Promise<void> {
   await ensureTestUserNotInOpenMatch(client);
   await seedClubDashboard(client);
   await seedTournaments(client);
+  await seedPermanentTeams(client);
   // eslint-disable-next-line no-console
   console.log(
-    '[seed] Fixtures listas: E1 lleno, E2 abierto, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture.',
+    '[seed] Fixtures listas: E1 lleno, E2 abierto, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture, equipos permanentes.',
   );
 }
 

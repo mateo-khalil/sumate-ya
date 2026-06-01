@@ -120,3 +120,16 @@ export const SEED_CLUB_DASHBOARD = {
   blockedSlotTime: '12:00',
   blockedReason: 'Mantenimiento E2E',
 } as const;
+
+/**
+ * Permanent team fixtures guaranteed by `apps/testing/scripts/seed.ts`.
+ *
+ * Used by the admin/captain team E2E flow. Mateo is captain of `captainTeam`;
+ * Ricardo is only a member, so the suite can verify both captain and non-captain
+ * permissions without mutating historical user data.
+ */
+export const SEED_TEAMS = {
+  captainTeam: 'a3000000-0000-0000-0000-000000000001',
+  claimableTeam: 'a3000000-0000-0000-0000-000000000002',
+  pendingInvitation: 'a3000000-0000-0000-0000-000000000101',
+} as const;
