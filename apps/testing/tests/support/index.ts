@@ -23,6 +23,7 @@ export { ClubDashboardPage } from './page-objects/ClubDashboardPage';
 export { ClubMatchWizardPage } from './page-objects/ClubMatchWizardPage';
 export { HomePage } from './page-objects/HomePage';
 export { HorariosPage } from './page-objects/HorariosPage';
+export { LeaderboardPage } from './page-objects/LeaderboardPage';
 export { LoginPage } from './page-objects/LoginPage';
 export { MatchDetailPage } from './page-objects/MatchDetailPage';
 export { MatchResultsSectionPage } from './page-objects/MatchResultsSectionPage';

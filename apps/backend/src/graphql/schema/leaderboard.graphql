@@ -1,0 +1,39 @@
+# GraphQL Schema: Public player leaderboard
+#
+# Decision Context:
+# - Why separate file: keeps the ranking endpoint isolated from profile.graphql while
+#   Apollo merges all .graphql files. Mirrors the match-history.graphql split.
+# - Public by design: `leaderboard` does NOT require auth — it is consumed by the static
+#   /leaderboard page hydrated client-side. The underlying RPC (get_leaderboard) only ever
+#   exposes already-public data (isPublic = true AND showStats = true AND matchesPlayed >= 5),
+#   so there is nothing to gate behind a session.
+# - LeaderboardEntry vs Profile: a dedicated, flat type carries the precomputed `rank` and
+#   makes every stat non-null (all entries are eligible public profiles, so the privacy
+#   nullability of Profile does not apply here). Reusing Profile would force nullable stats
+#   the UI would have to defensively handle for no reason.
+# - PlayerPosition enum is declared in profile.graphql; Apollo's merged schema makes it
+#   available here without re-declaration.
+# - `limit` is optional (defaults to 50 in the service, clamped to [1,100] in the RPC).
+# - Previously fixed bugs: none relevant.
+
+# A single ranked row in the public leaderboard.
+type LeaderboardEntry {
+  # 1-based position in the ranking (computed in the service from sort order).
+  rank: Int!
+  id: ID!
+  displayName: String!
+  avatarUrl: String
+  preferredPosition: PlayerPosition
+  division: Int!
+  matchesPlayed: Int!
+  matchesWon: Int!
+  # Win percentage (0–100, two decimals), e.g. 66.67.
+  winrate: Float!
+}
+
+extend type Query {
+  # Top public players ranked by winrate. No auth required.
+  # limit defaults to 50 (max 100). Eligibility is enforced in the DB RPC:
+  # isPublic = true, showStats = true, matchesPlayed >= 5.
+  leaderboard(limit: Int): [LeaderboardEntry!]!
+}

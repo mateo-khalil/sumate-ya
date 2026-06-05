@@ -1,0 +1,15 @@
+# Leaderboard operations — GraphQL source of truth (mirror in leaderboard.ts)
+
+query GetLeaderboard($limit: Int) {
+  leaderboard(limit: $limit) {
+    rank
+    id
+    displayName
+    avatarUrl
+    preferredPosition
+    division
+    matchesPlayed
+    matchesWon
+    winrate
+  }
+}

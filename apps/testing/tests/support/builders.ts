@@ -609,3 +609,52 @@ export function buildMockSubmission(
     ...overrides,
   };
 }
+
+/* ── Leaderboard mock builders (Ranking de jugadores) ───────────────────── */
+
+/**
+ * Mock builder for LeaderboardEntry — used by leaderboard.spec.ts.
+ *
+ * Decision Context:
+ * - Mirrors the LeaderboardEntry type from leaderboard.graphql / leaderboard.ts.
+ *   Every stat is non-null because the backend RPC only returns eligible public
+ *   profiles (isPublic + showStats + matchesPlayed >= 5).
+ * - Default is a top-of-table entry (rank 1, 66.7% winrate) so a single mock with
+ *   no overrides already renders a complete row; specs spread `rank`, `id`,
+ *   `displayName`, `winrate`, etc. for the case under test.
+ * - The page sorts nothing client-side — it renders entries in the order returned.
+ *   Specs must therefore pass entries already in rank order.
+ * - Previously fixed bugs: none relevant.
+ */
+export type PlayerPosition = 'GOALKEEPER' | 'DEFENDER' | 'MIDFIELDER' | 'FORWARD';
+
+export type MockLeaderboardEntry = {
+  __typename?: 'LeaderboardEntry';
+  rank: number;
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: PlayerPosition | null;
+  division: number;
+  matchesPlayed: number;
+  matchesWon: number;
+  winrate: number;
+};
+
+export function buildLeaderboardEntry(
+  overrides: Partial<MockLeaderboardEntry> = {},
+): MockLeaderboardEntry {
+  return {
+    __typename: 'LeaderboardEntry',
+    rank: 1,
+    id: 'leader-default-1',
+    displayName: 'Jugador Top',
+    avatarUrl: null,
+    preferredPosition: 'FORWARD',
+    division: 3,
+    matchesPlayed: 12,
+    matchesWon: 8,
+    winrate: 66.67,
+    ...overrides,
+  };
+}

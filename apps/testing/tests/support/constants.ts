@@ -39,6 +39,7 @@ export const TORNEOS_URL = `${FRONTEND_URL}/torneos`;
 export const TORNEOS_CREAR_URL = `${FRONTEND_URL}/torneos/crear`;
 export const CLUB_DASHBOARD_URL = `${FRONTEND_URL}/panel-club/dashboard`;
 export const AJUSTES_URL = `${FRONTEND_URL}/ajustes`;
+export const LEADERBOARD_URL = `${FRONTEND_URL}/leaderboard`;
 
 /**
  * Route patterns for the backend REST auth endpoints exercised by the

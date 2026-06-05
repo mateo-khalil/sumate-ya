@@ -6,6 +6,7 @@ import { ClubDashboardPage } from './page-objects/ClubDashboardPage';
 import { ClubMatchWizardPage } from './page-objects/ClubMatchWizardPage';
 import { HomePage } from './page-objects/HomePage';
 import { HorariosPage } from './page-objects/HorariosPage';
+import { LeaderboardPage } from './page-objects/LeaderboardPage';
 import { LoginPage } from './page-objects/LoginPage';
 import { MatchDetailPage } from './page-objects/MatchDetailPage';
 import { MatchResultsSectionPage } from './page-objects/MatchResultsSectionPage';
@@ -57,6 +58,8 @@ type Fixtures = {
   profilePage: ProfilePage;
   settingsPage: SettingsPage;
   changePasswordPage: ChangePasswordPage;
+  /** Public player ranking (/leaderboard). For ranking list tests. */
+  leaderboardPage: LeaderboardPage;
   /** Tournament listing page (/torneos). For list + card interaction tests (US #33). */
   tournamentsPage: TournamentsListPage;
   /** Open-registration tournament (no teams). For inscription tests (US #39). */
@@ -115,6 +118,9 @@ export const test = base.extend<Fixtures>({
   },
   changePasswordPage: async ({ page }, use) => {
     await use(new ChangePasswordPage(page));
+  },
+  leaderboardPage: async ({ page }, use) => {
+    await use(new LeaderboardPage(page));
   },
   tournamentsPage: async ({ page }, use) => {
     await use(new TournamentsListPage(page));

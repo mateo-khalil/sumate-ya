@@ -23,16 +23,23 @@
  */
 
 import { z } from 'zod';
-import { cacheDelete, cacheGetOrSet, CACHE_PREFIX, CACHE_TTL } from '../config/redis.js';
+import {
+  cacheDelete,
+  cacheGetOrSet,
+  CACHE_PREFIX,
+  CACHE_TTL,
+} from '../config/redis.js';
 import { supabase } from '../config/supabase.js';
 import {
   PlayerPosition,
   UserRole,
+  type LeaderboardEntry,
   type PrivacySettings,
   type Profile,
 } from '../graphql/generated/graphql.js';
 import {
   profileRepository,
+  type LeaderboardRow,
   type ProfileRow,
   type ProfileWithPrivacyRow,
   type PrivacySettingsRow,
@@ -128,6 +135,23 @@ function toPublicProfile(row: ProfileWithPrivacyRow): Profile {
     matchesWon: row.showStats ? row.matchesWon : null,
     winrate: row.showStats ? computeWinrate(row.matchesWon, row.matchesPlayed) : null,
     isPrivate: false,
+  };
+}
+
+function toLeaderboardEntry(row: LeaderboardRow, index: number): LeaderboardEntry {
+  return {
+    rank: index + 1,
+    id: row.id,
+    displayName: row.displayName,
+    avatarUrl: row.avatarUrl,
+    preferredPosition: row.preferredPosition
+      ? (DB_TO_POSITION[row.preferredPosition] ?? null)
+      : null,
+    division: row.division,
+    matchesPlayed: row.matchesPlayed,
+    matchesWon: row.matchesWon,
+    // RPC returns numeric (string-or-number depending on driver); coerce defensively.
+    winrate: Number(row.winrate),
   };
 }
 
@@ -289,9 +313,44 @@ export async function updatePrivacy(
   }
 }
 
+/**
+ * Returns the public player leaderboard ranked by winrate.
+ *
+ * Decision Context:
+ * - Public (no auth): consumed by the static /leaderboard page hydrated client-side.
+ *   The RPC only exposes already-public data, so there is no session to scope.
+ * - limit defaults to 50, clamped to [1,100] here AND in the RPC (defense in depth so a
+ *   crafted request can never widen the result set / egress).
+ * - Caching: leaderboard:<limit> at LIST_QUERIES TTL (1h). Stats only change when a match
+ *   is closed (a rare, write-side event), so a 1h stale window is an acceptable tradeoff
+ *   for keeping this read-heavy path off the DB. No explicit invalidation is wired on
+ *   stat updates yet — the 1h TTL bounds staleness; revisit if real-time ranks are needed.
+ * - Rank is assigned from the already-sorted RPC output (1-based), not stored, so it stays
+ *   correct regardless of how many rows the limit returns.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getLeaderboard(limit?: number | null): Promise<LeaderboardEntry[]> {
+  const safeLimit = Math.min(Math.max(Math.floor(limit ?? 50), 1), 100);
+  const cacheKey = `${CACHE_PREFIX.LEADERBOARD}${safeLimit}`;
+
+  try {
+    const rows = await cacheGetOrSet<LeaderboardRow[]>(
+      cacheKey,
+      () => profileRepository.getLeaderboard(safeLimit),
+      CACHE_TTL.LIST_QUERIES,
+    );
+
+    return rows.map(toLeaderboardEntry);
+  } catch (error) {
+    console.error(`[profileService.getLeaderboard] Failed for limit=${safeLimit}:`, error);
+    throw error instanceof Error ? error : new Error('Error al obtener el ranking');
+  }
+}
+
 export const profileService = {
   getMyProfile,
   getProfile,
   getMySettings,
   updatePrivacy,
+  getLeaderboard,
 };

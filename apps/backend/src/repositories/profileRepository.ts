@@ -102,6 +102,17 @@ export interface UpdatePrivacyFields {
   showDivision?: boolean;
 }
 
+export interface LeaderboardRow {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: string | null;
+  division: number;
+  matchesPlayed: number;
+  matchesWon: number;
+  winrate: number;
+}
+
 // =====================================================
 // Repository Functions
 // =====================================================
@@ -270,6 +281,37 @@ export async function insertPrivacyAuditLog(
   }
 }
 
+/**
+ * Fetches the public leaderboard via the get_leaderboard RPC.
+ *
+ * Decision Context:
+ * - Why an RPC (not a PostgREST select): the ranking orders by a *computed* winrate
+ *   (matchesWon/matchesPlayed) and applies a LIMIT in Postgres. PostgREST cannot order
+ *   by an arbitrary expression, and sorting client-side would mean fetching every
+ *   eligible row (egress cost). The RPC keeps computation + bounding in the DB.
+ * - Eligibility (isPublic, showStats, matchesPlayed >= 5) and limit clamping [1,100]
+ *   live inside the SQL function — see migration add_get_leaderboard_rpc.
+ * - Uses the service-role singleton: the data returned is already public, and the RPC is
+ *   SECURITY DEFINER, so no user-scoped client is required for this read path.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getLeaderboard(
+  limit: number,
+  client: SupabaseClient = supabase,
+): Promise<LeaderboardRow[]> {
+  const { data, error } = await client.rpc('get_leaderboard', { p_limit: limit });
+
+  if (error) {
+    console.error(
+      `[profileRepository.getLeaderboard] Supabase RPC error for limit=${limit}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as unknown as LeaderboardRow[];
+}
+
 export const profileRepository = {
   getProfileById,
   getProfileWithPrivacy,
@@ -277,4 +319,5 @@ export const profileRepository = {
   updatePrivacyFields,
   updateAvatarUrl,
   insertPrivacyAuditLog,
+  getLeaderboard,
 };

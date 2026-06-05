@@ -1,0 +1,75 @@
+---
+/**
+ * /leaderboard — Ranking público de jugadores por efectividad (winrate).
+ *
+ * Decision Context:
+ * - "Estática con hydration": la página es un shell liviano; los datos del ranking se
+ *   piden client-side desde el proxy /api/graphql dentro de la isla LeaderboardTable
+ *   (client:visible), igual que /torneos. El endpoint `leaderboard` es público, así que
+ *   visitantes anónimos también ven el ranking.
+ * - prerender = false (no totalmente estática) porque el Topbar compartido se renderiza
+ *   con la sesión (Astro.locals.user) para mostrar el navbar correcto. El costo de datos
+ *   pesado igualmente vive en la hidratación cliente, no en SSR.
+ * - currentUserId se pasa a la isla para resaltar la fila del propio jugador y cumplir la
+ *   motivación de "comparar mi rendimiento" de la user story.
+ * - Elegibilidad del ranking (isPublic + showStats + matchesPlayed >= 5, orden por winrate)
+ *   se aplica en el backend (RPC get_leaderboard) — esta página no filtra nada.
+ * - Previously fixed bugs: none relevant.
+ */
+export const prerender = false;
+
+import { Trophy } from 'lucide-react';
+import Layout from '../layouts/Layout.astro';
+import Topbar from '../components/shared/Topbar.astro';
+import { LeaderboardTable } from '../components/leaderboard/LeaderboardTable';
+
+const user = Astro.locals.user;
+---
+
+<Layout title="Ranking de Jugadores — Sumate Ya">
+  <div class="app-shell">
+    <Topbar user={user} />
+
+    <main class="page-content">
+      <header class="section-header">
+        <div class="section-label">
+          <Trophy size={14} strokeWidth={2} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'middle' }} />
+          RANKING
+        </div>
+        <h1 class="section-title">Mejores Jugadores</h1>
+        <p class="section-sub">
+          Ordenado por efectividad — jugadores con 5 o más partidos disputados
+        </p>
+      </header>
+
+      <LeaderboardTable client:visible limit={50} currentUserId={user?.id ?? null} />
+    </main>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .page-content {
+    flex: 1; max-width: 900px; width: 100%;
+    margin: 0 auto; padding: 2.5rem 1.25rem;
+  }
+  .section-header {
+    margin-bottom: 2rem; padding-bottom: 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.2em;
+    color: hsl(42 100% 58%); text-transform: uppercase; margin-bottom: 0.4rem;
+  }
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(1.75rem, 5vw, 2.5rem);
+    letter-spacing: 0.04em; color: #fff; margin: 0 0 0.3rem; line-height: 1;
+  }
+  .section-sub { margin: 0; color: hsl(215 20% 50%); font-size: 0.875rem; }
+  @media (max-width: 767px) {
+    .page-content { padding: 1.25rem 1rem; }
+    .section-header { margin-bottom: 1.25rem; }
+  }
+</style>

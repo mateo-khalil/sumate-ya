@@ -41,6 +41,13 @@ const Query: QueryResolvers = {
     return profileService.getProfile(args.id as string, user.id);
   },
 
+  // Public ranking — intentionally NOT gated by requireAuth. The service/RPC only
+  // surface already-public data (isPublic + showStats + matchesPlayed >= 5), and the
+  // /leaderboard page is reachable by anonymous visitors.
+  leaderboard: async (_parent, args) => {
+    return profileService.getLeaderboard(args.limit);
+  },
+
   mySettings: async (_parent, _args, context) => {
     const user = requireAuth(context);
     const userClient = context.accessToken

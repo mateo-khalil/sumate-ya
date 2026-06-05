@@ -70,6 +70,9 @@ export const CACHE_PREFIX = {
   USER_TEAMS: 'user:teams:',
   // team:availability:{teamId} — matriz de disponibilidad del equipo.
   TEAM_AVAILABILITY: 'team:availability:',
+  // leaderboard:{limit} — ranking público de jugadores por winrate.
+  // Read-heavy y estable (las stats sólo cambian al cerrarse un partido), cacheado a LIST_QUERIES.
+  LEADERBOARD: 'leaderboard:',
 } as const;
 
 // =====================================================

@@ -403,6 +403,19 @@ export type JoinTournamentInput = {
   tournamentId: Scalars['ID']['input'];
 };
 
+export type LeaderboardEntry = {
+  __typename?: 'LeaderboardEntry';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  division: Scalars['Int']['output'];
+  id: Scalars['ID']['output'];
+  matchesPlayed: Scalars['Int']['output'];
+  matchesWon: Scalars['Int']['output'];
+  preferredPosition?: Maybe<PlayerPosition>;
+  rank: Scalars['Int']['output'];
+  winrate: Scalars['Float']['output'];
+};
+
 export type LeaveMatchInput = {
   matchId: Scalars['ID']['input'];
 };
@@ -838,6 +851,7 @@ export type Query = {
   clubs: Array<ClubDetail>;
   courtPricing?: Maybe<CourtPricing>;
   exportClubSchedule: Scalars['String']['output'];
+  leaderboard: Array<LeaderboardEntry>;
   match?: Maybe<Match>;
   matchResultSubmissions: Array<MatchResultSubmission>;
   matches: Array<Match>;
@@ -894,6 +908,11 @@ export type QueryCourtPricingArgs = {
 export type QueryExportClubScheduleArgs = {
   filters?: InputMaybe<ClubDashboardFilters>;
   format?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryLeaderboardArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -1535,6 +1554,7 @@ export type ResolversTypes = ResolversObject<{
   JoinMatchInput: JoinMatchInput;
   JoinMatchResult: ResolverTypeWrapper<JoinMatchResult>;
   JoinTournamentInput: JoinTournamentInput;
+  LeaderboardEntry: ResolverTypeWrapper<LeaderboardEntry>;
   LeaveMatchInput: LeaveMatchInput;
   LeaveMatchResult: ResolverTypeWrapper<LeaveMatchResult>;
   LeaveTournamentInput: LeaveTournamentInput;
@@ -1654,6 +1674,7 @@ export type ResolversParentTypes = ResolversObject<{
   JoinMatchInput: JoinMatchInput;
   JoinMatchResult: JoinMatchResult;
   JoinTournamentInput: JoinTournamentInput;
+  LeaderboardEntry: LeaderboardEntry;
   LeaveMatchInput: LeaveMatchInput;
   LeaveMatchResult: LeaveMatchResult;
   LeaveTournamentInput: LeaveTournamentInput;
@@ -1914,6 +1935,18 @@ export type JoinMatchResultResolvers<ContextType = GraphQLContext, ParentType ex
   success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
 }>;
 
+export type LeaderboardEntryResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['LeaderboardEntry'] = ResolversParentTypes['LeaderboardEntry']> = ResolversObject<{
+  avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  division?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  matchesPlayed?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  matchesWon?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  preferredPosition?: Resolver<Maybe<ResolversTypes['PlayerPosition']>, ParentType, ContextType>;
+  rank?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  winrate?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+}>;
+
 export type LeaveMatchResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['LeaveMatchResult'] = ResolversParentTypes['LeaveMatchResult']> = ResolversObject<{
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType>;
   matchDeleted?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -2100,6 +2133,7 @@ export type QueryResolvers<ContextType = GraphQLContext, ParentType extends Reso
   clubs?: Resolver<Array<ResolversTypes['ClubDetail']>, ParentType, ContextType>;
   courtPricing?: Resolver<Maybe<ResolversTypes['CourtPricing']>, ParentType, ContextType, RequireFields<QueryCourtPricingArgs, 'courtId'>>;
   exportClubSchedule?: Resolver<ResolversTypes['String'], ParentType, ContextType, Partial<QueryExportClubScheduleArgs>>;
+  leaderboard?: Resolver<Array<ResolversTypes['LeaderboardEntry']>, ParentType, ContextType, Partial<QueryLeaderboardArgs>>;
   match?: Resolver<Maybe<ResolversTypes['Match']>, ParentType, ContextType, RequireFields<QueryMatchArgs, 'id'>>;
   matchResultSubmissions?: Resolver<Array<ResolversTypes['MatchResultSubmission']>, ParentType, ContextType, RequireFields<QueryMatchResultSubmissionsArgs, 'matchId'>>;
   matches?: Resolver<Array<ResolversTypes['Match']>, ParentType, ContextType, Partial<QueryMatchesArgs>>;
@@ -2379,6 +2413,7 @@ export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   DashboardMatch?: DashboardMatchResolvers<ContextType>;
   EnrollTeamResult?: EnrollTeamResultResolvers<ContextType>;
   JoinMatchResult?: JoinMatchResultResolvers<ContextType>;
+  LeaderboardEntry?: LeaderboardEntryResolvers<ContextType>;
   LeaveMatchResult?: LeaveMatchResultResolvers<ContextType>;
   LeaveTournamentResult?: LeaveTournamentResultResolvers<ContextType>;
   ManagedClubSlot?: ManagedClubSlotResolvers<ContextType>;
