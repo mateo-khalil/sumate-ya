@@ -64,6 +64,14 @@ const OPEN_MATCH_FORMAT = '5v5';
 const OPEN_MATCH_DURATION_MIN = 60;
 const OPEN_MATCH_DAYS_AHEAD = 14;
 
+// Tercer partido E3: terminado y con participantes reales. Dedicado al flujo de
+// carga/votacion de resultados para que los specs no dependan de datos historicos.
+const RESULT_VOTING_MATCH_ID = 'e1000000-0000-0000-0000-000000000003';
+const RESULT_VOTING_MATCH_CAPACITY = 10;
+const RESULT_VOTING_MATCH_FORMAT = '5v5';
+const RESULT_VOTING_MATCH_DURATION_MIN = 60;
+const RESULT_VOTING_MATCH_DAYS_AGO = 2;
+
 const CLUB_DASHBOARD_FIXTURE = {
   clubId: 'b2000000-0000-0000-0000-000000000001',
   courtId: 'c2000000-0000-0000-0000-000000000001',
@@ -364,6 +372,83 @@ async function ensureTestUserNotInOpenMatch(client: SupabaseClient): Promise<voi
   if (error) {
     throw new Error(
       `[seed] No se pudo limpiar la inscripcion del usuario de prueba en E2: ${error.message}`,
+    );
+  }
+}
+
+async function ensureResultVotingMatchFixture(
+  client: SupabaseClient,
+  ricardoId: string,
+): Promise<void> {
+  const { data: club, error: clubError } = await client
+    .from('clubs')
+    .select('id')
+    .order('createdAt', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (clubError) {
+    throw new Error(`[seed] Error consultando clubs (E3): ${clubError.message}`);
+  }
+  if (!club) {
+    throw new Error('[seed] No hay clubes en la DB para crear el partido E3.');
+  }
+
+  const scheduledAt = new Date(
+    Date.now() - RESULT_VOTING_MATCH_DAYS_AGO * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const { error: upsertError } = await client.from('matches').upsert(
+    {
+      id: RESULT_VOTING_MATCH_ID,
+      organizerId: TEST_USER_ID,
+      clubId: club.id,
+      format: RESULT_VOTING_MATCH_FORMAT,
+      capacity: RESULT_VOTING_MATCH_CAPACITY,
+      scheduledAt,
+      durationMin: RESULT_VOTING_MATCH_DURATION_MIN,
+      status: 'completed',
+      resultStatus: 'pending',
+      resultVotingClosesAt: null,
+      scoreTeamA: null,
+      scoreTeamB: null,
+      winningTeam: null,
+      description: 'Partido E3 (seed E2E) - terminado para cargar resultado.',
+    },
+    { onConflict: 'id' },
+  );
+  if (upsertError) {
+    throw new Error(`[seed] No se pudo crear/ajustar el partido E3: ${upsertError.message}`);
+  }
+
+  // Reset de propuestas/votos para que el primer resultado de la corrida sea reproducible.
+  // Los votos caen por ON DELETE CASCADE desde matchResultSubmissions.
+  const { error: deleteSubmissionsError } = await client
+    .from('matchResultSubmissions')
+    .delete()
+    .eq('matchId', RESULT_VOTING_MATCH_ID);
+  if (deleteSubmissionsError) {
+    throw new Error(
+      `[seed] No se pudieron limpiar submissions del partido E3: ${deleteSubmissionsError.message}`,
+    );
+  }
+
+  const { error: deleteParticipantsError } = await client
+    .from('matchParticipants')
+    .delete()
+    .eq('matchId', RESULT_VOTING_MATCH_ID);
+  if (deleteParticipantsError) {
+    throw new Error(
+      `[seed] No se pudieron limpiar participantes del partido E3: ${deleteParticipantsError.message}`,
+    );
+  }
+
+  const { error: insertParticipantsError } = await client.from('matchParticipants').insert([
+    { matchId: RESULT_VOTING_MATCH_ID, playerId: TEST_USER_ID, team: 'a' },
+    { matchId: RESULT_VOTING_MATCH_ID, playerId: ricardoId, team: 'b' },
+  ]);
+  if (insertParticipantsError) {
+    throw new Error(
+      `[seed] No se pudieron crear participantes del partido E3: ${insertParticipantsError.message}`,
     );
   }
 }
@@ -742,7 +827,7 @@ async function ensureProfileDisplayName(
   }
 }
 
-async function seedPermanentTeams(client: SupabaseClient): Promise<void> {
+async function seedPermanentTeams(client: SupabaseClient, ricardoId: string): Promise<void> {
   /*
    * Permanent teams for issue #137 E2E coverage.
    *
@@ -750,7 +835,6 @@ async function seedPermanentTeams(client: SupabaseClient): Promise<void> {
    * availability, tournament enrollment, config, navbar and non-captain gates.
    * T2: Mateo is a member but captainId=null. Used to verify claimCaptain.
    */
-  const { userId: ricardoId } = await signInTestPlayerRicardo();
   await ensureProfileDisplayName(client, TEST_USER_ID, 'Mateo Duran E2E');
   await ensureProfileDisplayName(client, ricardoId, 'Ricardo E2E');
 
@@ -1212,16 +1296,20 @@ async function ensureFixtureTournament(
 
 async function seed(): Promise<void> {
   const client = buildAdminClient();
+  const { userId: ricardoId } = await signInTestPlayerRicardo();
+  await ensureProfileDisplayName(client, TEST_USER_ID, 'Mateo Duran E2E');
+  await ensureProfileDisplayName(client, ricardoId, 'Ricardo E2E');
   await ensureMatchExists(client);
   await ensureMatchFullWithTestUser(client);
   await ensureOpenMatchExists(client);
   await ensureTestUserNotInOpenMatch(client);
+  await ensureResultVotingMatchFixture(client, ricardoId);
   await seedClubDashboard(client);
   await seedTournaments(client);
-  await seedPermanentTeams(client);
+  await seedPermanentTeams(client, ricardoId);
   // eslint-disable-next-line no-console
   console.log(
-    '[seed] Fixtures listas: E1 lleno, E2 abierto, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture, equipos permanentes.',
+    '[seed] Fixtures listas: E1 lleno, E2 abierto, E3 resultado, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture, equipos permanentes.',
   );
 }
 

@@ -1,14 +1,25 @@
-import type { APIRequestContext } from '@playwright/test';
+import path from 'node:path';
+import { createClient } from '@supabase/supabase-js';
+import type { APIRequestContext, Browser } from '@playwright/test';
+import dotenv from 'dotenv';
 import {
+  ACCESS_TOKEN_COOKIE,
   BACKEND_GRAPHQL_URL,
   buildMockSubmission,
   buildMockVoter,
   expect,
+  FRONTEND_URL,
+  gqlPost,
   gqlPostOrThrow,
   loginAndReadToken,
+  SEED_MATCHES,
   test,
   TEST_USERS,
 } from './support';
+import type { MockMatchResultSubmission } from './support';
+
+const BACKEND_ENV_PATH = path.resolve(__dirname, '..', '..', 'backend', '.env');
+dotenv.config({ path: BACKEND_ENV_PATH });
 
 /**
  * Tests E2E — US #54 "Confirmar resultado y actualizar stats" (PR #125).
@@ -93,6 +104,23 @@ async function findEligibleMatch(
   request: APIRequestContext,
   accessToken: string,
 ): Promise<MatchSummary | null> {
+  const seededResultMatch = await gqlPostOrThrow<{ match: MatchSummary | null }>(
+    request,
+    /* GraphQL */ `
+      query GetSeedResultVotingMatch($id: ID!) {
+        match(id: $id) {
+          id status startTime durationMin isCurrentUserJoined
+        }
+      }
+    `,
+    { id: SEED_MATCHES.resultVoting },
+    accessToken,
+  ).then((d) => d.match);
+
+  if (seededResultMatch && isEligibleForResultSection(seededResultMatch)) {
+    return seededResultMatch;
+  }
+
   const ids = await gqlPostOrThrow<{ matches: Array<{ id: string }> }>(
     request,
     /* GraphQL */ `
@@ -116,20 +144,21 @@ async function findEligibleMatch(
       accessToken,
     ).then((d) => d.match);
 
-    if (!detail) continue;
-    if (detail.status === 'CANCELLED') continue;
-    if (detail.isCurrentUserJoined !== true) continue;
-
-    // Aligned with the SSR gate in [id].astro: the result section renders once the match has
-    // ENDED (startTime + durationMin), not merely started. Picking a started-but-not-ended
-    // match would make goto() fail because the section never mounts.
-    const endMs =
-      new Date(detail.startTime).getTime() + (detail.durationMin ?? 60) * 60_000;
-    const ended =
-      detail.status === 'COMPLETED' || Date.now() >= endMs;
-    if (ended) return detail;
+    if (detail && isEligibleForResultSection(detail)) return detail;
   }
   return null;
+}
+
+function isEligibleForResultSection(detail: MatchSummary): boolean {
+  if (detail.status === 'CANCELLED') return false;
+  if (detail.isCurrentUserJoined !== true) return false;
+
+  // Aligned with the SSR gate in [id].astro: the result section renders once the match has
+  // ENDED (startTime + durationMin), not merely started. Picking a started-but-not-ended
+  // match would make goto() fail because the section never mounts.
+  const endMs =
+    new Date(detail.startTime).getTime() + (detail.durationMin ?? 60) * 60_000;
+  return detail.status === 'COMPLETED' || Date.now() >= endMs;
 }
 
 test.describe('US #54 — Confirmar resultado y actualizar stats', () => {
@@ -264,11 +293,265 @@ test.describe('US #54 — Confirmar resultado y actualizar stats', () => {
       await expect(matchResultsSectionPage.loadResultButton).toHaveCount(0);
       await expect(matchResultsSectionPage.proposeAnotherButton).toHaveCount(0);
     });
+
+    test('participante carga el primer resultado: marcador + ganador Equipo A via ProposeMatchResult', async ({
+      matchResultsSectionPage,
+      request,
+      page,
+    }) => {
+      const token = await readTokenFromCookies(page);
+      const match = await findEligibleMatch(request, token);
+      test.skip(!match);
+      if (!match) return;
+
+      await matchResultsSectionPage.mockGetSubmissions({
+        data: { matchResultSubmissions: [] },
+      });
+
+      const proposed = buildMockSubmission({
+        id: 'sub-first-result-a',
+        matchId: match.id,
+        submitter: buildMockVoter({ id: 'mateo', displayName: 'Mateo Duran E2E' }),
+        scoreA: 3,
+        scoreB: 2,
+        winnerTeam: 'A',
+        status: 'PENDING',
+        approveCount: 0,
+        rejectCount: 0,
+        hasUserVoted: false,
+        userVote: null,
+        votes: [],
+      });
+      const { payloads } = await matchResultsSectionPage.mockProposeMatchResult({
+        data: { proposeMatchResult: proposed },
+      });
+
+      await matchResultsSectionPage.goto(match.id);
+      await matchResultsSectionPage.loadResultButton.click();
+      await matchResultsSectionPage.fillResult(3, 2);
+
+      await expect(matchResultsSectionPage.resultSummary).toContainText(/Gana Equipo A/i);
+      await expect(matchResultsSectionPage.submitResultButton).toBeEnabled();
+
+      await matchResultsSectionPage.submitResultButton.click();
+
+      await expect.poll(() => payloads.length, { timeout: 10_000 }).toBe(1);
+      expect(payloads[0]).toMatchObject({
+        variables: {
+          input: {
+            matchId: match.id,
+            scoreA: 3,
+            scoreB: 2,
+            winnerTeam: 'A',
+          },
+        },
+      });
+
+      await matchResultsSectionPage.expectPendingBadge(3, 2);
+      await expect(
+        matchResultsSectionPage.section.getByText(/0 aprobaciones/i),
+      ).toBeVisible();
+      await expect(
+        matchResultsSectionPage.section.getByText(/0 rechazos/i),
+      ).toBeVisible();
+      await expect(matchResultsSectionPage.proposeAnotherButton).toBeVisible();
+    });
+
+    test('deriva empate desde el marcador y envia winnerTeam=DRAW', async ({
+      matchResultsSectionPage,
+      request,
+      page,
+    }) => {
+      const token = await readTokenFromCookies(page);
+      const match = await findEligibleMatch(request, token);
+      test.skip(!match);
+      if (!match) return;
+
+      await matchResultsSectionPage.mockGetSubmissions({
+        data: { matchResultSubmissions: [] },
+      });
+
+      const proposed = buildMockSubmission({
+        id: 'sub-first-result-draw',
+        matchId: match.id,
+        scoreA: 1,
+        scoreB: 1,
+        winnerTeam: 'DRAW',
+        approveCount: 0,
+        rejectCount: 0,
+        votes: [],
+      });
+      const { payloads } = await matchResultsSectionPage.mockProposeMatchResult({
+        data: { proposeMatchResult: proposed },
+      });
+
+      await matchResultsSectionPage.goto(match.id);
+      await matchResultsSectionPage.loadResultButton.click();
+      await matchResultsSectionPage.fillResult(1, 1);
+
+      await expect(matchResultsSectionPage.resultSummary).toContainText(/Empate/i);
+      await matchResultsSectionPage.submitResultButton.click();
+
+      await expect.poll(() => payloads.length, { timeout: 10_000 }).toBe(1);
+      expect(payloads[0]).toMatchObject({
+        variables: {
+          input: {
+            matchId: match.id,
+            scoreA: 1,
+            scoreB: 1,
+            winnerTeam: 'DRAW',
+          },
+        },
+      });
+      await matchResultsSectionPage.expectPendingBadge(1, 1);
+    });
   });
 
   /* ════════════════════════════════════════════════════════════════════
      Bloque 2 — Voto APPROVE / REJECT (mutation contract)
      ════════════════════════════════════════════════════════════════════ */
+  test.describe('Contrato real de carga de resultado', () => {
+    test('proposeMatchResult inserta submission, abre voting y queda visible para otro participante', async ({
+      request,
+      page,
+      browser,
+    }) => {
+      const mateoToken = await readTokenFromCookies(page);
+
+      const created = await gqlPostOrThrow<{
+        proposeMatchResult: MockMatchResultSubmission;
+      }>(
+        request,
+        /* GraphQL */ `
+          mutation ProposeResultE2E($input: ProposeMatchResultInput!) {
+            proposeMatchResult(input: $input) {
+              id
+              matchId
+              submitter { id displayName avatarUrl }
+              scoreA
+              scoreB
+              winnerTeam
+              status
+              approveCount
+              rejectCount
+              hasUserVoted
+              userVote
+              createdAt
+              votes {
+                id
+                voter { id displayName avatarUrl }
+                vote
+                createdAt
+              }
+            }
+          }
+        `,
+        {
+          input: {
+            matchId: SEED_MATCHES.resultVoting,
+            scoreA: 4,
+            scoreB: 1,
+            winnerTeam: 'A',
+          },
+        },
+        mateoToken,
+      ).then((d) => d.proposeMatchResult);
+
+      expect(created).toMatchObject({
+        matchId: SEED_MATCHES.resultVoting,
+        scoreA: 4,
+        scoreB: 1,
+        winnerTeam: 'A',
+        status: 'PENDING',
+        approveCount: 0,
+        rejectCount: 0,
+      });
+
+      const votingState = await readMatchVotingState(SEED_MATCHES.resultVoting);
+      expect(votingState.resultStatus).toBe('voting');
+      expect(votingState.resultVotingClosesAt).toBeTruthy();
+
+      const ricardoToken = await readTokenFromStorageState(
+        browser,
+        TEST_USERS.playerRicardo.storageStatePath,
+      );
+      const visibleToRicardo = await gqlPostOrThrow<{
+        matchResultSubmissions: MockMatchResultSubmission[];
+      }>(
+        request,
+        /* GraphQL */ `
+          query GetResultSubmissionsForOtherParticipant($matchId: ID!) {
+            matchResultSubmissions(matchId: $matchId) {
+              id
+              matchId
+              submitter { id displayName avatarUrl }
+              scoreA
+              scoreB
+              winnerTeam
+              status
+              approveCount
+              rejectCount
+              hasUserVoted
+              userVote
+              createdAt
+              votes {
+                id
+                voter { id displayName avatarUrl }
+                vote
+                createdAt
+              }
+            }
+          }
+        `,
+        { matchId: SEED_MATCHES.resultVoting },
+        ricardoToken,
+      ).then((d) => d.matchResultSubmissions.find((s) => s.id === created.id));
+
+      expect(visibleToRicardo, 'El primer resultado cargado debe mostrarse al otro participante').toBeTruthy();
+      expect(visibleToRicardo).toMatchObject({
+        id: created.id,
+        scoreA: 4,
+        scoreB: 1,
+        winnerTeam: 'A',
+        status: 'PENDING',
+        hasUserVoted: false,
+      });
+    });
+
+    test('un usuario autenticado no participante no puede cargar resultado por API', async ({
+      request,
+      browser,
+    }) => {
+      const clubAdminToken = await readTokenFromStorageState(
+        browser,
+        TEST_USERS.clubAdmin.storageStatePath,
+      );
+
+      const payload = await gqlPost<{ proposeMatchResult: { id: string } }>(
+        request,
+        /* GraphQL */ `
+          mutation ProposeResultAsNonParticipant($input: ProposeMatchResultInput!) {
+            proposeMatchResult(input: $input) { id }
+          }
+        `,
+        {
+          input: {
+            matchId: SEED_MATCHES.resultVoting,
+            scoreA: 2,
+            scoreB: 0,
+            winnerTeam: 'A',
+          },
+        },
+        clubAdminToken,
+      );
+
+      expect(payload.data?.proposeMatchResult).toBeFalsy();
+      expect(payload.errors?.[0]?.message ?? '').toMatch(
+        /solo los participantes del partido pueden proponer resultados/i,
+      );
+    });
+  });
+
   test.describe('Voto APPROVE / REJECT', () => {
     test('click en "Aprobar" envía VoteMatchResult con vote=APPROVE y el submissionId correcto', async ({
       matchResultsSectionPage,
@@ -571,7 +854,7 @@ test.describe('US #54 — Confirmar resultado y actualizar stats', () => {
       const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
       const anon = await ctx.newPage();
       try {
-        await anon.goto(`http://localhost:4321/partidos/${match.id}`);
+        await anon.goto(`${FRONTEND_URL}/partidos/${match.id}`);
         await expect(
           anon.getByRole('heading', { name: /resultado del partido/i, level: 2 }),
         ).toHaveCount(0);
@@ -695,11 +978,52 @@ test.describe('Contrato GraphQL voteMatchResult', () => {
  *   no comparte storage con el browser. Reutilizar la sesión existente
  *   evita un login redundante de 1-2s por test.
  */
+function requiredBackendEnv(name: string): string {
+  const value = process.env[name];
+  expect(value, `${name} debe existir en ${BACKEND_ENV_PATH}`).toBeTruthy();
+  return value as string;
+}
+
+async function readMatchVotingState(matchId: string): Promise<{
+  resultStatus: string | null;
+  resultVotingClosesAt: string | null;
+}> {
+  const admin = createClient(
+    requiredBackendEnv('SUPABASE_URL'),
+    requiredBackendEnv('PRIVATE_SUPABASE_SECRET_KEY'),
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { data, error } = await admin
+    .from('matches')
+    .select('"resultStatus", "resultVotingClosesAt"')
+    .eq('id', matchId)
+    .single();
+
+  expect(error, 'No debe fallar la lectura DB de estado de votacion').toBeNull();
+  expect(data, 'El fixture de partido E3 debe existir').toBeTruthy();
+  return data as { resultStatus: string | null; resultVotingClosesAt: string | null };
+}
+
+async function readTokenFromStorageState(
+  browser: Browser,
+  storageStatePath: string,
+): Promise<string> {
+  const context = await browser.newContext({ storageState: storageStatePath });
+  try {
+    const cookies = await context.cookies(FRONTEND_URL);
+    const token = cookies.find((c) => c.name === ACCESS_TOKEN_COOKIE)?.value;
+    expect(token, `storageState ${storageStatePath} debe tener access token`).toBeTruthy();
+    return token as string;
+  } finally {
+    await context.close();
+  }
+}
+
 async function readTokenFromCookies(
   page: import('@playwright/test').Page,
 ): Promise<string> {
-  const cookies = await page.context().cookies('http://localhost:4321');
-  const token = cookies.find((c) => c.name === 'sumateya-access-token')?.value;
+  const cookies = await page.context().cookies(FRONTEND_URL);
+  const token = cookies.find((c) => c.name === ACCESS_TOKEN_COOKIE)?.value;
   if (token) return token;
   // Fallback defensivo: si por algún motivo la cookie no está, hacemos
   // login real (cubre runs donde auth.setup.ts falló silenciosamente).

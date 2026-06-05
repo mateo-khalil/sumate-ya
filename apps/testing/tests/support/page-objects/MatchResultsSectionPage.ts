@@ -54,6 +54,11 @@ export class MatchResultsSectionPage {
   readonly changeVoteButton: Locator;
   readonly editTeamsButton: Locator;
   readonly saveTeamsButton: Locator;
+  readonly scoreAInput: Locator;
+  readonly scoreBInput: Locator;
+  readonly resultSummary: Locator;
+  readonly submitResultButton: Locator;
+  readonly cancelResultButton: Locator;
   readonly errorMessage: Locator;
 
   constructor(page: Page) {
@@ -79,6 +84,12 @@ export class MatchResultsSectionPage {
     // is CONFIRMED (the component hides the toggle once hasConfirmed).
     this.editTeamsButton = this.section.getByRole('button', { name: /editar equipos/i });
     this.saveTeamsButton = this.section.getByRole('button', { name: /guardar equipos/i });
+    const resultForm = this.section.locator('form', { hasText: /marcador final/i });
+    this.scoreAInput = resultForm.locator('input[type="number"]').nth(0);
+    this.scoreBInput = resultForm.locator('input[type="number"]').nth(1);
+    this.resultSummary = resultForm.getByText(/resultado:/i);
+    this.submitResultButton = resultForm.getByRole('button', { name: /enviar resultado/i });
+    this.cancelResultButton = resultForm.getByRole('button', { name: /cancelar/i });
     /*
      * Vote / fetch errors are rendered as <p class="text-destructive"> right
      * under the heading. We use a relaxed text-class selector because the
@@ -160,6 +171,11 @@ export class MatchResultsSectionPage {
   /** Mocks ProposeMatchResult mutation (used by ProposeResultForm sibling). */
   async mockProposeMatchResult<T>(body: T): Promise<{ payloads: Array<{ variables?: unknown }> }> {
     return this.mockOperation('ProposeMatchResult', body);
+  }
+
+  async fillResult(scoreA: number, scoreB: number): Promise<void> {
+    await this.scoreAInput.fill(String(scoreA));
+    await this.scoreBInput.fill(String(scoreB));
   }
 
   /**
