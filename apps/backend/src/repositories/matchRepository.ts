@@ -531,6 +531,52 @@ export async function updateMatchStatus(
   }
 }
 
+/**
+ * Cancel a match as a system side-effect, preserving the row for audit/history.
+ * Uses service-role because the last player leaving is not necessarily the organizer
+ * and the organizer-scoped RLS UPDATE policy would reject the transition.
+ */
+export async function cancelMatchWithReason(
+  matchId: string,
+  reason: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('matches')
+    .update({ status: 'cancelled', cancellationReason: reason })
+    .eq('id', matchId);
+
+  if (error) {
+    console.error(`[matchRepository.cancelMatchWithReason] Supabase error matchId=${matchId}:`, error.message);
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Notify the organizer that their match was auto-cancelled after the last player left.
+ * Uses service-role for the system-generated notification write.
+ */
+export async function insertOrganizerAutoCancelNotification(
+  organizerId: string,
+  matchId: string,
+): Promise<void> {
+  const { error } = await supabase.from('notifications').insert({
+    userId: organizerId,
+    title: 'Partido cancelado automaticamente',
+    body: 'Tu partido fue cancelado porque no quedan jugadores anotados.',
+    type: 'match_auto_cancelled',
+    referenceId: matchId,
+    isRead: false,
+  });
+
+  if (error) {
+    console.error(
+      `[matchRepository.insertOrganizerAutoCancelNotification] Supabase error matchId=${matchId} organizerId=${organizerId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
 // =====================================================
 // Match Creation Types & Functions
 // =====================================================
@@ -1015,6 +1061,8 @@ export const matchRepository = {
   getOpenMatches,
   getMatchWithParticipants,
   updateMatchStatus,
+  cancelMatchWithReason,
+  insertOrganizerAutoCancelNotification,
   removeParticipant,
   countParticipants,
   deleteMatch,
