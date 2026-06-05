@@ -108,6 +108,8 @@ export interface MatchDetailData {
   id: string;
   title: string;
   startTime: string;
+  /** Match duration in minutes; null on legacy rows (frontend falls back to 60). */
+  durationMin: number | null;
   format: MatchFormat;
   totalSlots: number;
   availableSlots: number;
@@ -282,6 +284,7 @@ export const GET_MATCH_DETAIL = /* GraphQL */ `
       id
       title
       startTime
+      durationMin
       format
       totalSlots
       availableSlots

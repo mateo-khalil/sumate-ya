@@ -169,6 +169,10 @@ const STATUS_LEFT_BORDER: Partial<Record<MatchStatus | 'OPEN', string>> = {
 export function MatchCard({ match, onJoin, isAuthenticated = false }: MatchCardProps) {
   const filledSlots = match.totalSlots - match.availableSlots;
   const isOpen = match.status === 'OPEN';
+  // Cancelled matches surface only via the opt-in "Mostrar cancelados" toggle. They are
+  // rendered dimmed with a struck-through title so they read clearly as "no longer happening"
+  // while staying clickable (the detail page shows the cancellation banner).
+  const isCancelled = match.status === 'CANCELLED';
   const isJoinable = isOpen && match.availableSlots > 0;
   // Decision Context: tratamos un partido OPEN con availableSlots=0 como FULL para
   // efectos de UI. El backend a veces deja status='open' aunque ya no queden cupos
@@ -195,6 +199,7 @@ export function MatchCard({ match, onJoin, isAuthenticated = false }: MatchCardP
       className={cn(
         'hover:shadow-2xl hover:border-border/60 hover:-translate-y-0.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         leftBorderClass,
+        isCancelled && 'opacity-60',
       )}
       role="button"
       tabIndex={0}
@@ -225,7 +230,9 @@ export function MatchCard({ match, onJoin, isAuthenticated = false }: MatchCardP
         <div className="flex items-start gap-3 min-w-0">
           {match.club && <ClubAvatar club={match.club} />}
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-lg">{match.title}</CardTitle>
+            <CardTitle className={cn('text-lg', isCancelled && 'line-through')}>
+              {match.title}
+            </CardTitle>
             {match.club && (
               <CardDescription className="flex items-center gap-1 mt-1">
                 <MapPin className="h-3 w-3 shrink-0" />

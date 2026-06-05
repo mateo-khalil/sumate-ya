@@ -18,6 +18,12 @@
  * - URL persistence is intentionally narrow: only filter values useful for
  *   sharing/bookmarks are stored. `onlyMine` IS persisted because a player
  *   sharing their "mis partidos pasados" link wants the toggle preserved.
+ * - `showCancelled` reveals the caller's OWN cancelled matches (auto-cancelled
+ *   for not reaching the roster, or admin-cancelled). It is a private, opt-in,
+ *   authenticated-only dimension: the backend scopes the CANCELLED status to the
+ *   requesting user (see matchService.toFilterOptions), so a second server query
+ *   with `{ status: CANCELLED, onlyMine: true }` is fired by MatchList and merged
+ *   into the active dataset. It is persisted in the URL like `onlyMine`.
  * - Previously fixed bugs: none relevant — new dimension.
  */
 
@@ -31,6 +37,8 @@ export type ClientMatchFilters = MatchFilters & {
   timeTo?: string;
   /** UI tab — maps to status on the server (upcoming → OPEN, past → COMPLETED). */
   timeframe?: MatchTimeframe;
+  /** Reveal the caller's OWN cancelled matches (authenticated-only, opt-in). */
+  showCancelled?: boolean;
 };
 
 export const DEFAULT_MATCH_FILTERS: ClientMatchFilters = {
@@ -135,7 +143,19 @@ export function filterMatches(matches: Match[], filters: ClientMatchFilters): Ma
   const search = normalized.search?.trim().toLowerCase();
 
   return matches.filter((match) => {
-    if (normalized.status && match.status && match.status !== normalized.status) return false;
+    // Status gate: a match must match the active timeframe status (OPEN/COMPLETED). The one
+    // exception is the opt-in "Mostrar cancelados" view, where the caller's own CANCELLED
+    // rows (loaded via a separate server query in MatchList) must survive even though their
+    // status differs from the active timeframe.
+    const isShownCancelled = !!normalized.showCancelled && match.status === 'CANCELLED';
+    if (
+      normalized.status &&
+      match.status &&
+      match.status !== normalized.status &&
+      !isShownCancelled
+    ) {
+      return false;
+    }
     if (normalized.format && match.format !== normalized.format) return false;
     if (normalized.zone && match.club?.zone !== normalized.zone) return false;
 
@@ -168,6 +188,7 @@ export function parseMatchFiltersFromSearch(search: string): ClientMatchFilters 
   const timeframeParam = params.get('timeframe');
   const timeframe: MatchTimeframe = timeframeParam === 'past' ? 'past' : 'upcoming';
   const onlyMine = params.get('onlyMine') === '1';
+  const showCancelled = params.get('showCancelled') === '1';
 
   return normalizeMatchFilters({
     format: format && VALID_FORMATS.has(format) ? format : undefined,
@@ -179,6 +200,7 @@ export function parseMatchFiltersFromSearch(search: string): ClientMatchFilters 
     search: params.get('search') || undefined,
     timeframe,
     onlyMine: timeframe === 'past' && onlyMine ? true : undefined,
+    showCancelled: showCancelled ? true : undefined,
   });
 }
 
@@ -191,6 +213,7 @@ export function writeMatchFiltersToUrl(filters: ClientMatchFilters, href: string
   }
   url.searchParams.delete('timeframe');
   url.searchParams.delete('onlyMine');
+  url.searchParams.delete('showCancelled');
 
   for (const key of URL_FILTER_KEYS) {
     const value = normalized[key];
@@ -204,6 +227,12 @@ export function writeMatchFiltersToUrl(filters: ClientMatchFilters, href: string
     if (normalized.onlyMine) {
       url.searchParams.set('onlyMine', '1');
     }
+  }
+
+  // `showCancelled` is timeframe-independent (a cancelled match may be upcoming or past),
+  // so it is persisted regardless of the active tab.
+  if (normalized.showCancelled) {
+    url.searchParams.set('showCancelled', '1');
   }
 
   return `${url.pathname}${url.search}${url.hash}`;

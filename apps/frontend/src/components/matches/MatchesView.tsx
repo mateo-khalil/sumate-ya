@@ -70,6 +70,7 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
 
   const timeframe: MatchTimeframe = filters.timeframe ?? 'upcoming';
   const onlyMine = !!filters.onlyMine;
+  const showCancelled = !!filters.showCancelled;
 
   const handleTimeframeChange = useCallback(
     (next: MatchTimeframe) => {
@@ -89,6 +90,13 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
   const handleOnlyMineToggle = useCallback(
     (next: boolean) => {
       handleFiltersChange({ ...filters, onlyMine: next ? true : undefined });
+    },
+    [filters, handleFiltersChange],
+  );
+
+  const handleShowCancelledToggle = useCallback(
+    (next: boolean) => {
+      handleFiltersChange({ ...filters, showCancelled: next ? true : undefined });
     },
     [filters, handleFiltersChange],
   );
@@ -138,6 +146,22 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
               aria-label="Mostrar solo los partidos en los que jugué"
             />
             <span>Solo los míos</span>
+          </label>
+        )}
+
+        {/* "Mostrar cancelados" — authenticated-only and timeframe-independent. Reveals
+            ONLY the user's own cancelled matches (auto-cancelled for not filling the roster
+            or admin-cancelled). Hidden for anonymous users because cancelled matches are
+            private and the backend scopes them to the requester. */}
+        {isAuthenticated && (
+          <label className="only-mine-toggle">
+            <input
+              type="checkbox"
+              checked={showCancelled}
+              onChange={(event) => handleShowCancelledToggle(event.target.checked)}
+              aria-label="Mostrar mis partidos cancelados"
+            />
+            <span>Mostrar cancelados</span>
           </label>
         )}
       </div>

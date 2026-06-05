@@ -228,6 +228,12 @@ async function enrichWithCoords<T extends { clubs: { id: string; address: string
  *   ignored when no userId is available.
  * - We deliberately do NOT trust a client-supplied user id; the only source of truth is
  *   the resolver's `requireAuth` / `ctx.user.id`.
+ * - CANCELLED privacy scoping: cancelled matches are private — a user may only ever see
+ *   cancelled matches they participated in or organized, never another player's. So when the
+ *   resolved status is 'cancelled' we FORCE `participantUserId = userId` regardless of the
+ *   `onlyMine` flag. For anonymous callers (no userId) there is no one to scope to, so
+ *   `listMatches` short-circuits to an empty list (see the guard there). This is the single
+ *   server-side guard that prevents cancelled-match enumeration via the public list path.
  */
 function toFilterOptions(
   filters?: MatchFilters | null,
@@ -235,14 +241,17 @@ function toFilterOptions(
 ): MatchFilterOptions {
   if (!filters) return { status: 'open' };
 
+  const status = filters.status ? STATUS_TO_DB[filters.status] : 'open';
+  const scopeToSelf = status === 'cancelled' || Boolean(filters.onlyMine);
+
   return {
-    status: filters.status ? STATUS_TO_DB[filters.status] : 'open',
+    status,
     format: filters.format ? FORMAT_TO_DB[filters.format] : undefined,
     zone: filters.zone ?? undefined,
     dateFrom: filters.dateFrom ?? undefined,
     dateTo: filters.dateTo ?? undefined,
     search: filters.search ?? undefined,
-    participantUserId: filters.onlyMine && userId ? userId : undefined,
+    participantUserId: scopeToSelf && userId ? userId : undefined,
   };
 }
 
@@ -286,6 +295,15 @@ export async function listMatches(
   filters?: MatchFilters | null,
 ): Promise<Match[]> {
   const filterOptions = toFilterOptions(filters, ctx.userId);
+
+  // CANCELLED privacy guard: cancelled matches are only ever visible to a user who was tied
+  // to them. toFilterOptions forces participantUserId for the cancelled status; if the caller
+  // is anonymous there is no scope to apply, so return empty rather than leaking every
+  // cancelled match. (See toFilterOptions Decision Context.)
+  if (filterOptions.status === 'cancelled' && !filterOptions.participantUserId) {
+    return [];
+  }
+
   const cacheKey = getFiltersCacheKey(filterOptions);
 
   const matches = await cacheGetOrSet<MatchWithClub[]>(
@@ -418,6 +436,8 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
     id: row.id,
     title: row.description ?? 'Partido sin título',
     startTime: row.scheduledAt,
+    // durationMin powers the frontend end-of-match gate; null falls back to 60 client-side.
+    durationMin: row.durationMin ?? null,
     format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
     totalSlots: row.capacity,
     availableSlots: Math.max(0, row.capacity - totalCount),

@@ -188,4 +188,40 @@ test.describe('Listado de partidos (/partidos)', () => {
     // error panels). Scope to the first (matches) panel.
     await expect(page.getByText('Server on fire').first()).toBeVisible();
   });
+
+  // Decision Context: "Mostrar cancelados" es un toggle autenticado y opt-in. Por defecto
+  // los partidos cancelados quedan ocultos: la query primaria es OPEN y filterMatches del
+  // cliente descarta el row CANCELLED (status !== OPEN, showCancelled=false), así que se ve
+  // el empty-state. Al activarlo, MatchList dispara una segunda query con
+  // {status: CANCELLED, onlyMine: true}; como mockGraphQLAll responde el mismo body a toda
+  // operación `matches`, el row cancelado se mergea y filterMatches lo conserva → aparece la
+  // card atenuada con badge "Cancelado". Esto valida el flujo extremo a extremo sin depender
+  // del seed. Usa el storageState de playerMateo (autenticado) para que el toggle se renderice.
+  test('toggle "Mostrar cancelados" revela los cancelados, ocultos por defecto', async ({
+    matchesPage,
+    page,
+  }) => {
+    await mockGraphQLAll(page, GRAPHQL_PROXY_ROUTE, {
+      data: {
+        matches: [
+          buildMatch({
+            id: '00000000-0000-0000-0000-0000000000c1',
+            title: 'Partido cancelado por falta de jugadores',
+            status: 'CANCELLED',
+          }),
+        ],
+      },
+    });
+
+    await matchesPage.goto();
+
+    // Oculto por defecto: el único partido es CANCELLED → empty-state.
+    await expect(matchesPage.emptyState).toBeVisible();
+    await expect(matchesPage.card('Partido cancelado por falta de jugadores')).toHaveCount(0);
+
+    // Al activar el toggle, el cancelado aparece con su badge.
+    await matchesPage.showCancelledToggle.check();
+    await expect(matchesPage.card('Partido cancelado por falta de jugadores')).toBeVisible();
+    await expect(page.getByText('Cancelado').first()).toBeVisible();
+  });
 });

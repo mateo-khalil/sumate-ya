@@ -19,6 +19,12 @@
  *     ignore timeframe/onlyMine changes. Switching to "Pasados" appeared to do nothing
  *     because the backing dataset never refreshed. Fixed by depending on the serialized
  *     server filters in the effect.
+ * - "Mostrar cancelados": the server `status` filter (and its Redis cache key) is
+ *   single-valued, so cancelled matches cannot be merged into the OPEN/COMPLETED query.
+ *   When the toggle is on AND the user is authenticated, a SECOND query with
+ *   `{ status: CANCELLED, onlyMine: true }` runs in parallel and its rows are merged
+ *   (deduped by id) into the dataset. The backend scopes CANCELLED to the caller, so this
+ *   only ever returns the user's own cancelled matches — never another player's.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -62,18 +68,37 @@ export function MatchList({
 
   const filters = controlledFilters ?? internalFilters;
   const serverFilters = useMemo(() => toServerMatchFilters(filters), [filters]);
+  // Cancelled matches are private and authenticated-only; the toggle is ignored for
+  // anonymous callers (the backend would return empty anyway).
+  const showCancelled = !!filters.showCancelled && isAuthenticated;
   // Stable fingerprint of the server-side dimensions; the fetch effect refreshes whenever
-  // this value changes (e.g. timeframe upcoming↔past or onlyMine on/off).
-  const serverFiltersKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
+  // this value changes (e.g. timeframe upcoming↔past, onlyMine on/off, or showCancelled).
+  const serverFiltersKey = useMemo(
+    () => JSON.stringify({ ...serverFilters, showCancelled }),
+    [serverFilters, showCancelled],
+  );
 
   useEffect(() => {
     if (initialMatches) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    executeQuery<{ matches: Match[] }>(GET_MATCHES, { filters: serverFilters })
-      .then((data) => {
-        if (!cancelled) setMatches(data.matches);
+    // Primary dataset (active timeframe) + optional own-cancelled dataset, merged and
+    // deduped by id. The cancelled query is scoped server-side to the caller.
+    Promise.all([
+      executeQuery<{ matches: Match[] }>(GET_MATCHES, { filters: serverFilters }),
+      showCancelled
+        ? executeQuery<{ matches: Match[] }>(GET_MATCHES, {
+            filters: { status: 'CANCELLED', onlyMine: true },
+          })
+        : Promise.resolve({ matches: [] as Match[] }),
+    ])
+      .then(([primary, cancelledData]) => {
+        if (cancelled) return;
+        const byId = new Map<string, Match>();
+        for (const m of primary.matches) byId.set(m.id, m);
+        for (const m of cancelledData.matches) byId.set(m.id, m);
+        setMatches([...byId.values()]);
       })
       .catch((err: unknown) => {
         if (!cancelled) {

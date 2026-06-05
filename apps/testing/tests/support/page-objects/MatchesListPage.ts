@@ -30,6 +30,7 @@ export class MatchesListPage {
   readonly dateToInput: Locator;
   readonly clearButton: Locator;
   readonly emptyState: Locator;
+  readonly showCancelledToggle: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -44,6 +45,9 @@ export class MatchesListPage {
     this.dateToInput = page.getByLabel(/fecha hasta/i);
     this.clearButton = page.getByRole('button', { name: /limpiar/i });
     this.emptyState = page.getByText('No hay partidos disponibles');
+    // Authenticated-only checkbox that reveals the caller's own cancelled matches.
+    // Rendered in the timeframe row by MatchesView; matched by its aria-label.
+    this.showCancelledToggle = page.getByLabel(/mostrar mis partidos cancelados/i);
   }
 
   async goto(path = '/partidos'): Promise<void> {
