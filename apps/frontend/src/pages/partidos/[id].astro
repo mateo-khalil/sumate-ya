@@ -124,16 +124,25 @@ const matchFull = match?.status === 'FULL' || (match != null && match.availableS
 const matchJoinable = matchOpen && !matchFull;
 const currentUserTeam = match?.currentUserTeam ?? null;
 
-// Show result section when the match has already taken place:
-// - status is COMPLETED or IN_PROGRESS, OR
-// - match start time is in the past (slot already happened)
-// Only visible to participants of non-cancelled matches.
-// Previously fixed bugs: P1 audit — cancelled matches with past startTime were showing
-// the section; the !matchCancelled guard prevents proposals/votes on cancelled matches.
-const matchStarted = match
-  ? matchCompleted || matchInProgress || new Date(match.startTime) < new Date()
-  : false;
-const showResultSection = matchStarted && isJoined && isPlayer && !matchCancelled;
+// Result loading/voting is gated on the match END time (startTime + durationMin), NOT the
+// start time. The US is explicit: a player arriving while the match is still being played
+// (e.g. 16:58 for a 17:00 finish) must see "Partido en juego, volvé más tarde"; only once it
+// has ended do they get the load/vote options.
+// - matchEnded: COMPLETED, or now >= startTime + durationMin (durationMin null -> 60 default).
+// - matchInPlay: between start and end (or IN_PROGRESS) — show the "in play" notice instead.
+// Both are scoped to participants of non-cancelled matches.
+// Previously fixed bugs:
+//   - P1 audit — cancelled matches with past startTime were showing the section; the
+//     !matchCancelled guard prevents proposals/votes on cancelled matches.
+//   - Section appeared at START time, letting players load a result mid-match; now gated on
+//     END time so "Partido en juego" shows until the match actually finishes.
+const startMs = match ? new Date(match.startTime).getTime() : 0;
+const endMs = match ? startMs + (match.durationMin ?? 60) * 60_000 : 0;
+const nowMs = Date.now();
+const matchEnded = match ? matchCompleted || nowMs >= endMs : false;
+const matchInPlay = match ? !matchEnded && (matchInProgress || nowMs >= startMs) : false;
+const showResultSection = matchEnded && isJoined && isPlayer && !matchCancelled;
+const showInPlayNotice = matchInPlay && isJoined && isPlayer && !matchCancelled;
 
 const allParticipants = [...teamA, ...teamB];
 const organizerParticipant = match?.organizerId
@@ -295,7 +304,16 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
             </div>
           )}
 
-          <!-- Section 4: Result voting — only after match has started, only for participants -->
+          <!-- Section 4a: "Partido en juego" notice — between start and end, for participants.
+               Tells the player the result can't be loaded yet (gating is on the END time). -->
+          {showInPlayNotice && (
+            <div class="banner banner--inplay" role="status">
+              <span class="banner-icon"><Activity size={18} strokeWidth={2.25} aria-hidden="true" /></span>
+              <span class="banner-msg">Partido en juego. Volvé más tarde para cargar el resultado.</span>
+            </div>
+          )}
+
+          <!-- Section 4b: Result voting — only after the match has ended, only for participants -->
           {showResultSection && (
             <MatchResultsSection
               client:visible
@@ -303,6 +321,8 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
               isParticipant={isJoined}
               backendUrl={backendUrl}
               accessToken={accessToken}
+              teamA={teamA}
+              teamB={teamB}
             />
           )}
 
@@ -498,6 +518,8 @@ const organizerPosition = organizerParticipant?.preferredPosition ?? null;
   .banner--enrolled-cancelled { background: hsl(35 20% 18% / 0.6); border: 1px solid hsl(35 30% 35% / 0.4); color: hsl(35 25% 60%); }
   /* P4: match in progress — FIFA blue (same family as --open but distinct message) */
   .banner--inprogress { background: hsl(216 85% 45% / 0.12); border: 1px solid hsl(216 85% 55% / 0.4); color: hsl(216 85% 72%); }
+  /* "Partido en juego" notice (result gating on end time) — same blue as --inprogress */
+  .banner--inplay { background: hsl(216 85% 45% / 0.12); border: 1px solid hsl(216 85% 55% / 0.4); color: hsl(216 85% 72%); }
   /* P4: match completed — neutral gray */
   .banner--completed { background: hsl(215 15% 18% / 0.6); border: 1px solid rgba(255,255,255,0.1); color: hsl(215 15% 55%); }
 

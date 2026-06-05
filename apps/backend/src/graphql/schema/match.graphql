@@ -60,6 +60,10 @@ type Match {
   id: ID!
   title: String!
   startTime: String!
+  # Match duration in minutes. Nullable: only populated on single-match detail queries.
+  # The frontend computes the match end time (startTime + durationMin) to gate the result
+  # section ("Partido en juego" before the end; result loading/voting after the end).
+  durationMin: Int
   format: MatchFormat!
   totalSlots: Int!
   # Computed: totalSlots − totalParticipants (or totalSlots when participants not loaded)

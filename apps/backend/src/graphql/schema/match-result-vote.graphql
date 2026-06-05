@@ -75,6 +75,17 @@ input VoteMatchResultInput {
   vote: VoteValue!
 }
 
+# One player's team assignment for a roster correction.
+input TeamAssignmentInput {
+  playerId: ID!
+  team: MatchTeam!
+}
+
+input ReassignMatchTeamsInput {
+  matchId: ID!
+  assignments: [TeamAssignmentInput!]!
+}
+
 extend type Query {
   # Returns all submissions for a match, newest first.
   # Requires authentication. Caller must be a participant of the match.
@@ -90,4 +101,9 @@ extend type Mutation {
   # Requires authentication. Caller must be a participant.
   # Uses UPSERT — calling again with a different vote changes the existing vote.
   voteMatchResult(input: VoteMatchResultInput!): VoteSubmissionResult!
+
+  # Reassign participants between Team A and Team B (roster correction at result time).
+  # Requires authentication. Caller must be a participant. Only allowed after the match
+  # has ended and before the result is confirmed. Returns the updated participant rosters.
+  reassignMatchTeams(input: ReassignMatchTeamsInput!): MatchParticipantsData!
 }

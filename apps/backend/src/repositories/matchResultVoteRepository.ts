@@ -85,6 +85,13 @@ export interface MatchStatusRow {
   status: string;
 }
 
+export interface MatchTimingRow {
+  id: string;
+  status: string;
+  scheduledAt: string;
+  durationMin: number | null;
+}
+
 export interface CreateSubmissionInput {
   matchId: string;
   submitterId: string;
@@ -118,6 +125,30 @@ export async function getMatchStatus(matchId: string): Promise<MatchStatusRow | 
   }
 
   return data as MatchStatusRow;
+}
+
+/**
+ * Fetch match timing (status + scheduledAt + durationMin) for the end-of-match guard.
+ * Used by proposeMatchResult to refuse proposals while the match is still in play.
+ * Uses service-role; no user data involved.
+ */
+export async function getMatchTiming(matchId: string): Promise<MatchTimingRow | null> {
+  const { data, error } = await supabase
+    .from('matches')
+    .select('id, status, "scheduledAt", "durationMin"')
+    .eq('id', matchId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    console.error(
+      `[matchResultVoteRepository.getMatchTiming] Supabase error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return data as MatchTimingRow;
 }
 
 /**
@@ -301,6 +332,35 @@ export async function countMatchParticipants(matchId: string): Promise<number> {
   }
 
   return count ?? 0;
+}
+
+/**
+ * Count DISTINCT participants who have cast at least one vote on ANY submission of a match.
+ * Drives the "all voted" early-resolution trigger: once distinct voters reach the participant
+ * count, voting can be resolved without waiting for the 24h deadline.
+ *
+ * Decision Context:
+ * - Votes link to submissions, not directly to the match, so we filter through an inner-joined
+ *   matchResultSubmissions embed and dedupe voterId in memory (egress is just voterId column).
+ * - A participant who only ever rejected still counts as "voted".
+ * - Previously fixed bugs: none relevant.
+ */
+export async function countDistinctVotersForMatch(matchId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('matchResultVotes')
+    .select('"voterId", matchResultSubmissions!inner("matchId")')
+    .eq('matchResultSubmissions.matchId', matchId);
+
+  if (error) {
+    console.error(
+      `[matchResultVoteRepository.countDistinctVotersForMatch] Supabase error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  const voterIds = new Set((data ?? []).map((r) => (r as { voterId: string }).voterId));
+  return voterIds.size;
 }
 
 /**
@@ -496,8 +556,97 @@ export async function confirmMatchResultAtomic(
   };
 }
 
+// =====================================================
+// Resolution (deadline / all-voted) + team reassignment (RPC wrappers)
+// =====================================================
+
+export interface ResolveVotingResult {
+  resolved: boolean;
+  reason?: string;
+  matchId?: string;
+  participantIds: string[];
+}
+
+/**
+ * Resolve match result voting through the `resolve_match_result_voting` RPC: picks the
+ * pending submission with the most approvals and applies the same confirmation cascade as
+ * the instant path (the RPC also refreshes competitive stats internally).
+ *
+ * Decision Context:
+ * - Called on the "all voted" path with the user-scoped client. The RPC does NOT require
+ *   auth.uid() (it is also invoked by pg_cron), but we still pass the user client to keep
+ *   the call inside the caller's RLS session.
+ * - Returns resolved=false with a reason when there is nothing to confirm (already resolved,
+ *   no pending proposals, or zero approvals → match flagged 'disputed').
+ * - Previously fixed bugs: none relevant.
+ */
+export async function resolveMatchResultVoting(
+  matchId: string,
+  client: SupabaseClient,
+): Promise<ResolveVotingResult> {
+  const { data, error } = await client.rpc('resolve_match_result_voting', {
+    p_match_id: matchId,
+  });
+
+  if (error) {
+    console.error(
+      `[matchResultVoteRepository.resolveMatchResultVoting] Supabase RPC error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  const payload = data as {
+    resolved: boolean;
+    reason?: string;
+    matchId?: string;
+    participantIds?: string[];
+  };
+
+  return {
+    resolved: payload.resolved,
+    reason: payload.reason,
+    matchId: payload.matchId,
+    participantIds: payload.participantIds ?? [],
+  };
+}
+
+/**
+ * Reassign participants between teams through the `reassign_match_teams` RPC.
+ * Must be called with the user-scoped client so the RPC's auth.uid() participant check runs.
+ *
+ * Decision Context:
+ * - matchParticipants has no UPDATE RLS policy by design; the SECURITY DEFINER RPC performs
+ *   the move after validating the caller is a participant, the match has ended, and the
+ *   result is not yet confirmed.
+ * - assignments use the lowercase matchTeam enum ('a'/'b') — the service maps GraphQL A/B.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function reassignMatchTeams(
+  matchId: string,
+  assignments: { playerId: string; team: 'a' | 'b' }[],
+  client: SupabaseClient,
+): Promise<void> {
+  const { error } = await client.rpc('reassign_match_teams', {
+    p_match_id: matchId,
+    p_assignments: assignments,
+  });
+
+  if (error) {
+    console.error(
+      `[matchResultVoteRepository.reassignMatchTeams] Supabase RPC error matchId=${matchId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
 export const matchResultVoteRepository = {
   getMatchStatus,
+  getMatchTiming,
+  countDistinctVotersForMatch,
+  resolveMatchResultVoting,
+  reassignMatchTeams,
   isParticipant,
   getSubmissionsByMatch,
   getSubmissionById,

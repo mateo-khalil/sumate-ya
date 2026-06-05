@@ -74,6 +74,26 @@ const Mutation: MutationResolvers = {
       { userId: user.id, supabase: userClient },
     );
   },
+
+  /**
+   * Reassign participants between teams (roster correction at result time).
+   * Requires auth + participant. User-scoped client lets the RPC's auth.uid() check run.
+   */
+  reassignMatchTeams: async (_parent, args, ctx) => {
+    const user = requireAuth(ctx);
+    const userClient = ctx.accessToken ? createUserClient(ctx.accessToken) : undefined;
+
+    return matchResultVoteService.reassignMatchTeams(
+      {
+        matchId: args.input.matchId,
+        assignments: args.input.assignments.map((a) => ({
+          playerId: a.playerId,
+          team: a.team,
+        })),
+      },
+      { userId: user.id, supabase: userClient },
+    );
+  },
 };
 
 export const matchResultResolvers = { Query, Mutation };

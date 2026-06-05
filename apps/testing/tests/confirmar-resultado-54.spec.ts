@@ -73,6 +73,7 @@ type MatchSummary = {
   id: string;
   status: 'OPEN' | 'FULL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   startTime: string;
+  durationMin: number | null;
   isCurrentUserJoined: boolean | null;
 };
 
@@ -107,7 +108,7 @@ async function findEligibleMatch(
       /* GraphQL */ `
         query GetMatchForResultSection($id: ID!) {
           match(id: $id) {
-            id status startTime isCurrentUserJoined
+            id status startTime durationMin isCurrentUserJoined
           }
         }
       `,
@@ -119,11 +120,14 @@ async function findEligibleMatch(
     if (detail.status === 'CANCELLED') continue;
     if (detail.isCurrentUserJoined !== true) continue;
 
-    const started =
-      detail.status === 'IN_PROGRESS' ||
-      detail.status === 'COMPLETED' ||
-      new Date(detail.startTime) < new Date();
-    if (started) return detail;
+    // Aligned with the SSR gate in [id].astro: the result section renders once the match has
+    // ENDED (startTime + durationMin), not merely started. Picking a started-but-not-ended
+    // match would make goto() fail because the section never mounts.
+    const endMs =
+      new Date(detail.startTime).getTime() + (detail.durationMin ?? 60) * 60_000;
+    const ended =
+      detail.status === 'COMPLETED' || Date.now() >= endMs;
+    if (ended) return detail;
   }
   return null;
 }
@@ -574,6 +578,57 @@ test.describe('US #54 — Confirmar resultado y actualizar stats', () => {
       } finally {
         await ctx.close();
       }
+    });
+  });
+
+  /* ════════════════════════════════════════════════════════════════════
+     Bloque 5b — Editar equipos (reasignar A/B antes de confirmar)
+     ════════════════════════════════════════════════════════════════════
+     Decision Context:
+     - The "Editar equipos" toggle is visible while no submission is CONFIRMED. Opening it
+       mounts EditTeamsForm (one A/B segmented toggle per participant). Saving fires the
+       ReassignMatchTeams mutation; on success the component reloads the page so the SSR team
+       grid reflects the change — so we assert the captured payload right after the click
+       (the reload may detach the page afterwards). The mutation is mocked to keep the suite
+       hermetic (a real reassignment mutates matchParticipants for the shared seed match). */
+  test.describe('Editar equipos (reasignar A/B)', () => {
+    test('abre el editor y envía ReassignMatchTeams con el matchId correcto al guardar', async ({
+      matchResultsSectionPage,
+      request,
+      page,
+    }) => {
+      const token = await readTokenFromCookies(page);
+      const match = await findEligibleMatch(request, token);
+      test.skip(!match);
+      if (!match) return;
+
+      await matchResultsSectionPage.mockGetSubmissions({
+        data: { matchResultSubmissions: [] },
+      });
+      const { payloads } = await matchResultsSectionPage.mockReassignMatchTeams({
+        data: {
+          reassignMatchTeams: {
+            teamA: [],
+            teamB: [],
+            teamACount: 0,
+            teamBCount: 0,
+            totalCount: 0,
+            spotsLeftA: 0,
+            spotsLeftB: 0,
+          },
+        },
+      });
+
+      await matchResultsSectionPage.goto(match.id);
+
+      await expect(matchResultsSectionPage.editTeamsButton).toBeVisible();
+      await matchResultsSectionPage.editTeamsButton.click();
+      await expect(matchResultsSectionPage.saveTeamsButton).toBeVisible();
+
+      await matchResultsSectionPage.saveTeamsButton.click();
+
+      await expect.poll(() => payloads.length, { timeout: 10_000 }).toBe(1);
+      expect(payloads[0]).toMatchObject({ variables: { input: { matchId: match.id } } });
     });
   });
 });

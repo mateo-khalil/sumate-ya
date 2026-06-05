@@ -61,6 +61,36 @@ export interface VoteMatchResultInput {
   vote: VoteValue;
 }
 
+export type MatchTeam = 'A' | 'B';
+
+export interface RosterMember {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  preferredPosition: string | null;
+  division: number | null;
+}
+
+export interface MatchParticipantsData {
+  teamA: RosterMember[];
+  teamB: RosterMember[];
+  teamACount: number;
+  teamBCount: number;
+  totalCount: number;
+  spotsLeftA: number;
+  spotsLeftB: number;
+}
+
+export interface TeamAssignmentInput {
+  playerId: string;
+  team: MatchTeam;
+}
+
+export interface ReassignMatchTeamsInput {
+  matchId: string;
+  assignments: TeamAssignmentInput[];
+}
+
 // =====================================================
 // GraphQL Operation Strings
 // =====================================================
@@ -119,6 +149,20 @@ export const VOTE_MATCH_RESULT = /* GraphQL */ `
     voteMatchResult(input: $input) {
       statusChanged
       submission { ...SubmissionFields }
+    }
+  }
+`;
+
+export const REASSIGN_MATCH_TEAMS = /* GraphQL */ `
+  mutation ReassignMatchTeams($input: ReassignMatchTeamsInput!) {
+    reassignMatchTeams(input: $input) {
+      teamA { id displayName avatarUrl preferredPosition division }
+      teamB { id displayName avatarUrl preferredPosition division }
+      teamACount
+      teamBCount
+      totalCount
+      spotsLeftA
+      spotsLeftB
     }
   }
 `;

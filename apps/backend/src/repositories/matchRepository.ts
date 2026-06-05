@@ -426,6 +426,7 @@ const MATCH_DETAIL_COLUMNS = `
   "organizerId",
   description,
   "scheduledAt",
+  "durationMin",
   format,
   capacity,
   status,
@@ -461,6 +462,7 @@ export interface MatchDetailRow {
   organizerId: string;
   description: string | null;
   scheduledAt: string;
+  durationMin: number | null;
   format: string;
   capacity: number;
   status: string;

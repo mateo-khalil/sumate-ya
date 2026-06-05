@@ -47,13 +47,16 @@ import {
   CACHE_TTL,
 } from '../config/redis.js';
 import {
+  MatchTeam,
   SubmissionStatus,
   VoteValue,
   WinnerTeam,
   type MatchResultSubmission,
+  type MatchParticipantsData,
   type VoteSubmissionResult,
 } from '../graphql/generated/graphql.js';
 import { matchResultVoteRepository, type SubmissionRow, type VoteRow, type MatchStatusRow } from '../repositories/matchResultVoteRepository.js';
+import { matchRepository, type MatchDetailRow } from '../repositories/matchRepository.js';
 import type { ServiceContext } from '../types/context.js';
 
 // =====================================================
@@ -76,6 +79,18 @@ const proposeSchema = z.object({
 const voteSchema = z.object({
   submissionId: uuidSchema,
   vote: z.enum(['APPROVE', 'REJECT'], { message: 'Voto inválido' }),
+});
+
+const reassignSchema = z.object({
+  matchId: uuidSchema,
+  assignments: z
+    .array(
+      z.object({
+        playerId: uuidSchema,
+        team: z.enum(['A', 'B'], { message: 'Equipo inválido' }),
+      }),
+    )
+    .min(1, { message: 'Indicá al menos una asignación de equipo' }),
 });
 
 // =====================================================
@@ -198,11 +213,20 @@ export async function proposeMatchResult(
     winnerTeam: input.winnerTeam ?? undefined,
   });
 
-  // Guard: load match status before any participant/DB write check
-  const matchStatus = await matchResultVoteRepository.getMatchStatus(parsed.matchId);
-  if (!matchStatus) throw new Error('Partido no encontrado');
-  if (matchStatus.status === 'cancelled') {
+  // Guard: load match timing before any participant/DB write check.
+  // End-of-match gate (defense in depth): the frontend only shows the result section once
+  // the match has ended (scheduledAt + durationMin), but a crafted request could bypass the
+  // UI — so the service refuses proposals while the match is still in play. durationMin is
+  // nullable for legacy rows; fall back to 60 minutes to match the frontend default.
+  const matchTiming = await matchResultVoteRepository.getMatchTiming(parsed.matchId);
+  if (!matchTiming) throw new Error('Partido no encontrado');
+  if (matchTiming.status === 'cancelled') {
     throw new Error('El partido fue cancelado, no se pueden proponer ni votar resultados');
+  }
+  const endMs =
+    new Date(matchTiming.scheduledAt).getTime() + (matchTiming.durationMin ?? 60) * 60_000;
+  if (Date.now() < endMs) {
+    throw new Error('El partido todavía está en juego, volvé más tarde para cargar el resultado');
   }
 
   const isPlayer = await matchResultVoteRepository.isParticipant(parsed.matchId, ctx.userId);
@@ -348,6 +372,51 @@ export async function voteMatchResult(
     }
   }
 
+  // "All voted" early resolution (US: "o si todos los jugadores ya votaron").
+  // When no submission crossed the strict approve-majority above but every participant has
+  // now cast at least one vote, resolve immediately instead of waiting for the 24h deadline:
+  // the resolve RPC picks the pending proposal with the MOST approvals and applies the same
+  // cascade (it also refreshes competitive stats internally). The 24h pg_cron path is the
+  // fallback for matches where not everyone votes.
+  if (!statusChanged) {
+    const distinctVoters = await matchResultVoteRepository.countDistinctVotersForMatch(
+      submission.matchId,
+    );
+
+    if (totalParticipants > 0 && distinctVoters >= totalParticipants) {
+      const resolveResult = await matchResultVoteRepository.resolveMatchResultVoting(
+        submission.matchId,
+        db,
+      );
+
+      if (resolveResult.resolved) {
+        statusChanged = true;
+
+        console.info(
+          `[matchResultVoteService.voteMatchResult] all participants voted — resolved match=${submission.matchId} via majority of approvals`,
+        );
+
+        // Stats/division already refreshed inside the RPC; only invalidate caches here.
+        await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${submission.matchId}`);
+        await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${submission.matchId}`);
+        await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
+        await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
+
+        await Promise.all(
+          resolveResult.participantIds.flatMap((uid) => [
+            cacheDeletePattern(`${CACHE_PREFIX.USER_MATCHES}${uid}*`),
+            cacheDelete(`${CACHE_PREFIX.PROFILE_ME}${uid}`),
+            cacheDelete(`profile:public:${uid}`),
+          ]),
+        );
+      } else {
+        console.info(
+          `[matchResultVoteService.voteMatchResult] all participants voted but match=${submission.matchId} not resolved — reason=${resolveResult.reason ?? 'unknown'}`,
+        );
+      }
+    }
+  }
+
   await cacheDelete(`${SUBMISSIONS_PREFIX}${submission.matchId}`);
 
   const updatedSubmission = await matchResultVoteRepository.getSubmissionById(parsed.submissionId);
@@ -395,8 +464,92 @@ export async function getMatchResultSubmissions(
   return rows.map((row) => toSubmissionDTO(row, userId));
 }
 
+/**
+ * Build the GraphQL MatchParticipantsData (team rosters + counts) from a detail row.
+ * Mirrors the shape produced by matchService.toMatchDetail so the reassign mutation can
+ * return the freshly-updated rosters without coupling to that module.
+ */
+function buildParticipantsData(row: MatchDetailRow): MatchParticipantsData {
+  const map = (team: 'a' | 'b') =>
+    row.matchParticipants
+      .filter((p) => p.team === team)
+      .map((p) => ({
+        id: p.profiles.id,
+        displayName: p.profiles.displayName,
+        avatarUrl: p.profiles.avatarUrl ?? null,
+        preferredPosition: p.profiles.preferredPosition ?? null,
+        division: p.profiles.division,
+      }));
+
+  const teamA = map('a');
+  const teamB = map('b');
+  const spotsPerTeam = Math.floor(row.capacity / 2);
+
+  return {
+    teamA,
+    teamB,
+    teamACount: teamA.length,
+    teamBCount: teamB.length,
+    totalCount: teamA.length + teamB.length,
+    spotsLeftA: Math.max(0, spotsPerTeam - teamA.length),
+    spotsLeftB: Math.max(0, spotsPerTeam - teamB.length),
+  };
+}
+
+/**
+ * Reassign participants between Team A and Team B (roster correction at result time).
+ *
+ * Decision Context:
+ * - Why: matchesWon is computed from matchParticipants.team at confirmation, so a participant
+ *   loading the result must be able to fix rosters that changed mid-match or were set wrong at
+ *   join time, BEFORE the result is confirmed.
+ * - Authorization + window/confirmation guards live in the reassign_match_teams RPC
+ *   (SECURITY DEFINER) because matchParticipants has no UPDATE RLS policy by design. The
+ *   participant check is duplicated here for a clean early error message.
+ * - GraphQL teams (A/B) are mapped to the lowercase matchTeam enum (a/b) before the RPC call.
+ * - Caches: match:participants:{id} and match:{id} are invalidated so the SSR detail page and
+ *   the result section read the corrected rosters on the next load.
+ * - Returns the updated rosters so the client can reflect the change without a full refetch.
+ * - Previously fixed bugs: none relevant (new capability).
+ */
+export async function reassignMatchTeams(
+  input: { matchId: string; assignments: { playerId: string; team: MatchTeam }[] },
+  ctx: ServiceContext,
+): Promise<MatchParticipantsData> {
+  if (!ctx.userId) throw new Error('Se requiere autenticación');
+  const db = ctx.supabase;
+  if (!db) throw new Error('Se requiere cliente con contexto de usuario');
+
+  const parsed = reassignSchema.parse(input);
+
+  const isPlayer = await matchResultVoteRepository.isParticipant(parsed.matchId, ctx.userId);
+  if (!isPlayer) {
+    throw new Error('Solo los participantes del partido pueden editar los equipos');
+  }
+
+  const assignments = parsed.assignments.map((a) => ({
+    playerId: a.playerId,
+    team: (a.team === 'A' ? 'a' : 'b') as 'a' | 'b',
+  }));
+
+  await matchResultVoteRepository.reassignMatchTeams(parsed.matchId, assignments, db);
+
+  console.info(
+    `[matchResultVoteService.reassignMatchTeams] userId=${ctx.userId} matchId=${parsed.matchId} assignments=${assignments.length}`,
+  );
+
+  await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${parsed.matchId}`);
+  await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${parsed.matchId}`);
+
+  const row = await matchRepository.getMatchWithParticipants(parsed.matchId);
+  if (!row) throw new Error('Partido no encontrado');
+
+  return buildParticipantsData(row);
+}
+
 export const matchResultVoteService = {
   proposeMatchResult,
   voteMatchResult,
   getMatchResultSubmissions,
+  reassignMatchTeams,
 };

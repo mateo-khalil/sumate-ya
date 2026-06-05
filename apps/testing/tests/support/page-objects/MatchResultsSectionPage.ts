@@ -52,6 +52,8 @@ export class MatchResultsSectionPage {
   readonly approveButton: Locator;
   readonly rejectButton: Locator;
   readonly changeVoteButton: Locator;
+  readonly editTeamsButton: Locator;
+  readonly saveTeamsButton: Locator;
   readonly errorMessage: Locator;
 
   constructor(page: Page) {
@@ -72,6 +74,11 @@ export class MatchResultsSectionPage {
     this.approveButton = this.section.getByRole('button', { name: /^aprobar$/i });
     this.rejectButton = this.section.getByRole('button', { name: /^rechazar$/i });
     this.changeVoteButton = this.section.getByRole('button', { name: /cambiar voto/i });
+    // Roster-correction controls (EditTeamsForm): the "Editar equipos" toggle opens the form
+    // and "Guardar equipos" submits the ReassignMatchTeams mutation. Available until a result
+    // is CONFIRMED (the component hides the toggle once hasConfirmed).
+    this.editTeamsButton = this.section.getByRole('button', { name: /editar equipos/i });
+    this.saveTeamsButton = this.section.getByRole('button', { name: /guardar equipos/i });
     /*
      * Vote / fetch errors are rendered as <p class="text-destructive"> right
      * under the heading. We use a relaxed text-class selector because the
@@ -153,6 +160,22 @@ export class MatchResultsSectionPage {
   /** Mocks ProposeMatchResult mutation (used by ProposeResultForm sibling). */
   async mockProposeMatchResult<T>(body: T): Promise<{ payloads: Array<{ variables?: unknown }> }> {
     return this.mockOperation('ProposeMatchResult', body);
+  }
+
+  /**
+   * Mocks the ReassignMatchTeams mutation fired by EditTeamsForm. Returns the captured
+   * payloads so a spec can assert the assignments sent. Note: on success the component calls
+   * window.location.reload(), so assert the payload (via expect.poll) right after the click.
+   */
+  async mockReassignMatchTeams<T>(body: T): Promise<{ payloads: Array<{ variables?: unknown }> }> {
+    return this.mockOperation('ReassignMatchTeams', body);
+  }
+
+  /** The A/B toggle button for a given player inside the open EditTeamsForm. */
+  teamToggle(playerName: string, team: 'A' | 'B'): Locator {
+    return this.section
+      .locator('li', { hasText: playerName })
+      .getByRole('button', { name: new RegExp(`^equipo ${team}$`, 'i') });
   }
 
   /**

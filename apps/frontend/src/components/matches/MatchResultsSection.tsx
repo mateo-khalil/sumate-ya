@@ -26,14 +26,18 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Check, X } from 'lucide-react';
-import type { MatchResultSubmission } from '../../graphql/operations/match-results.js';
+import { Check, X, Users } from 'lucide-react';
+import type {
+  MatchResultSubmission,
+  RosterMember,
+} from '../../graphql/operations/match-results.js';
 import {
   GET_MATCH_RESULT_SUBMISSIONS,
   VOTE_MATCH_RESULT,
   type VoteValue,
 } from '../../graphql/operations/match-results.js';
 import ProposeResultForm from './ProposeResultForm.js';
+import EditTeamsForm from './EditTeamsForm.js';
 import { parseGqlError } from '../../lib/parseGqlError.js';
 
 interface Props {
@@ -41,6 +45,9 @@ interface Props {
   isParticipant: boolean;
   backendUrl: string;
   accessToken: string;
+  /** Current rosters, passed from the SSR page so teams can be corrected at result time. */
+  teamA: RosterMember[];
+  teamB: RosterMember[];
 }
 
 async function gql<T>(
@@ -250,11 +257,14 @@ export default function MatchResultsSection({
   isParticipant,
   backendUrl,
   accessToken,
+  teamA,
+  teamB,
 }: Props) {
   const [submissions, setSubmissions] = useState<MatchResultSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showEditTeams, setShowEditTeams] = useState(false);
   const [voting, setVoting] = useState<string | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
 
@@ -384,6 +394,29 @@ export default function MatchResultsSection({
           accessToken={accessToken}
           onSuccess={handleProposed}
           onCancel={() => setShowForm(false)}
+        />
+      )}
+
+      {/* Edit teams: roster correction available until the result is confirmed.
+          On success we reload so the SSR team grid (rendered outside this island) is fresh. */}
+      {!loading && !hasConfirmed && !showEditTeams && (
+        <button
+          onClick={() => setShowEditTeams(true)}
+          className="inline-flex items-center gap-2 bg-transparent border border-white/12 rounded-lg text-muted-foreground font-condensed text-[0.85rem] font-bold tracking-[0.07em] py-[0.45rem] px-[1.1rem] cursor-pointer self-start"
+        >
+          <Users size={14} strokeWidth={2.25} aria-hidden="true" /> Editar equipos
+        </button>
+      )}
+
+      {showEditTeams && (
+        <EditTeamsForm
+          matchId={matchId}
+          teamA={teamA}
+          teamB={teamB}
+          backendUrl={backendUrl}
+          accessToken={accessToken}
+          onSuccess={() => window.location.reload()}
+          onCancel={() => setShowEditTeams(false)}
         />
       )}
     </section>
