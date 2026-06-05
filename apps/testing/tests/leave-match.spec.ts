@@ -1,12 +1,20 @@
+import path from 'node:path';
+import { createClient } from '@supabase/supabase-js';
 import type { APIRequestContext } from '@playwright/test';
+import dotenv from 'dotenv';
 import {
   BACKEND_GRAPHQL_ROUTE,
   expect,
   gqlPost,
+  gqlPostOrThrow,
   loginAndReadToken,
   mockGraphQLOperation,
+  SEED_MATCHES,
   test,
 } from './support';
+
+const BACKEND_ENV_PATH = path.resolve(__dirname, '..', '..', 'backend', '.env');
+dotenv.config({ path: BACKEND_ENV_PATH });
 
 /**
  * Tests E2E del flujo "Salirme del partido" (LeaveMatchButton).
@@ -258,3 +266,193 @@ test.describe('Salirme del partido (LeaveMatchButton)', () => {
     await expect(loading).toHaveAttribute('aria-busy', 'true');
   });
 });
+
+test.describe('Auto-cancel cuando leaveMatch deja 0 jugadores', () => {
+  test('conserva el partido como CANCELLED, limpia participantes, notifica e invalida caches', async ({
+    page,
+    request,
+  }) => {
+    const token = await loginAndReadToken(page, 'playerRicardo');
+
+    const before = await fetchMatchAutoCancelDetail(request, token);
+    expect(before).toMatchObject({
+      id: SEED_MATCHES.emptyAutoCancel,
+      status: 'OPEN',
+      isCurrentUserJoined: true,
+      participants: { totalCount: 1 },
+    });
+
+    const result = await gqlPostOrThrow<{
+      leaveMatch: {
+        matchDeleted: boolean;
+        match: MatchAutoCancelDetail | null;
+      };
+    }>(
+      request,
+      /* GraphQL */ `
+        mutation LeaveLastParticipantAutoCancelE2E($input: LeaveMatchInput!) {
+          leaveMatch(input: $input) {
+            matchDeleted
+            match {
+              id
+              status
+              availableSlots
+              isCurrentUserJoined
+              participants {
+                teamACount
+                teamBCount
+                totalCount
+              }
+            }
+          }
+        }
+      `,
+      { input: { matchId: SEED_MATCHES.emptyAutoCancel } },
+      token,
+    ).then((data) => data.leaveMatch);
+
+    expect(result.matchDeleted).toBe(false);
+    expect(result.match).toMatchObject({
+      id: SEED_MATCHES.emptyAutoCancel,
+      status: 'CANCELLED',
+      isCurrentUserJoined: false,
+      participants: {
+        teamACount: 0,
+        teamBCount: 0,
+        totalCount: 0,
+      },
+    });
+
+    const dbMatch = await readAutoCancelMatchState(SEED_MATCHES.emptyAutoCancel);
+    expect(dbMatch.status).toBe('cancelled');
+    expect(dbMatch.cancellationReason).toMatch(/no quedan jugadores/i);
+    await expect.poll(() => countParticipants(SEED_MATCHES.emptyAutoCancel)).toBe(0);
+
+    const notifications = await readOrganizerAutoCancelNotifications(
+      SEED_MATCHES.emptyAutoCancel,
+      dbMatch.organizerId,
+    );
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      userId: dbMatch.organizerId,
+      type: 'match_auto_cancelled',
+      referenceId: SEED_MATCHES.emptyAutoCancel,
+      isRead: false,
+    });
+    expect(notifications[0].body).toMatch(/no quedan jugadores/i);
+
+    const fresh = await fetchMatchAutoCancelDetail(request, token);
+    expect(fresh).toMatchObject({
+      id: SEED_MATCHES.emptyAutoCancel,
+      status: 'CANCELLED',
+      isCurrentUserJoined: false,
+      participants: { totalCount: 0 },
+    });
+  });
+});
+
+type MatchAutoCancelDetail = {
+  id: string;
+  status: 'OPEN' | 'FULL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  availableSlots: number;
+  isCurrentUserJoined: boolean | null;
+  participants: {
+    teamACount: number;
+    teamBCount: number;
+    totalCount: number;
+  } | null;
+};
+
+type AutoCancelMatchRow = {
+  id: string;
+  status: string;
+  cancellationReason: string | null;
+  organizerId: string;
+};
+
+type AutoCancelNotificationRow = {
+  id: string;
+  userId: string;
+  type: string;
+  title: string | null;
+  body: string | null;
+  referenceId: string;
+  isRead: boolean;
+};
+
+async function fetchMatchAutoCancelDetail(
+  request: APIRequestContext,
+  accessToken: string,
+): Promise<MatchAutoCancelDetail | null> {
+  return gqlPostOrThrow<{ match: MatchAutoCancelDetail | null }>(
+    request,
+    /* GraphQL */ `
+      query GetAutoCancelMatchE2E($id: ID!) {
+        match(id: $id) {
+          id
+          status
+          availableSlots
+          isCurrentUserJoined
+          participants {
+            teamACount
+            teamBCount
+            totalCount
+          }
+        }
+      }
+    `,
+    { id: SEED_MATCHES.emptyAutoCancel },
+    accessToken,
+  ).then((data) => data.match);
+}
+
+function requiredBackendEnv(name: string): string {
+  const value = process.env[name];
+  expect(value, `${name} debe existir en ${BACKEND_ENV_PATH}`).toBeTruthy();
+  return value as string;
+}
+
+function adminClient() {
+  return createClient(
+    requiredBackendEnv('SUPABASE_URL'),
+    requiredBackendEnv('PRIVATE_SUPABASE_SECRET_KEY'),
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
+
+async function readAutoCancelMatchState(matchId: string): Promise<AutoCancelMatchRow> {
+  const { data, error } = await adminClient()
+    .from('matches')
+    .select('id, status, "cancellationReason", "organizerId"')
+    .eq('id', matchId)
+    .single();
+
+  expect(error, 'No debe fallar la lectura DB del partido auto-cancelado').toBeNull();
+  expect(data, 'El fixture E4 debe seguir existiendo despues del leaveMatch').toBeTruthy();
+  return data as AutoCancelMatchRow;
+}
+
+async function countParticipants(matchId: string): Promise<number> {
+  const { count, error } = await adminClient()
+    .from('matchParticipants')
+    .select('id', { count: 'exact', head: true })
+    .eq('matchId', matchId);
+
+  expect(error, 'No debe fallar el conteo DB de participantes').toBeNull();
+  return count ?? 0;
+}
+
+async function readOrganizerAutoCancelNotifications(
+  matchId: string,
+  organizerId: string,
+): Promise<AutoCancelNotificationRow[]> {
+  const { data, error } = await adminClient()
+    .from('notifications')
+    .select('id, "userId", type, title, body, "referenceId", "isRead"')
+    .eq('referenceId', matchId)
+    .eq('userId', organizerId)
+    .eq('type', 'match_auto_cancelled');
+
+  expect(error, 'No debe fallar la lectura DB de notificaciones').toBeNull();
+  return (data ?? []) as AutoCancelNotificationRow[];
+}

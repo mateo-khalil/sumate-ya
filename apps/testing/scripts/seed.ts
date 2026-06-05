@@ -72,6 +72,14 @@ const RESULT_VOTING_MATCH_FORMAT = '5v5';
 const RESULT_VOTING_MATCH_DURATION_MIN = 60;
 const RESULT_VOTING_MATCH_DAYS_AGO = 2;
 
+// Cuarto partido E4: un solo participante. Dedicado al flujo donde leaveMatch deja
+// el partido con 0 jugadores y debe auto-cancelarlo sin borrar el registro.
+const EMPTY_AUTO_CANCEL_MATCH_ID = 'e1000000-0000-0000-0000-000000000004';
+const EMPTY_AUTO_CANCEL_MATCH_CAPACITY = 10;
+const EMPTY_AUTO_CANCEL_MATCH_FORMAT = '5v5';
+const EMPTY_AUTO_CANCEL_MATCH_DURATION_MIN = 60;
+const EMPTY_AUTO_CANCEL_MATCH_DAYS_AHEAD = 10;
+
 const CLUB_DASHBOARD_FIXTURE = {
   clubId: 'b2000000-0000-0000-0000-000000000001',
   courtId: 'c2000000-0000-0000-0000-000000000001',
@@ -449,6 +457,94 @@ async function ensureResultVotingMatchFixture(
   if (insertParticipantsError) {
     throw new Error(
       `[seed] No se pudieron crear participantes del partido E3: ${insertParticipantsError.message}`,
+    );
+  }
+}
+
+async function ensureEmptyAutoCancelMatchFixture(
+  client: SupabaseClient,
+  ricardoId: string,
+): Promise<void> {
+  const { data: club, error: clubError } = await client
+    .from('clubs')
+    .select('id')
+    .order('createdAt', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (clubError) {
+    throw new Error(`[seed] Error consultando clubs (E4): ${clubError.message}`);
+  }
+  if (!club) {
+    throw new Error('[seed] No hay clubes en la DB para crear el partido E4.');
+  }
+
+  const scheduledAt = new Date(
+    Date.now() + EMPTY_AUTO_CANCEL_MATCH_DAYS_AHEAD * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const { error: upsertError } = await client.from('matches').upsert(
+    {
+      id: EMPTY_AUTO_CANCEL_MATCH_ID,
+      organizerId: TEST_USER_ID,
+      clubId: club.id,
+      format: EMPTY_AUTO_CANCEL_MATCH_FORMAT,
+      capacity: EMPTY_AUTO_CANCEL_MATCH_CAPACITY,
+      scheduledAt,
+      durationMin: EMPTY_AUTO_CANCEL_MATCH_DURATION_MIN,
+      status: 'open',
+      resultStatus: 'pending',
+      resultVotingClosesAt: null,
+      cancellationReason: null,
+      scoreTeamA: null,
+      scoreTeamB: null,
+      winningTeam: null,
+      description: 'Partido E4 (seed E2E) - se autocancela al quedar vacio.',
+    },
+    { onConflict: 'id' },
+  );
+  if (upsertError) {
+    throw new Error(`[seed] No se pudo crear/ajustar el partido E4: ${upsertError.message}`);
+  }
+
+  const { error: deleteSubmissionsError } = await client
+    .from('matchResultSubmissions')
+    .delete()
+    .eq('matchId', EMPTY_AUTO_CANCEL_MATCH_ID);
+  if (deleteSubmissionsError) {
+    throw new Error(
+      `[seed] No se pudieron limpiar submissions del partido E4: ${deleteSubmissionsError.message}`,
+    );
+  }
+
+  const { error: deleteParticipantsError } = await client
+    .from('matchParticipants')
+    .delete()
+    .eq('matchId', EMPTY_AUTO_CANCEL_MATCH_ID);
+  if (deleteParticipantsError) {
+    throw new Error(
+      `[seed] No se pudieron limpiar participantes del partido E4: ${deleteParticipantsError.message}`,
+    );
+  }
+
+  const { error: deleteNotificationsError } = await client
+    .from('notifications')
+    .delete()
+    .eq('referenceId', EMPTY_AUTO_CANCEL_MATCH_ID)
+    .eq('type', 'match_auto_cancelled');
+  if (deleteNotificationsError) {
+    throw new Error(
+      `[seed] No se pudieron limpiar notificaciones del partido E4: ${deleteNotificationsError.message}`,
+    );
+  }
+
+  const { error: insertParticipantsError } = await client.from('matchParticipants').insert({
+    matchId: EMPTY_AUTO_CANCEL_MATCH_ID,
+    playerId: ricardoId,
+    team: 'a',
+  });
+  if (insertParticipantsError) {
+    throw new Error(
+      `[seed] No se pudo crear el participante unico del partido E4: ${insertParticipantsError.message}`,
     );
   }
 }
@@ -1304,12 +1400,13 @@ async function seed(): Promise<void> {
   await ensureOpenMatchExists(client);
   await ensureTestUserNotInOpenMatch(client);
   await ensureResultVotingMatchFixture(client, ricardoId);
+  await ensureEmptyAutoCancelMatchFixture(client, ricardoId);
   await seedClubDashboard(client);
   await seedTournaments(client);
   await seedPermanentTeams(client, ricardoId);
   // eslint-disable-next-line no-console
   console.log(
-    '[seed] Fixtures listas: E1 lleno, E2 abierto, E3 resultado, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture, equipos permanentes.',
+    '[seed] Fixtures listas: E1 lleno, E2 abierto, E3 resultado, E4 auto-cancel, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture, equipos permanentes.',
   );
 }
 

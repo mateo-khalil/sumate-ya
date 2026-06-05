@@ -2,8 +2,8 @@
  * Match Service - Business logic for matches
  *
  * Decision Context:
- * - Why: Services return data only (no side effects) per backend.md rules. Side effects
- *   (broadcasts, notifications) must stay in resolvers, not here.
+ * - Why: Services own match-domain orchestration: validation, writes, cache invalidation,
+ *   and small domain side effects such as system notifications tied to the same mutation.
  * - Caching: All read paths go through `cacheGetOrSet()` (egress-prevention rule). TTL is
  *   `DYNAMIC_DATA` (3 min) because match slots change frequently; single-match lookups use
  *   `SINGLE_ENTITY` (30 min). When mutations land that change match state, invalidate via
@@ -591,7 +591,7 @@ export async function joinMatch(
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Leave a match as a player, with optional auto-deletion when the last participant exits.
+ * Leave a match as a player, with optional auto-cancellation when the last participant exits.
  *
  * Decision Context:
  * - Validation order (fail-fast):
@@ -604,10 +604,10 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  *   5. Membership check — explicit "not enrolled" error instead of a silent 0-row DELETE.
  *   6. DELETE via user-scoped client — RLS enforces auth.uid() = playerId.
  *   7. Count remaining participants.
- *   8. If 0 → deleteMatch() via service-role (auto-elimination); invalidate list caches.
+ *   8. If 0 → cancelMatchWithReason() via service-role, notify organizer, invalidate list caches.
  *   9. If was 'full' → updateMatchStatus('open') via service-role + invalidate list caches.
  *  10. Invalidate participant + detail caches regardless.
- *  11. Return { match: null, matchDeleted: true } or { match: updatedMatch, matchDeleted: false }.
+ *  11. Return { match: cancelled/updatedMatch, matchDeleted: false }.
  *
  * Caso A — organizador se sale:
  *   The match keeps the organizerId FK pointing to the player who left, but they no longer
@@ -618,8 +618,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * Caso B — último participante:
  *   countParticipants() reads after the DELETE to get the authoritative count.
  *   Race condition: two players leaving simultaneously when each is the last would both
- *   read count=0; deleteMatch is idempotent (DELETE WHERE id=x on missing row returns 0
- *   rows without error in PostgreSQL). At most one spurious no-op call to deleteMatch.
+ *   read count=0; the status UPDATE is idempotent enough for the user-facing state, and the
+ *   match remains preserved as cancelled rather than being deleted.
  *
  * Caso C — partido full → open:
  *   The service-role update is required because the organizer-scoped RLS UPDATE policy
@@ -670,17 +670,25 @@ export async function leaveMatch(
   // 6. Count remaining participants
   const remaining = await matchRepository.countParticipants(input.matchId);
 
-  // 7. Auto-delete if no participants left (Caso B)
+  // 7. Auto-cancel if no participants left (Caso B)
   if (remaining === 0) {
-    await matchRepository.deleteMatch(input.matchId);
+    await matchRepository.cancelMatchWithReason(
+      input.matchId,
+      'Cancelado automaticamente porque no quedan jugadores anotados',
+    );
+    await matchRepository.insertOrganizerAutoCancelNotification(
+      matchRow.organizerId,
+      input.matchId,
+    );
     await cacheDelete(`${CACHE_PREFIX.MATCH_PARTICIPANTS}${input.matchId}`);
     await cacheDelete(`${CACHE_PREFIX.MATCH_DETAIL}${input.matchId}`);
     await cacheDelete(CACHE_PREFIX.MATCHES_OPEN);
     await cacheDeletePattern(`${CACHE_PREFIX.MATCHES_LIST}:*`);
     console.info(
-      `[matchService.leaveMatch] matchId=${input.matchId} auto-deleted (0 participants)`,
+      `[matchService.leaveMatch] matchId=${input.matchId} auto-cancelled (0 participants)`,
     );
-    return { match: null, matchDeleted: true };
+    const cancelledMatch = await getMatchDetail({ userId: ctx.userId }, input.matchId);
+    return { match: cancelledMatch ?? null, matchDeleted: false };
   }
 
   // 8. Re-open if was full (Caso C)

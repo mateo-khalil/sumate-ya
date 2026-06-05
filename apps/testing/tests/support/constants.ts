@@ -72,6 +72,8 @@ export const SEED_MATCHES = {
   open: 'e1000000-0000-0000-0000-000000000002',
   /** COMPLETED match with Mateo + Ricardo, reset for result-submission specs. */
   resultVoting: 'e1000000-0000-0000-0000-000000000003',
+  /** OPEN match with a single Ricardo participant; leaving it auto-cancels the match. */
+  emptyAutoCancel: 'e1000000-0000-0000-0000-000000000004',
 } as const;
 
 /**
