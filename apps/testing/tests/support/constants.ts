@@ -70,6 +70,8 @@ export const SEED_MATCHES = {
   full: 'e1000000-0000-0000-0000-000000000001',
   /** OPEN match with 0 participants. */
   open: 'e1000000-0000-0000-0000-000000000002',
+  /** COMPLETED match with Mateo + Ricardo, reset for result-submission specs. */
+  resultVoting: 'e1000000-0000-0000-0000-000000000003',
 } as const;
 
 /**
