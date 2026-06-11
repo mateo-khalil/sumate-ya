@@ -80,3 +80,9 @@ Auto generate tests with Codegen.
 We suggest that you begin by typing:
 
     npx playwright test
+
+## Operacion
+
+- Backend DigitalOcean: `docs/deploy-digitalocean-backend.md`
+- Observabilidad Grafana/Prometheus/Loki: `docs/observability.md`
+- Performance k6: `docs/performance-k6.md`

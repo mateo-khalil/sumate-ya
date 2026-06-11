@@ -17,15 +17,13 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck --force",
     "test": "turbo test",
+    "loadtest:backend": "turbo run loadtest --filter=@sumate-ya/backend",
     "pretest:e2e": "bash scripts/kill-dev-ports.sh",
     "test:e2e": "npm --prefix apps/testing test",
     "pretest:e2e:headed": "bash scripts/kill-dev-ports.sh",
     "test:e2e:headed": "npm --prefix apps/testing run test:headed",
     "codegen": "turbo codegen",
-    "format": "turbo format",
-    "docker:up": "docker compose up --build -d",
-    "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f app"
+    "format": "turbo format"
   },
   "devDependencies": {
     "supabase": "^2.89.1",

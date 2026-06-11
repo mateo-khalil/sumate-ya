@@ -24,6 +24,8 @@ import { fileURLToPath } from 'url';
 
 import { resolvers } from './resolvers/index.js';
 import { createUserClient } from '../config/supabase.js';
+import { logger } from '../observability/logger.js';
+import { observeGraphqlRequest } from '../observability/metrics.js';
 import type { GraphQLContext } from '../types/context.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -93,44 +95,56 @@ export async function applyApolloMiddleware(app: Express): Promise<void> {
 
   // Manual Express integration for Apollo Server 5
   app.use('/graphql', async (req: Request, res: Response) => {
+    const startedAt = process.hrtime.bigint();
+    const operation = getOperationMetadata(req.body);
     const authHeader = req.headers.authorization;
-    const user = await extractUserFromToken(authHeader);
 
-    const contextValue: GraphQLContext = {
-      user,
-      accessToken: authHeader?.slice(7),
-    };
+    try {
+      const user = await extractUserFromToken(authHeader);
 
-    // Handle the GraphQL request
-    const { body, headers, status } = await server.executeHTTPGraphQLRequest({
-      httpGraphQLRequest: {
-        method: req.method,
-        headers: toHeaderMap(req.headers),
-        body: req.body,
-        search: new URL(req.url, `http://${req.headers.host}`).search,
-      },
-      context: async () => contextValue,
-    });
+      const contextValue: GraphQLContext = {
+        user,
+        accessToken: authHeader?.slice(7),
+      };
 
-    // Set response headers
-    for (const [key, value] of headers) {
-      res.setHeader(key, value);
-    }
+      // Handle the GraphQL request
+      const { body, headers, status } = await server.executeHTTPGraphQLRequest({
+        httpGraphQLRequest: {
+          method: req.method,
+          headers: toHeaderMap(req.headers),
+          body: req.body,
+          search: new URL(req.url, `http://${req.headers.host}`).search,
+        },
+        context: async () => contextValue,
+      });
 
-    res.status(status ?? 200);
-
-    if (body.kind === 'complete') {
-      res.send(body.string);
-    } else {
-      // Handle chunked response if needed
-      for await (const chunk of body.asyncIterator) {
-        res.write(chunk);
+      // Set response headers
+      for (const [key, value] of headers) {
+        res.setHeader(key, value);
       }
-      res.end();
+
+      const statusCode = status ?? 200;
+      res.status(statusCode);
+
+      if (body.kind === 'complete') {
+        observeGraphql(operation, statusCode, body.string, startedAt);
+        res.send(body.string);
+      } else {
+        observeGraphql(operation, statusCode, undefined, startedAt);
+        // Handle chunked response if needed
+        for await (const chunk of body.asyncIterator) {
+          res.write(chunk);
+        }
+        res.end();
+      }
+    } catch (err) {
+      observeGraphql(operation, 500, undefined, startedAt, true);
+      logger.error({ event: 'graphql_request_failed', err, operation }, 'GraphQL request failed');
+      throw err;
     }
   });
 
-  console.log('[Apollo] GraphQL endpoint ready at /graphql');
+  logger.info({ event: 'apollo_ready', path: '/graphql' }, 'GraphQL endpoint ready');
 }
 
 function toHeaderMap(headers: Request['headers']): HeaderMap {
@@ -148,4 +162,55 @@ function toHeaderMap(headers: Request['headers']): HeaderMap {
   }
 
   return headerMap;
+}
+
+function getOperationMetadata(body: unknown): { operationName: string; operationType: string } {
+  const requestBody = Array.isArray(body) ? body[0] : body;
+
+  if (!requestBody || typeof requestBody !== 'object') {
+    return { operationName: 'unknown', operationType: 'unknown' };
+  }
+
+  const maybeOperationName = 'operationName' in requestBody ? requestBody.operationName : undefined;
+  const maybeQuery = 'query' in requestBody ? requestBody.query : undefined;
+  const operationName =
+    typeof maybeOperationName === 'string' && maybeOperationName.trim()
+      ? maybeOperationName.trim()
+      : 'anonymous';
+  const operationType =
+    typeof maybeQuery === 'string'
+      ? (maybeQuery.match(/\b(query|mutation|subscription)\b/i)?.[1] ?? 'unknown')
+      : 'unknown';
+
+  return {
+    operationName,
+    operationType: operationType.toLowerCase(),
+  };
+}
+
+function observeGraphql(
+  operation: { operationName: string; operationType: string },
+  statusCode: number,
+  responseBody: string | undefined,
+  startedAt: bigint,
+  forcedError = false,
+): void {
+  const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+  const hasGraphqlErrors = responseBody ? responseHasGraphqlErrors(responseBody) : false;
+
+  observeGraphqlRequest({
+    operationName: operation.operationName,
+    operationType: operation.operationType,
+    status: forcedError || statusCode >= 400 || hasGraphqlErrors ? 'error' : 'ok',
+    durationSeconds,
+  });
+}
+
+function responseHasGraphqlErrors(responseBody: string): boolean {
+  try {
+    const parsed = JSON.parse(responseBody) as { errors?: unknown };
+    return Array.isArray(parsed.errors) && parsed.errors.length > 0;
+  } catch {
+    return false;
+  }
 }

@@ -11,6 +11,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createInstrumentedSupabaseFetch } from '../observability/metrics.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseSecretKey = process.env.PRIVATE_SUPABASE_SECRET_KEY;
@@ -37,6 +38,9 @@ export const supabase: SupabaseClient = createClient(
   supabaseUrl,
   serverSupabaseKey || supabaseAnonKey!,
   {
+    global: {
+      fetch: createInstrumentedSupabaseFetch('server'),
+    },
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -54,6 +58,9 @@ export function createAnonClient(): SupabaseClient {
   }
 
   return createClient(supabaseUrl!, supabaseAnonKey, {
+    global: {
+      fetch: createInstrumentedSupabaseFetch('anon'),
+    },
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -74,6 +81,7 @@ export function createUserClient(accessToken: string): SupabaseClient {
 
   return createClient(supabaseUrl!, supabaseAnonKey, {
     global: {
+      fetch: createInstrumentedSupabaseFetch('user'),
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },

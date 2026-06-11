@@ -7,3 +7,5 @@ node_modules/
 .vscode/
 .turbo
 .mcp.json
+apps/backend/load-tests/results/*
+!apps/backend/load-tests/results/.gitkeep
