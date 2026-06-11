@@ -1,0 +1,153 @@
+{
+  "uid": "sumate-backend-overview",
+  "title": "Sumate Ya Backend Overview",
+  "tags": ["sumate-ya", "backend"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "API Up",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "up{job=\"sumate-backend\"}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Down" }, "1": { "text": "Up" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "type": "timeseries",
+      "title": "RPS",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 4, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_requests_total{job=\"sumate-backend\",route!=\"/metrics\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Errors",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "4xx",
+          "expr": "sum(rate(http_requests_total{job=\"sumate-backend\",status_code=~\"4..\"}[5m]))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "5xx",
+          "expr": "sum(rate(http_requests_total{job=\"sumate-backend\",status_code=~\"5..\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Latency p50/p95/p99",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"sumate-backend\",route!=\"/metrics\"}[5m])) by (le))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"sumate-backend\",route!=\"/metrics\"}[5m])) by (le))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "p99",
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"sumate-backend\",route!=\"/metrics\"}[5m])) by (le))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "GraphQL p95 by Operation",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{operation_name}}",
+          "expr": "histogram_quantile(0.95, sum(rate(graphql_request_duration_seconds_bucket{job=\"sumate-backend\"}[5m])) by (le, operation_name))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Redis Cache Hit Ratio",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{cache_prefix}}",
+          "expr": "sum(rate(redis_cache_requests_total{job=\"sumate-backend\",result=\"hit\"}[5m])) by (cache_prefix) / clamp_min(sum(rate(redis_cache_requests_total{job=\"sumate-backend\"}[5m])) by (cache_prefix), 1)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Supabase Latency p95 by Service",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{service}}/{{client_scope}}",
+          "expr": "histogram_quantile(0.95, sum(rate(supabase_request_duration_seconds_bucket{job=\"sumate-backend\"}[5m])) by (le, service, client_scope))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "type": "logs",
+      "title": "Backend Errors",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{app=\"sumate-ya-backend\"} | json | level =~ \"error|fatal|warn\""
+        }
+      ],
+      "options": {
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}

@@ -20,6 +20,22 @@
       "dependsOn": ["codegen"],
       "outputs": ["coverage/**"]
     },
+    "loadtest": {
+      "cache": false,
+      "outputs": ["load-tests/results/**"],
+      "passThroughEnv": [
+        "API_URL",
+        "K6_AUTH_TOKEN",
+        "K6_AUTH_TOKENS",
+        "K6_JOIN_MATCH_ID",
+        "K6_MATCH_ID",
+        "K6_TOURNAMENT_ID",
+        "K6_READ_RATE",
+        "K6_READ_DURATION",
+        "K6_JOIN_VUS",
+        "K6_JOIN_DURATION"
+      ]
+    },
     "codegen": {
       "outputs": ["src/graphql/generated/**"]
     },

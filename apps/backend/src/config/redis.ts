@@ -9,6 +9,12 @@
  */
 
 import { Redis } from 'ioredis';
+import { logger } from '../observability/logger.js';
+import {
+  recordRedisCacheOperation,
+  recordRedisCacheRequest,
+  setRedisAvailability,
+} from '../observability/metrics.js';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
@@ -26,16 +32,18 @@ if (process.env.REDIS_URL) {
   redis = redisClient;
 
   redisClient.on('error', (err: Error) => {
-    console.warn('[Redis] Connection error (caching disabled):', err.message);
+    logger.warn({ event: 'redis_connection_error', err }, 'Redis connection error; caching disabled');
     redisAvailable = false;
+    setRedisAvailability(false);
   });
 
   redisClient.on('connect', () => {
-    console.log('[Redis] Connected successfully');
+    logger.info({ event: 'redis_connected' }, 'Redis connected successfully');
     redisAvailable = true;
+    setRedisAvailability(true);
   });
 } else {
-  console.log('[Redis] REDIS_URL not set, caching disabled');
+  logger.info({ event: 'redis_disabled' }, 'REDIS_URL not set, caching disabled');
 }
 
 // =====================================================
@@ -99,16 +107,24 @@ export const CACHE_TTL = {
  * Get cached value
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
-  if (!redis || !redisAvailable) return null;
+  const prefix = cacheMetricPrefix(key);
+
+  if (!redis || !redisAvailable) {
+    recordRedisCacheOperation('get', 'disabled', prefix);
+    return null;
+  }
 
   try {
     const cached = await redis.get(key);
+    recordRedisCacheOperation('get', 'ok', prefix);
+    recordRedisCacheRequest(cached ? 'hit' : 'miss', prefix);
     if (cached) {
       return JSON.parse(cached) as T;
     }
     return null;
   } catch (error) {
-    console.error(`[Redis] cacheGet error for key ${key}:`, error);
+    recordRedisCacheOperation('get', 'error', prefix);
+    logger.error({ event: 'redis_cache_get_error', err: error, key }, 'Redis cacheGet error');
     return null;
   }
 }
@@ -117,12 +133,19 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
  * Set cached value with TTL
  */
 export async function cacheSet<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
-  if (!redis || !redisAvailable) return;
+  const prefix = cacheMetricPrefix(key);
+
+  if (!redis || !redisAvailable) {
+    recordRedisCacheOperation('set', 'disabled', prefix);
+    return;
+  }
 
   try {
     await redis.setex(key, ttlSeconds, JSON.stringify(value));
+    recordRedisCacheOperation('set', 'ok', prefix);
   } catch (error) {
-    console.error(`[Redis] cacheSet error for key ${key}:`, error);
+    recordRedisCacheOperation('set', 'error', prefix);
+    logger.error({ event: 'redis_cache_set_error', err: error, key }, 'Redis cacheSet error');
   }
 }
 
@@ -138,17 +161,17 @@ export async function cacheGetOrSet<T>(
   try {
     const cached = await cacheGet<T>(key);
     if (cached !== null) {
-      console.log(`[Redis] Cache HIT: ${key}`);
+      logger.debug({ event: 'redis_cache_hit', key }, 'Redis cache hit');
       return cached;
     }
 
-    console.log(`[Redis] Cache MISS: ${key}`);
+    logger.debug({ event: 'redis_cache_miss', key }, 'Redis cache miss');
     const fresh = await fetchFn();
     await cacheSet(key, fresh, ttlSeconds);
     return fresh;
   } catch (error) {
     // If Redis fails, still return fresh data
-    console.error(`[Redis] cacheGetOrSet error for key ${key}:`, error);
+    logger.error({ event: 'redis_cache_get_or_set_error', err: error, key }, 'Redis cacheGetOrSet error');
     return fetchFn();
   }
 }
@@ -157,13 +180,20 @@ export async function cacheGetOrSet<T>(
  * Delete a specific cache key
  */
 export async function cacheDelete(key: string): Promise<void> {
-  if (!redis || !redisAvailable) return;
+  const prefix = cacheMetricPrefix(key);
+
+  if (!redis || !redisAvailable) {
+    recordRedisCacheOperation('delete', 'disabled', prefix);
+    return;
+  }
 
   try {
     await redis.del(key);
-    console.log(`[Redis] Deleted key: ${key}`);
+    recordRedisCacheOperation('delete', 'ok', prefix);
+    logger.debug({ event: 'redis_cache_delete', key }, 'Redis cache key deleted');
   } catch (error) {
-    console.error(`[Redis] cacheDelete error for key ${key}:`, error);
+    recordRedisCacheOperation('delete', 'error', prefix);
+    logger.error({ event: 'redis_cache_delete_error', err: error, key }, 'Redis cacheDelete error');
   }
 }
 
@@ -177,14 +207,38 @@ export async function cacheDelete(key: string): Promise<void> {
  * Redis-less dev environment would 500.
  */
 export async function cacheDeletePattern(pattern: string): Promise<void> {
-  if (!redis || !redisAvailable) return;
+  const prefix = cacheMetricPrefix(pattern);
+
+  if (!redis || !redisAvailable) {
+    recordRedisCacheOperation('delete_pattern', 'disabled', prefix);
+    return;
+  }
 
   try {
     const keys = await redis.keys(pattern);
     if (keys.length > 0) {
       await redis.del(...keys);
     }
+    recordRedisCacheOperation('delete_pattern', 'ok', prefix);
   } catch (error) {
-    console.error(`[Redis] cacheDeletePattern error for pattern ${pattern}:`, error);
+    recordRedisCacheOperation('delete_pattern', 'error', prefix);
+    logger.error(
+      { event: 'redis_cache_delete_pattern_error', err: error, pattern },
+      'Redis cacheDeletePattern error',
+    );
   }
+}
+
+function cacheMetricPrefix(key: string): string {
+  const keyWithoutWildcard = key.replace(/\*+$/g, '');
+  const segments = keyWithoutWildcard.split(':').filter(Boolean);
+
+  if (segments.length === 0) return 'unknown';
+  if (segments[0] === 'match' && segments[1] === 'participants') return 'match:participants';
+  if (segments[0] === 'matches' && segments[1] === 'list') return 'matches:list';
+  if (segments[0] === 'user' && segments[1] === 'matches') return 'user:matches';
+  if (segments[0] === 'user' && segments[1] === 'teams') return 'user:teams';
+  if (segments[0] === 'team' && segments[1] === 'availability') return 'team:availability';
+
+  return segments.length > 1 ? `${segments[0]}:${segments[1]}` : segments[0];
 }

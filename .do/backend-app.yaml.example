@@ -1,0 +1,62 @@
+name: sumate-ya-backend
+region: nyc
+
+services:
+  - name: api
+    environment_slug: node-js
+    github:
+      repo: your-org/sumate-ya
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    build_command: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @sumate-ya/backend build
+    run_command: pnpm --filter @sumate-ya/backend start
+    http_port: 4000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    routes:
+      - path: /
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: LOG_LEVEL
+        value: info
+      - key: FRONTEND_URL
+        scope: RUN_TIME
+        value: https://app.example.com
+      - key: FRONTEND_URLS
+        scope: RUN_TIME
+        value: https://app.example.com,https://www.example.com
+      - key: SUPABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: replace-me
+      - key: PRIVATE_SUPABASE_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: replace-me
+      - key: SUPABASE_ANON_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: replace-me
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: replace-me
+      - key: REDIS_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: replace-me
+      - key: METRICS_BEARER_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: replace-me

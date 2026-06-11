@@ -27,6 +27,8 @@ import cors from 'cors';
 import 'dotenv/config';
 
 import { applyApolloMiddleware } from './graphql/server.js';
+import { errorObservability, metricsHandler, requestObservability } from './observability/http.js';
+import { logger } from './observability/logger.js';
 import authRoutes from './routes/authRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 
@@ -61,6 +63,7 @@ const ALLOWED_ORIGINS = Array.from(
 
 const app = express();
 
+app.use(requestObservability);
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -68,12 +71,13 @@ app.use(
         callback(null, true);
         return;
       }
-      console.warn(`[cors] Blocked origin: ${origin}`);
+      logger.warn({ event: 'cors_blocked_origin', origin }, 'Blocked CORS origin');
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     credentials: true,
   }),
 );
+app.get('/metrics', metricsHandler);
 app.use(express.json({ limit: '4mb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
@@ -83,9 +87,13 @@ app.get('/health', (_req, res) => {
 });
 
 // Initialize Apollo Server
-applyApolloMiddleware(app).catch((err) => {
-  console.error('[Apollo] Failed to initialize:', err);
-  process.exit(1);
-});
+applyApolloMiddleware(app)
+  .then(() => {
+    app.use(errorObservability);
+  })
+  .catch((err) => {
+    logger.error({ event: 'apollo_start_failed', err }, 'Failed to initialize Apollo');
+    process.exit(1);
+  });
 
 export default app;
