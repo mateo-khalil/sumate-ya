@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
-import node from '@astrojs/node';
+import cloudflare from '@astrojs/cloudflare';
 import tailwindcss from '@tailwindcss/vite';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -18,14 +18,22 @@ dotenv.config({ path: frontendEnvPath, quiet: true });
  * - Why output: 'server': Astro 6 merged 'hybrid' into 'server' — pages prerender by default,
  *   SSR opt-in via `export const prerender = false`. This enables auth middleware, login POST,
  *   and role-gated redirects while keeping public pages static.
- * - Adapter: @astrojs/node for standalone/container deployment.
- * - Env loading: Dotenv loads only apps/frontend/.env so backend secrets never enter the
- *   frontend runtime. Backend URL falls back to localhost in development.
+ * - Adapter: @astrojs/cloudflare deploys SSR pages to a Cloudflare Worker (free tier, global
+ *   edge, no server to manage). Replaced @astrojs/node (which targeted the DigitalOcean droplet).
+ * - Runtime env on Cloudflare: SSR code reads PRIVATE_BACKEND_URL / PRIVATE_IS_PROD via
+ *   `import.meta.env.*`, which Vite inlines at BUILD time. The deploy pipeline therefore exports
+ *   these before `astro build` (see scripts/deploy-frontend.sh) so the Render backend URL is baked
+ *   into the Worker bundle. wrangler.jsonc also mirrors them as [vars] for the process.env fallback.
+ * - Dev bindings: @astrojs/cloudflare v13 reads wrangler.jsonc bindings in `astro dev`
+ *   automatically via @cloudflare/vite-plugin — the old `platformProxy` adapter option was
+ *   removed in v13 and is no longer passed here.
+ * - Env loading: Dotenv still loads apps/frontend/.env at config time so a local .env can supply
+ *   PRIVATE_BACKEND_URL for the build without polluting backend secrets.
  * - Previously fixed bugs: none relevant.
  */
 export default defineConfig({
   output: 'server',
-  adapter: node({ mode: 'standalone' }),
+  adapter: cloudflare(),
   integrations: [react()],
   vite: {
     plugins: [tailwindcss()],

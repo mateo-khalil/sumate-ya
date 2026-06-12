@@ -1,0 +1,36 @@
+{
+  // Cloudflare Worker config for the Astro SSR frontend.
+  //
+  // Decision Context:
+  // - main = @astrojs/cloudflare/entrypoints/server: the v13 adapter (Astro 6) exposes a unified
+  //   entrypoint that exists in node_modules (so build-time config resolution doesn't fail) and
+  //   handles both `astro dev` and the production Worker. The old dist/_worker.js/index.js path
+  //   broke the build because @cloudflare/vite-plugin validates `main` BEFORE the build writes it.
+  // - assets.directory ./dist: Cloudflare serves Astro's static client output directly and falls
+  //   through to the worker for SSR routes.
+  // - compatibility_flags: nodejs_compat is intentionally NOT set. With Astro 6 + this adapter,
+  //   nodejs_compat + middleware corrupts streamed SSR responses into the literal string
+  //   "[object Object]" (withastro/astro#15434 — works in dev, breaks in deploy). The SSR code
+  //   only uses web-standard fetch/cookies, so Node built-ins aren't needed at runtime.
+  // - PRIVATE_BACKEND_URL is intentionally NOT hardcoded here: it is baked into the bundle at
+  //   build time (import.meta.env) by scripts/deploy-frontend.sh, and can also be set as a
+  //   runtime var via `wrangler deploy --var` if the process.env fallback path is exercised.
+  // - PRIVATE_IS_PROD=true forces secure cookies (frontend sits behind Cloudflare TLS).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sumate-ya-frontend",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2025-09-23",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist"
+  },
+  // @astrojs/cloudflare v13 auto-enables an Astro Sessions driver backed by Workers KV
+  // (binding name SESSION). The namespace must exist for `wrangler deploy` to succeed even
+  // though the app currently uses JWT cookies, not Astro.session. Provisioned via
+  // `wrangler kv namespace create SESSION`.
+  "kv_namespaces": [{ "binding": "SESSION", "id": "3c7b1d7a11f64c85b4ec4082a8d81ce7" }],
+  "vars": {
+    "PRIVATE_IS_PROD": "true"
+  }
+}
