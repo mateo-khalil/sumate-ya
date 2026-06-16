@@ -23,5 +23,6 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 
-# Cloudflare Wrangler local state
-.wrangler/
+# Vercel local state
+.vercel/
+.vercel

@@ -11,6 +11,6 @@ packages:
 allowBuilds:
   esbuild: true
   '@apollo/protobufjs': true
-  # workerd ships the Cloudflare Workers runtime used by @astrojs/cloudflare to build
-  # and preview the frontend Worker. Approved so `pnpm install` doesn't abort.
-  workerd: true
+  # sharp is pulled in by @astrojs/vercel for build-time image optimization and ships a
+  # native postinstall step. Approved so `pnpm install` doesn't abort with ERR_PNPM_IGNORED_BUILDS.
+  sharp: true

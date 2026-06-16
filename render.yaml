@@ -14,7 +14,7 @@
 # - plan: free uses Render's free web instance (spins down after ~15m idle, ~30-50s cold
 #   start). Fine for MVP; bump to `starter` to remove spin-down.
 # - Secrets use `sync: false` so they are set per-environment in the dashboard/API and
-#   never committed. FRONTEND_URL is set after the Cloudflare frontend URL is known (CORS).
+#   never committed. FRONTEND_URL is set after the Vercel frontend URL is known (CORS).
 # - Previously fixed bugs: none relevant (new file).
 services:
   - type: web
