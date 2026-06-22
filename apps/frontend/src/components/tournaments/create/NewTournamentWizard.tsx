@@ -74,7 +74,12 @@ async function gqlPost<T>(query: string, variables: unknown): Promise<{ data?: T
 
 export function NewTournamentWizard({ initialClubs, userName }: Props) {
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState<FormState>(INITIAL);
+  // Pre-seleccionar el club cuando hay exactamente uno (caso club_admin: el selector se
+  // scopea a su propio club desde el SSR, así no tiene que elegirlo manualmente).
+  const [form, setForm] = useState<FormState>(() => ({
+    ...INITIAL,
+    clubId: initialClubs.length === 1 ? initialClubs[0].id : '',
+  }));
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

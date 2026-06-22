@@ -26,6 +26,7 @@
 import { Volleyball, ChevronDown, UserRound, Settings, LogOut } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { DynamicNavActions } from './DynamicNavActions';
+import ClubTopbar from '../panel-club/ClubTopbar.astro';
 
 interface Props {
   user?: {
@@ -52,6 +53,12 @@ const rankingActive = matchesPath('/leaderboard');
 const settingsHref = isClubAdmin ? '/panel-club/configuracion' : '/ajustes';
 ---
 
+{/* Dispatch por rol: un club_admin ve SIEMPRE la barra de club (ClubTopbar) en cualquier
+    página que use este Topbar compartido (detalle de torneo, perfil, listados, etc.), no la
+    barra de jugador. Antes el club_admin veía la navbar de jugador fuera del panel-club. */}
+{isClubAdmin ? (
+  <ClubTopbar user={user} currentPath={pathname} />
+) : (
 <nav class="shared-topbar">
   <div class="topbar-inner">
 
@@ -160,6 +167,7 @@ const settingsHref = isClubAdmin ? '/panel-club/configuracion' : '/ajustes';
   </div>
   <div class="topbar-accent" aria-hidden="true"></div>
 </nav>
+)}
 
 <script>
   // Menú de cuenta: abrir/cerrar el desplegable detrás del nombre del usuario.

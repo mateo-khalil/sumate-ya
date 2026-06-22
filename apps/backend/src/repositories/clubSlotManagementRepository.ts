@@ -578,6 +578,105 @@ export async function updateSlot(
 }
 
 /**
+ * Bulk-insert recurring slots in a single round-trip.
+ *
+ * Decision Context:
+ * - Used by applyCourtSchedule: a first-time weekly setup can create ~100 slots, so doing
+ *   one INSERT per row (each a network round-trip) is slow and not atomic. A single insert
+ *   array keeps the configurator "Guardar" snappy.
+ * - Caller guarantees no (courtId, dayOfWeek, startTime) collides with an existing row
+ *   (active OR soft-deleted) — the unique index covers inactive rows too, so the reconcile
+ *   step reuses/updates existing rows instead of inserting duplicates.
+ * - Previously fixed bugs: none relevant (new method).
+ */
+export async function bulkInsertSlots(
+  rows: CreateSlotData[],
+  client: SupabaseClient = supabase,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const now = new Date().toISOString();
+  const { error, count } = await client
+    .from('clubSlots')
+    .insert(
+      rows.map((r) => ({
+        clubId: r.clubId,
+        courtId: r.courtId,
+        dayOfWeek: r.dayOfWeek,
+        startTime: r.startTime,
+        endTime: r.endTime,
+        duration: r.duration,
+        priceArs: r.priceArs,
+        allowOnlineBooking: r.allowOnlineBooking,
+        isActive: true,
+        isBlocked: false,
+        updatedAt: now,
+      })),
+      { count: 'exact' },
+    );
+
+  if (error) {
+    console.error(
+      `[clubSlotManagementRepository.bulkInsertSlots] Supabase error inserting ${rows.length} slots:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+
+  return count ?? rows.length;
+}
+
+/**
+ * Bulk reactivate + reprice a set of slots (used when the configurator reuses existing
+ * available slots at the same day/time). Sets isActive=true so a previously soft-deleted
+ * slot returns to service with the new price. Never touches blocked/matched slots — the
+ * caller excludes those ids.
+ */
+export async function bulkSetSlotPriceActive(
+  ids: string[],
+  priceArs: number | null,
+  updatedBy: string | null,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await client
+    .from('clubSlots')
+    .update({ priceArs, isActive: true, updatedBy, updatedAt: new Date().toISOString() })
+    .in('id', ids);
+
+  if (error) {
+    console.error(
+      `[clubSlotManagementRepository.bulkSetSlotPriceActive] Supabase error for ${ids.length} ids:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Bulk soft-delete (isActive=false) a set of slots in one round-trip. Preserves rows for
+ * audit history and match foreign keys. Caller excludes booked/blocked slots.
+ */
+export async function bulkSoftDeleteSlots(
+  ids: string[],
+  updatedBy: string | null,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await client
+    .from('clubSlots')
+    .update({ isActive: false, updatedBy, updatedAt: new Date().toISOString() })
+    .in('id', ids);
+
+  if (error) {
+    console.error(
+      `[clubSlotManagementRepository.bulkSoftDeleteSlots] Supabase error for ${ids.length} ids:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Soft-delete: set isActive=false. Preserves slot for audit history and foreign keys
  * from matches. Physical deletion is never done (improvement 17).
  */
@@ -974,6 +1073,9 @@ export const clubSlotManagementRepository = {
   createSlot,
   updateSlot,
   softDeleteSlot,
+  bulkInsertSlots,
+  bulkSetSlotPriceActive,
+  bulkSoftDeleteSlots,
   getMatchesAtSlots,
   getPlayerCountForMatches,
   getParticipantCountsByMatch,

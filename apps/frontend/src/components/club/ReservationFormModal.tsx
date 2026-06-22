@@ -40,6 +40,8 @@ interface Props {
   courts: ManagedCourt[];
   busy: boolean;
   searchPlayers: (term: string) => Promise<TeamProfile[]>;
+  /** Precio sugerido según las reglas de precio de la cancha (base + pico). Opcional. */
+  suggestPrice?: (courtId: string, reservedAtISO: string, durationMin: number) => Promise<number | null>;
   onClose: () => void;
   onSubmit: (values: ReservationFormValues) => void;
 }
@@ -58,6 +60,7 @@ export default function ReservationFormModal({
   courts,
   busy,
   searchPlayers,
+  suggestPrice,
   onClose,
   onSubmit,
 }: Props) {
@@ -74,6 +77,11 @@ export default function ReservationFormModal({
   const [contactName, setContactName] = useState(reservation?.contactName ?? '');
   const [contactPhone, setContactPhone] = useState(reservation?.contactPhone ?? '');
   const [priceArs, setPriceArs] = useState<string>(reservation?.priceArs != null ? String(reservation.priceArs) : '');
+  // priceTouched: el club editó el precio manualmente → no lo auto-sobreescribimos. En modo
+  // edición arranca "touched" para respetar el precio guardado. priceAuto: el valor actual fue
+  // autocompletado desde las reglas de precio (sólo para el rótulo "· automático").
+  const [priceTouched, setPriceTouched] = useState<boolean>(!!reservation);
+  const [priceAuto, setPriceAuto] = useState(false);
   const [notes, setNotes] = useState(reservation?.notes ?? '');
   const [status, setStatus] = useState<ReservationStatus>(reservation?.status ?? 'CONFIRMED');
 
@@ -95,6 +103,21 @@ export default function ReservationFormModal({
     }, 280);
     return () => window.clearTimeout(debounce.current);
   }, [term, mode, selectedPlayer, searchPlayers]);
+
+  // Auto-precio: cuando hay cancha + fecha + hora (+ duración) y el club no tocó el precio a
+  // mano, consultamos las reglas de precio de la cancha y precargamos el valor sugerido.
+  useEffect(() => {
+    if (!suggestPrice || priceTouched) return;
+    if (!courtId || !date || !time) return;
+    let cancelled = false;
+    (async () => {
+      const suggested = await suggestPrice(courtId, `${date}T${time}`, durationMin);
+      if (cancelled || suggested == null) return;
+      setPriceArs(String(suggested));
+      setPriceAuto(true);
+    })();
+    return () => { cancelled = true; };
+  }, [suggestPrice, priceTouched, courtId, date, time, durationMin]);
 
   const bookerOk = mode === 'app' ? !!selectedPlayer : contactName.trim().length > 0;
   const canSubmit = !!courtId && !!date && !!time && durationMin > 0 && bookerOk && !busy;
@@ -219,9 +242,9 @@ export default function ReservationFormModal({
 
           <div className="rm-row">
             <label className="rm-field">
-              <span>Precio ARS (opcional)</span>
+              <span>Precio ($U){priceAuto ? ' · automático' : ' (opcional)'}</span>
               <input type="number" min={0} step={100} value={priceArs} placeholder="0"
-                onChange={(e) => setPriceArs(e.target.value)} />
+                onChange={(e) => { setPriceTouched(true); setPriceArs(e.target.value); }} />
             </label>
             {reservation && (
               <label className="rm-field">

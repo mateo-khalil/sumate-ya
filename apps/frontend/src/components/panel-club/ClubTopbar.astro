@@ -22,7 +22,7 @@
  * - Previously fixed bugs: none relevant (componente nuevo que unifica el patrón).
  */
 
-import { Volleyball, ChevronDown, UserRound, Settings, LogOut, LayoutDashboard, Plus, Calendar, Trophy } from 'lucide-react';
+import { Volleyball, ChevronDown, UserRound, Settings, LogOut, LayoutDashboard, Calendar, Trophy, CalendarClock, BarChart3 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import ClubMobileNav from './ClubMobileNav.tsx';
 
@@ -63,14 +63,6 @@ const startsWith = (prefix: string) => currentPath.startsWith(prefix);
         <span>Dashboard</span>
       </a>
       <a
-        href="/panel-club/crear-partido"
-        class:list={['nav-link', { 'is-active': isActive('/panel-club/crear-partido') }]}
-        aria-current={isActive('/panel-club/crear-partido') ? 'page' : undefined}
-      >
-        <Plus size={16} strokeWidth={2.5} aria-hidden="true" />
-        <span>Crear partido</span>
-      </a>
-      <a
         href="/panel-club/horarios"
         class:list={['nav-link', { 'is-active': isActive('/panel-club/horarios') }]}
         aria-current={isActive('/panel-club/horarios') ? 'page' : undefined}
@@ -79,12 +71,36 @@ const startsWith = (prefix: string) => currentPath.startsWith(prefix);
         <span>Horarios</span>
       </a>
       <a
-        href="/torneos/crear"
-        class:list={['nav-link', { 'is-active': startsWith('/torneos/crear') }]}
-        aria-current={startsWith('/torneos/crear') ? 'page' : undefined}
+        href="/panel-club/canchas"
+        class:list={['nav-link', { 'is-active': isActive('/panel-club/canchas') }]}
+        aria-current={isActive('/panel-club/canchas') ? 'page' : undefined}
+      >
+        <Volleyball size={16} strokeWidth={2} aria-hidden="true" />
+        <span>Canchas</span>
+      </a>
+      <a
+        href="/panel-club/reservas"
+        class:list={['nav-link', { 'is-active': isActive('/panel-club/reservas') }]}
+        aria-current={isActive('/panel-club/reservas') ? 'page' : undefined}
+      >
+        <CalendarClock size={16} strokeWidth={2} aria-hidden="true" />
+        <span>Reservas</span>
+      </a>
+      <a
+        href="/panel-club/estadisticas"
+        class:list={['nav-link', { 'is-active': isActive('/panel-club/estadisticas') }]}
+        aria-current={isActive('/panel-club/estadisticas') ? 'page' : undefined}
+      >
+        <BarChart3 size={16} strokeWidth={2} aria-hidden="true" />
+        <span>Estadísticas</span>
+      </a>
+      <a
+        href="/panel-club/torneos"
+        class:list={['nav-link', { 'is-active': startsWith('/panel-club/torneos') || startsWith('/torneos') }]}
+        aria-current={startsWith('/panel-club/torneos') || startsWith('/torneos') ? 'page' : undefined}
       >
         <Trophy size={16} strokeWidth={2} aria-hidden="true" />
-        <span>Crear torneo</span>
+        <span>Torneos</span>
       </a>
     </div>
 

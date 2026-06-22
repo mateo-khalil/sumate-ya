@@ -14,5 +14,6 @@ const user = accessToken ? await getSessionFromBackend(accessToken) : null;
 		client:load
 		isAuthenticated={user !== null}
 		userName={user?.displayName}
+		userRole={user?.role}
 	/>
 </Layout>

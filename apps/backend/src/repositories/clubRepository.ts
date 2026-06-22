@@ -111,4 +111,37 @@ export async function updateClubCoords(
   }
 }
 
-export const clubRepository = { listClubs, getClubById, updateClubCoords };
+/**
+ * Return the ownerId (club_admin user) of a club, or null if the club doesn't exist.
+ *
+ * Decision Context:
+ * - Used to authorize "club tournaments": a club_admin may create a tournament for the
+ *   club they own (clubs.ownerId = auth.uid()), in addition to the legacy captain path.
+ * - ownerId is intentionally NOT part of CLUB_DETAIL_COLUMNS (it isn't exposed via the
+ *   public ClubDetail GraphQL type), so it gets its own minimal projection here to keep
+ *   egress tight.
+ * - Defaults to the service-role client because this is an authorization read in the write
+ *   path; the caller has already authenticated. RLS on clubs (public SELECT) would allow it
+ *   either way, but service-role avoids depending on the user client being present.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getClubOwnerId(
+  id: string,
+  client: SupabaseClient = supabase,
+): Promise<string | null> {
+  const { data, error } = await client
+    .from('clubs')
+    .select('"ownerId"')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    console.error(`[clubRepository.getClubOwnerId] Supabase error for clubId=${id}:`, error.message);
+    throw new Error(error.message);
+  }
+
+  return (data as unknown as { ownerId: string | null })?.ownerId ?? null;
+}
+
+export const clubRepository = { listClubs, getClubById, updateClubCoords, getClubOwnerId };

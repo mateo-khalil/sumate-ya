@@ -26,6 +26,7 @@ import Layout from '../../layouts/Layout.astro';
 import SlotManager from '../../components/club/SlotManager';
 import { readAccessToken } from '../../lib/auth';
 import type { ManagedClubSlot } from '../../graphql/operations/club-slots';
+import type { ManagedCourt } from '../../graphql/operations/courts';
 
 const user = Astro.locals.user;
 
@@ -38,8 +39,11 @@ if (!user || user.role !== 'club_admin') {
 const accessToken = readAccessToken(Astro.cookies) ?? '';
 const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
 
-const SLOTS_QUERY = `
-  query MY_CLUB_SLOTS_SSR {
+// Single SSR round-trip fetches BOTH the slots and the club's courts. Courts are needed so
+// the configurator can offer a tab per court — including courts that have no slots yet (which
+// would be invisible if derived from slots alone).
+const HORARIOS_QUERY = `
+  query HORARIOS_SSR {
     myClubSlots {
       id clubId courtId
       court { id name maxFormat surface isIndoor }
@@ -47,10 +51,15 @@ const SLOTS_QUERY = `
       isBlocked blockReason blockType
       isActive allowOnlineBooking hasScheduledMatch updatedAt
     }
+    myClubCourts {
+      id clubId name surface isIndoor maxFormat
+      slotCount activeSlotCount upcomingMatchCount createdAt
+    }
   }
 `;
 
 let initialSlots: ManagedClubSlot[] = [];
+let initialCourts: ManagedCourt[] = [];
 let initialError: string | null = null;
 
 try {
@@ -60,19 +69,20 @@ try {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ query: SLOTS_QUERY }),
+    body: JSON.stringify({ query: HORARIOS_QUERY }),
   });
   const json = (await res.json()) as {
-    data?: { myClubSlots?: ManagedClubSlot[] };
+    data?: { myClubSlots?: ManagedClubSlot[]; myClubCourts?: ManagedCourt[] };
     errors?: Array<{ message: string }>;
   };
   if (json.errors?.length) {
     initialError = json.errors[0].message;
   } else {
     initialSlots = json.data?.myClubSlots ?? [];
+    initialCourts = json.data?.myClubCourts ?? [];
   }
 } catch (err) {
-  console.error('[panel-club/horarios] SSR slots fetch failed:', err);
+  console.error('[panel-club/horarios] SSR fetch failed:', err);
   initialError = 'No se pudieron cargar los horarios. Intentá de nuevo.';
 }
 ---
@@ -87,11 +97,17 @@ try {
         <header class="section-header">
           <div class="section-label">GESTIÓN DE HORARIOS</div>
           <h1 class="section-title">Horarios</h1>
-          <p class="section-sub">Gestioná los slots de tus canchas: creá, editá, bloqueá y desbloquea horarios</p>
+          <p class="section-sub">Definí los días y el horario de atención de cada cancha y poné tus precios</p>
         </header>
 
-        <!-- React island: handles all slot management interactions -->
-        <SlotManager client:load initialSlots={initialSlots} initialError={initialError} accessToken={accessToken} />
+        <!-- React island: schedule configurator (primary) + advanced per-slot panel -->
+        <SlotManager
+          client:load
+          initialSlots={initialSlots}
+          initialCourts={initialCourts}
+          initialError={initialError}
+          accessToken={accessToken}
+        />
       </main>
     </div>
   </div>

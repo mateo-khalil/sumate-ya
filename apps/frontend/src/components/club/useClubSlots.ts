@@ -27,6 +27,8 @@ import type {
   SlotImpactPreview,
   ClubSlotMutationResult,
   BulkSlotMutationResult,
+  ApplyCourtScheduleInput,
+  ApplyCourtScheduleResult,
 } from '../../graphql/operations/club-slots';
 import {
   GET_MY_CLUB_SLOTS,
@@ -35,6 +37,7 @@ import {
   DELETE_CLUB_SLOT,
   TOGGLE_SLOT_BLOCK,
   BULK_BLOCK_SLOTS,
+  APPLY_COURT_SCHEDULE,
 } from '../../graphql/operations/club-slots';
 
 // Use the authenticated proxy endpoint (/api/graphql-auth) for all client-side calls.
@@ -87,6 +90,7 @@ interface UseClubSlotsReturn {
     affectedCount: number;
     impactPreview: SlotImpactPreview | null;
   }>;
+  applyCourtSchedule: (input: ApplyCourtScheduleInput) => Promise<{ success: boolean; message: string }>;
 }
 
 export function useClubSlots({ initialSlots, initialError, accessToken }: UseClubSlotsParams): UseClubSlotsReturn {
@@ -169,5 +173,19 @@ export function useClubSlots({ initialSlots, initialError, accessToken }: UseClu
     }
   }, [refetch, accessToken]);
 
-  return { slots, loading, error, refetch, createSlot, updateSlot, deleteSlot, toggleBlock, bulkBlock };
+  // Reconcile a court's whole weekly schedule in one call (simplified configurator).
+  // The mutation returns the fresh slot list for that court; we still refetch ALL slots so
+  // the advanced calendar (which spans every court) stays consistent.
+  const applyCourtSchedule = useCallback(async (input: ApplyCourtScheduleInput) => {
+    try {
+      const data = await gql<{ applyCourtSchedule: ApplyCourtScheduleResult }>(APPLY_COURT_SCHEDULE, { input }, accessToken);
+      const r = data.applyCourtSchedule;
+      if (r.success) refetch();
+      return { success: r.success, message: r.message ?? (r.success ? 'Horarios guardados' : 'Error al guardar los horarios') };
+    } catch (e) {
+      return { success: false, message: e instanceof Error ? e.message : 'Error al guardar los horarios' };
+    }
+  }, [refetch, accessToken]);
+
+  return { slots, loading, error, refetch, createSlot, updateSlot, deleteSlot, toggleBlock, bulkBlock, applyCourtSchedule };
 }

@@ -16,8 +16,8 @@
 
 import { useState } from 'react';
 import {
-  Menu, X, LayoutDashboard, Calendar, Plus,
-  Volleyball, Users, Settings, BarChart3, LogOut, Trophy,
+  Menu, X, LayoutDashboard, Calendar,
+  Volleyball, CalendarClock, Settings, BarChart3, LogOut, Trophy,
 } from 'lucide-react';
 
 interface Props {
@@ -25,18 +25,17 @@ interface Props {
   userName: string;
 }
 
+// Decision Context: Canchas, Reservas y Estadísticas eran placeholders ("Próximo") hasta que se
+// implementaron las features completas. Ahora son links reales (igual que el ClubTopbar), por lo
+// que se eliminó la lista PLACEHOLDER_LINKS y su render.
 const NAV_LINKS = [
   { href: '/panel-club/dashboard', icon: LayoutDashboard, label: 'Dashboard', highlight: false },
-  { href: '/panel-club/crear-partido', icon: Plus, label: 'Crear partido', highlight: true },
   { href: '/panel-club/horarios', icon: Calendar, label: 'Horarios', highlight: false },
-  { href: '/torneos/crear', icon: Trophy, label: 'Crear torneo', highlight: false },
+  { href: '/panel-club/canchas', icon: Volleyball, label: 'Canchas', highlight: false },
+  { href: '/panel-club/reservas', icon: CalendarClock, label: 'Reservas', highlight: false },
+  { href: '/panel-club/estadisticas', icon: BarChart3, label: 'Estadísticas', highlight: false },
+  { href: '/panel-club/torneos', icon: Trophy, label: 'Torneos', highlight: false },
   { href: '/panel-club/configuracion', icon: Settings, label: 'Configuración', highlight: false },
-];
-
-const PLACEHOLDER_LINKS = [
-  { icon: Volleyball, label: 'Canchas' },
-  { icon: Users, label: 'Reservas' },
-  { icon: BarChart3, label: 'Estadísticas' },
 ];
 
 export default function ClubMobileNav({ currentPath, userName }: Props) {
@@ -107,12 +106,6 @@ export default function ClubMobileNav({ currentPath, userName }: Props) {
                   </a>
                 );
               })}
-              {PLACEHOLDER_LINKS.map(({ icon: Icon, label }) => (
-                <span key={label} className="mob-link mob-link--placeholder" aria-disabled="true">
-                  <Icon size={18} strokeWidth={2} aria-hidden="true" />
-                  {label}
-                </span>
-              ))}
             </div>
 
             {/* Logout */}

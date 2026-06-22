@@ -25,6 +25,31 @@ export type AffectedMatch = {
   title: Scalars['String']['output'];
 };
 
+export type ApplyCourtScheduleInput = {
+  basePrice: Scalars['Float']['input'];
+  closeTime: Scalars['String']['input'];
+  courtId: Scalars['ID']['input'];
+  openDays: Array<Scalars['String']['input']>;
+  openTime: Scalars['String']['input'];
+  peakDays?: InputMaybe<Array<Scalars['String']['input']>>;
+  peakEnabled?: InputMaybe<Scalars['Boolean']['input']>;
+  peakEnd?: InputMaybe<Scalars['String']['input']>;
+  peakPrice?: InputMaybe<Scalars['Float']['input']>;
+  peakStart?: InputMaybe<Scalars['String']['input']>;
+  slotMinutes?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type ApplyCourtScheduleResult = {
+  __typename?: 'ApplyCourtScheduleResult';
+  createdCount: Scalars['Int']['output'];
+  message?: Maybe<Scalars['String']['output']>;
+  protectedCount: Scalars['Int']['output'];
+  removedCount: Scalars['Int']['output'];
+  slots: Array<ManagedClubSlot>;
+  success: Scalars['Boolean']['output'];
+  updatedCount: Scalars['Int']['output'];
+};
+
 export type AuditProfile = {
   __typename?: 'AuditProfile';
   avatarUrl?: Maybe<Scalars['String']['output']>;
@@ -662,6 +687,7 @@ export enum MatchUserResult {
 export type Mutation = {
   __typename?: 'Mutation';
   addTournamentTeamMember: TournamentTeamRegistrationResult;
+  applyCourtSchedule: ApplyCourtScheduleResult;
   bulkBlockSlots: BulkSlotMutationResult;
   bulkCreateClubMatches: BulkClubMatchResult;
   cancelInvitation: TeamMutationResult;
@@ -711,6 +737,11 @@ export type Mutation = {
 
 export type MutationAddTournamentTeamMemberArgs = {
   input: TournamentTeamMemberInput;
+};
+
+
+export type MutationApplyCourtScheduleArgs = {
+  input: ApplyCourtScheduleInput;
 };
 
 
@@ -1794,6 +1825,8 @@ export type DirectiveResolverFn<TResult = Record<PropertyKey, never>, TParent = 
 /** Mapping between all available schema types and the resolvers types */
 export type ResolversTypes = ResolversObject<{
   AffectedMatch: ResolverTypeWrapper<AffectedMatch>;
+  ApplyCourtScheduleInput: ApplyCourtScheduleInput;
+  ApplyCourtScheduleResult: ResolverTypeWrapper<ApplyCourtScheduleResult>;
   AuditProfile: ResolverTypeWrapper<AuditProfile>;
   AvailabilityMatrixCell: ResolverTypeWrapper<AvailabilityMatrixCell>;
   AvailabilitySlotInput: AvailabilitySlotInput;
@@ -1944,6 +1977,8 @@ export type ResolversTypes = ResolversObject<{
 /** Mapping between all available schema types and the resolvers parents */
 export type ResolversParentTypes = ResolversObject<{
   AffectedMatch: AffectedMatch;
+  ApplyCourtScheduleInput: ApplyCourtScheduleInput;
+  ApplyCourtScheduleResult: ApplyCourtScheduleResult;
   AuditProfile: AuditProfile;
   AvailabilityMatrixCell: AvailabilityMatrixCell;
   AvailabilitySlotInput: AvailabilitySlotInput;
@@ -2073,6 +2108,16 @@ export type AffectedMatchResolvers<ContextType = GraphQLContext, ParentType exte
   participantCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   scheduledAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   title?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+}>;
+
+export type ApplyCourtScheduleResultResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['ApplyCourtScheduleResult'] = ResolversParentTypes['ApplyCourtScheduleResult']> = ResolversObject<{
+  createdCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  message?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  protectedCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  removedCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  slots?: Resolver<Array<ResolversTypes['ManagedClubSlot']>, ParentType, ContextType>;
+  success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  updatedCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
 }>;
 
 export type AuditProfileResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['AuditProfile'] = ResolversParentTypes['AuditProfile']> = ResolversObject<{
@@ -2440,6 +2485,7 @@ export type MatchResultVoteResolvers<ContextType = GraphQLContext, ParentType ex
 
 export type MutationResolvers<ContextType = GraphQLContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
   addTournamentTeamMember?: Resolver<ResolversTypes['TournamentTeamRegistrationResult'], ParentType, ContextType, RequireFields<MutationAddTournamentTeamMemberArgs, 'input'>>;
+  applyCourtSchedule?: Resolver<ResolversTypes['ApplyCourtScheduleResult'], ParentType, ContextType, RequireFields<MutationApplyCourtScheduleArgs, 'input'>>;
   bulkBlockSlots?: Resolver<ResolversTypes['BulkSlotMutationResult'], ParentType, ContextType, RequireFields<MutationBulkBlockSlotsArgs, 'input'>>;
   bulkCreateClubMatches?: Resolver<ResolversTypes['BulkClubMatchResult'], ParentType, ContextType, RequireFields<MutationBulkCreateClubMatchesArgs, 'input'>>;
   cancelInvitation?: Resolver<ResolversTypes['TeamMutationResult'], ParentType, ContextType, RequireFields<MutationCancelInvitationArgs, 'invitationId'>>;
@@ -2867,6 +2913,7 @@ export type VoteSubmissionResultResolvers<ContextType = GraphQLContext, ParentTy
 
 export type Resolvers<ContextType = GraphQLContext> = ResolversObject<{
   AffectedMatch?: AffectedMatchResolvers<ContextType>;
+  ApplyCourtScheduleResult?: ApplyCourtScheduleResultResolvers<ContextType>;
   AuditProfile?: AuditProfileResolvers<ContextType>;
   AvailabilityMatrixCell?: AvailabilityMatrixCellResolvers<ContextType>;
   BulkClubMatchItem?: BulkClubMatchItemResolvers<ContextType>;

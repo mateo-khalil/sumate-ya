@@ -1,304 +1,165 @@
 /**
- * SlotManager — main React island for club slot management
+ * SlotManager — Horarios island. Leads with the simple per-court schedule configurator and
+ * keeps the powerful per-slot calendar behind a collapsible "Vista avanzada".
  *
  * Decision Context:
- * - Why island with client:load: the admin needs immediate interactivity (create, edit,
- *   block slots). client:load ensures the component hydrates as soon as the page loads.
- * - State split: slots live in the useClubSlots hook; UI state (selected, modals) lives here.
- * - SSR-hydrated initial state: horarios.astro fetches slots server-side using the HttpOnly
- *   cookie and passes them as initialSlots. The hook uses these as initial state so the UI
- *   renders immediately without a client-side query (which previously failed on auth).
- * - accessToken prop: forwarded to the hook so mutation calls include Authorization
- *   explicitly. The HttpOnly cookie cannot be read from JS, so we receive it via SSR prop.
- *   Trade-off: token is exposed to JS on this auth-protected page only.
- * - BulkBlockDialog shows a consolidated impact preview before confirming destructive ops.
- * - When toggleSlotBlock returns impactPreview (matches exist, no confirmForce), the UI
- *   transitions to the BulkBlockDialog for the single-slot case too, reusing the same flow.
- * - Semantic color classes: available=green, hasMatch=yellow, blocked=red, inactive=gray.
- * - courts derived via useMemo from slots (unique courtId → court.name). Passed to
- *   SlotEditModal so the create form shows a named <select> instead of a UUID input.
- *   Courts are sorted alphabetically. Empty array triggers a "no courts configured" hint.
+ * - Why the redesign: club owners found the old screen (a 245-cell weekly grid with bulk
+ *   checkboxes, a separate Precios panel, and a per-slot create/block/audit modal) impossible
+ *   to map onto "set my hours and prices". This island now leads with ScheduleConfigurator —
+ *   one court at a time, open days + hours + base/peak price — and relegates the grid to an
+ *   advanced panel for exceptions (one-off blocks / odd slots).
+ * - Single data owner: useClubSlots lives here so the configurator and the advanced panel
+ *   share one slot list. Applying a schedule refetches, so the advanced calendar updates too.
+ * - Courts come from SSR `initialCourts` (myClubCourts — includes courts with zero slots so a
+ *   brand-new court can still be configured); we fall back to deriving them from slots if the
+ *   prop is empty. Court tabs switch the configurator's target.
+ * - accessToken is forwarded for client-side mutations (the HttpOnly cookie can't be read from
+ *   JS, so the SSR page passes the token in as a prop on this auth-protected page only).
  * - Previously fixed bugs:
- *   - Initial GraphQL query returned "Authentication required" because the /api/graphql
- *     proxy could not reliably read the HttpOnly cookie. Fix: SSR-hydrated initialSlots.
- *   - Create Slot form required manual UUID entry for "ID de cancha". Fixed by deriving
- *     CourtOption[] from slots and rendering a named <select> in SlotEditModal.
- *   - Single-slot "block with scheduled match" force-cancel was broken: handleSingleBlock
- *     opened the bulk confirm dialog but did not carry the slot id, so handleBulkConfirm
- *     fell back to the (empty) multi-select `selectedIds` and called bulkBlockSlots with
- *     slotIds:[] → backend rejected with "Debes seleccionar al menos un slot" and nothing
- *     was cancelled/blocked. Fixed by threading `slotId` through the 'bulk' ModalState.
+ *   - Initial GraphQL query returned "Authentication required" because the /api/graphql proxy
+ *     could not reliably read the HttpOnly cookie. Fix: SSR-hydrated initialSlots.
+ *   - Create Slot form required a raw court UUID. Fixed by deriving named CourtOption[].
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Plus, List, CalendarDays, DollarSign } from 'lucide-react';
+import { ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-react';
 import { useClubSlots } from './useClubSlots';
-import { SlotListView } from './SlotListView';
-import { SlotCalendarView } from './SlotCalendarView';
-import { CourtPricingPanel } from './CourtPricingPanel';
-import { SlotEditModal } from './SlotEditModal';
+import { ScheduleConfigurator } from './ScheduleConfigurator';
+import { SlotsAdvancedPanel } from './SlotsAdvancedPanel';
 import type { CourtOption } from './SlotEditModal';
-import { BulkBlockDialog } from './BulkBlockDialog';
-import type { ManagedClubSlot, BlockSlotInput, SlotImpactPreview } from '../../graphql/operations/club-slots';
-
-type ModalState =
-  | { type: 'none' }
-  | { type: 'create' }
-  | { type: 'edit'; slot: ManagedClubSlot }
-  // `slotId` is set only when the dialog is opened from the single-slot block path
-  // (SlotEditModal / calendar cell). It carries the one slot to force-block so the
-  // confirm step does not fall back to the (empty) multi-select `selectedIds`.
-  | { type: 'bulk'; isBlocked: boolean; impactPreview: SlotImpactPreview | null; slotId?: string };
+import type { ManagedClubSlot } from '../../graphql/operations/club-slots';
+import type { ManagedCourt } from '../../graphql/operations/courts';
 
 interface SlotManagerProps {
   initialSlots?: ManagedClubSlot[];
+  initialCourts?: ManagedCourt[];
   initialError?: string | null;
   accessToken?: string;
 }
 
-export default function SlotManager({ initialSlots = [], initialError = null, accessToken = '' }: SlotManagerProps) {
-  const { slots, loading, error, refetch, createSlot, updateSlot, deleteSlot, toggleBlock, bulkBlock } =
+export default function SlotManager({
+  initialSlots = [], initialCourts = [], initialError = null, accessToken = '',
+}: SlotManagerProps) {
+  const { slots, loading, error, refetch, createSlot, updateSlot, deleteSlot, toggleBlock, bulkBlock, applyCourtSchedule } =
     useClubSlots({ initialSlots, initialError, accessToken });
 
-  // Derive unique courts from loaded slots so SlotEditModal can show a named <select>
-  // instead of a raw UUID text field. Sorted alphabetically by name.
+  // Courts: prefer the SSR myClubCourts list (covers courts with no slots yet); otherwise
+  // derive from the slots we have. Sorted alphabetically for a stable tab order.
   const courts = useMemo((): CourtOption[] => {
+    if (initialCourts.length) {
+      return [...initialCourts].map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
+    }
     const seen = new Set<string>();
     const result: CourtOption[] = [];
     for (const slot of slots) {
-      if (!seen.has(slot.courtId)) {
-        seen.add(slot.courtId);
-        result.push({ id: slot.courtId, name: slot.court.name });
-      }
+      if (!seen.has(slot.courtId)) { seen.add(slot.courtId); result.push({ id: slot.courtId, name: slot.court.name }); }
     }
     return result.sort((a, b) => a.name.localeCompare(b.name));
-  }, [slots]);
+  }, [initialCourts, slots]);
 
-  const [view, setView] = useState<'calendar' | 'list'>('calendar');
-  const [showPricing, setShowPricing] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [modal, setModal] = useState<ModalState>({ type: 'none' });
+  const [selectedCourtId, setSelectedCourtId] = useState<string>(courts[0]?.id ?? '');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const closeModal = useCallback(() => setModal({ type: 'none' }), []);
-
-  function showMsg(msg: string, isError = false) {
+  const showMsg = useCallback((msg: string, isError = false) => {
     if (isError) { setActionError(msg); setSuccessMsg(null); }
     else { setSuccessMsg(msg); setActionError(null); }
-    setTimeout(() => { setActionError(null); setSuccessMsg(null); }, 4000);
-  }
-
-  const handleToggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setTimeout(() => { setActionError(null); setSuccessMsg(null); }, 5000);
   }, []);
 
-  const handleSelectAll = useCallback(() => {
-    const activeIds = slots.filter((s) => s.isActive).map((s) => s.id);
-    setSelectedIds((prev) =>
-      prev.size === activeIds.length ? new Set() : new Set(activeIds),
+  // Keep a valid selected court if the list changes.
+  const activeCourtId = courts.some((c) => c.id === selectedCourtId) ? selectedCourtId : (courts[0]?.id ?? '');
+  const activeCourt = courts.find((c) => c.id === activeCourtId) ?? null;
+  const courtSlots = useMemo(() => slots.filter((s) => s.courtId === activeCourtId), [slots, activeCourtId]);
+
+  const handleApply = useCallback(
+    async (input: Parameters<typeof applyCourtSchedule>[0]) => {
+      const res = await applyCourtSchedule(input);
+      showMsg(res.message, !res.success);
+      return res;
+    },
+    [applyCourtSchedule, showMsg],
+  );
+
+  if (loading) return <div className="state-card"><p className="state-text">Cargando horarios...</p></div>;
+  if (error) {
+    return (
+      <div className="state-card state-card--error">
+        <p className="state-text">{error}</p>
+        <button className="btn-secondary" onClick={refetch}>Reintentar</button>
+      </div>
     );
-  }, [slots]);
+  }
 
-  const handleSingleBlock = useCallback(
-    async (input: BlockSlotInput) => {
-      const result = await toggleBlock(input);
-      if (result.impactPreview && !input.confirmForce) {
-        // Matches exist — show confirmation dialog. Carry the single slot's id so the
-        // confirm step force-blocks THIS slot (previously it routed through the bulk
-        // path with an empty selectedIds set, so the force-cancel never ran).
-        setModal({ type: 'bulk', isBlocked: input.isBlocked, impactPreview: result.impactPreview, slotId: input.slotId });
-      } else if (result.success) {
-        showMsg(input.isBlocked ? 'Slot bloqueado' : 'Slot desbloqueado');
-        closeModal();
-      } else {
-        showMsg(result.message || 'Error al cambiar estado del slot', true);
-      }
-    },
-    [toggleBlock, closeModal],
-  );
-
-  const handleBulkAction = useCallback(
-    async (isBlocked: boolean) => {
-      if (selectedIds.size === 0) return;
-      const slotIds = Array.from(selectedIds);
-      const result = await bulkBlock({ slotIds, isBlocked, confirmForce: false });
-      if (result.impactPreview && result.affectedCount === 0) {
-        setModal({ type: 'bulk', isBlocked, impactPreview: result.impactPreview });
-      } else if (result.success) {
-        showMsg(`${result.affectedCount} slot(s) procesado(s)`);
-        setSelectedIds(new Set());
-      } else {
-        showMsg(result.message || 'Error en operación masiva', true);
-      }
-    },
-    [selectedIds, bulkBlock],
-  );
-
-  const handleBulkConfirm = useCallback(
-    async (reason: string, blockType: string) => {
-      if (modal.type !== 'bulk') return;
-      // Single-slot path: the dialog carries one slotId. Multi-select path: use selectedIds.
-      const slotIds = modal.slotId ? [modal.slotId] : Array.from(selectedIds);
-      const result = await bulkBlock({
-        slotIds,
-        isBlocked: modal.isBlocked,
-        blockReason: reason || undefined,
-        blockType: blockType as never,
-        confirmForce: true,
-      });
-      if (result.success) {
-        showMsg(`${result.affectedCount} slot(s) ${modal.isBlocked ? 'bloqueado(s)' : 'desbloqueado(s)'}`);
-        setSelectedIds(new Set());
-        closeModal();
-      } else {
-        showMsg(result.message || 'Error al procesar', true);
-      }
-    },
-    [modal, selectedIds, bulkBlock, closeModal],
-  );
-
-  const handleDelete = useCallback(
-    async (slotId: string) => {
-      const result = await deleteSlot(slotId);
-      if (result.success) { showMsg('Slot eliminado'); closeModal(); }
-      else showMsg(result.message || 'Error al eliminar', true);
-    },
-    [deleteSlot, closeModal],
-  );
-
-  if (loading) return <LoadingState />;
-  if (error) return <ErrorState error={error} onRetry={refetch} />;
+  if (!courts.length) {
+    return (
+      <div className="state-card">
+        <p className="state-text">Todavía no tenés canchas. Creá una cancha para configurar sus horarios.</p>
+        <a className="btn-primary" href="/panel-club/canchas">Ir a Canchas</a>
+      </div>
+    );
+  }
 
   return (
     <div className="slot-manager">
-      {/* Toolbar */}
-      <div className="toolbar">
-        <div className="toolbar-left">
-          {/* View toggle */}
-          <div className="view-toggle" role="group" aria-label="Vista">
-            <button
-              className={`view-btn${view === 'calendar' ? ' view-btn--active' : ''}`}
-              onClick={() => setView('calendar')}
-              aria-pressed={view === 'calendar'}
-              title="Vista calendario"
-            >
-              <CalendarDays size={15} strokeWidth={2} aria-hidden="true" />
-              Calendario
-            </button>
-            <button
-              className={`view-btn${view === 'list' ? ' view-btn--active' : ''}`}
-              onClick={() => setView('list')}
-              aria-pressed={view === 'list'}
-              title="Vista lista"
-            >
-              <List size={15} strokeWidth={2} aria-hidden="true" />
-              Lista
-            </button>
-          </div>
-
-          <span className="slots-count">{slots.filter((s) => s.isActive).length} activos</span>
-          {selectedIds.size > 0 && (
-            <span className="selection-badge">{selectedIds.size} sel.</span>
-          )}
-        </div>
-        <div className="toolbar-right">
-          {selectedIds.size > 0 && (
-            <>
-              <button className="btn-secondary" onClick={() => handleBulkAction(true)}>
-                Bloquear sel.
-              </button>
-              <button className="btn-secondary" onClick={() => handleBulkAction(false)}>
-                Desbloquear sel.
-              </button>
-            </>
-          )}
-          <button
-            className={`btn-secondary${showPricing ? ' btn-secondary--active' : ''}`}
-            onClick={() => setShowPricing((v) => !v)}
-            title="Configurar precios"
-          >
-            <DollarSign size={14} aria-hidden="true" /> Precios
-          </button>
-          <button className="btn-primary" onClick={() => setModal({ type: 'create' })}>
-            <Plus size={14} aria-hidden="true" /> Nuevo slot
-          </button>
-        </div>
-      </div>
-
       {/* Feedback banners */}
       {actionError && <div className="banner banner--error">{actionError}</div>}
       {successMsg && <div className="banner banner--success">{successMsg}</div>}
 
-      {/* Pricing panel — collapsible */}
-      {showPricing && (
-        <CourtPricingPanel slots={slots} accessToken={accessToken} />
+      {/* Court tabs (hidden when there is a single court) */}
+      {courts.length > 1 && (
+        <div className="court-tabs" role="tablist" aria-label="Canchas">
+          {courts.map((c) => (
+            <button
+              key={c.id}
+              role="tab"
+              aria-selected={c.id === activeCourtId}
+              className={`court-tab${c.id === activeCourtId ? ' court-tab--active' : ''}`}
+              onClick={() => setSelectedCourtId(c.id)}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
       )}
 
-      {/* Slot view — calendar (default) or list */}
-      {view === 'calendar' ? (
-        <SlotCalendarView
-          slots={slots}
-          selectedIds={selectedIds}
-          onToggleSelect={handleToggleSelect}
-          onEdit={(slot) => setModal({ type: 'edit', slot })}
-          onBlock={handleSingleBlock}
-        />
-      ) : (
-        <SlotListView
-          slots={slots}
-          selectedIds={selectedIds}
-          onToggleSelect={handleToggleSelect}
-          onSelectAll={handleSelectAll}
-          onEdit={(slot) => setModal({ type: 'edit', slot })}
-          onBlock={handleSingleBlock}
-          onDelete={handleDelete}
-        />
-      )}
-
-      {/* Modals */}
-      {(modal.type === 'create' || modal.type === 'edit') && (
-        <SlotEditModal
-          slot={modal.type === 'edit' ? modal.slot : null}
-          courts={courts}
+      {/* Primary: the simple configurator for the selected court */}
+      {activeCourt && (
+        <ScheduleConfigurator
+          key={activeCourt.id}
+          court={activeCourt}
+          courtSlots={courtSlots}
           accessToken={accessToken}
-          onClose={closeModal}
-          onSaveCreate={createSlot}
-          onSaveUpdate={updateSlot}
-          onBlock={handleSingleBlock}
-          onDelete={handleDelete}
+          onApply={handleApply}
         />
       )}
-      {modal.type === 'bulk' && (
-        <BulkBlockDialog
-          isBlocked={modal.isBlocked}
-          impactPreview={modal.impactPreview}
-          selectedCount={modal.slotId ? 1 : selectedIds.size}
-          onConfirm={handleBulkConfirm}
-          onClose={closeModal}
-        />
-      )}
-    </div>
-  );
-}
 
-function LoadingState() {
-  return (
-    <div className="state-card">
-      <p className="state-text">Cargando horarios...</p>
-    </div>
-  );
-}
-
-function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
-  return (
-    <div className="state-card state-card--error">
-      <p className="state-text">{error}</p>
-      <button className="btn-secondary" onClick={onRetry}>Reintentar</button>
+      {/* Advanced: per-slot calendar / blocks, collapsed by default */}
+      <div className="adv-wrap">
+        <button
+          className="adv-toggle"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          aria-expanded={advancedOpen}
+        >
+          <SlidersHorizontal size={15} strokeWidth={2} aria-hidden="true" />
+          Vista avanzada y bloqueos puntuales
+          {advancedOpen ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
+        </button>
+        {advancedOpen && (
+          <SlotsAdvancedPanel
+            slots={courtSlots}
+            courts={courts}
+            accessToken={accessToken}
+            createSlot={createSlot}
+            updateSlot={updateSlot}
+            deleteSlot={deleteSlot}
+            toggleBlock={toggleBlock}
+            bulkBlock={bulkBlock}
+            onMessage={showMsg}
+          />
+        )}
+      </div>
     </div>
   );
 }

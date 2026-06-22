@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { gqlAuth } from '../../lib/graphqlAuth';
 import { SEARCH_PLAYERS, type TeamProfile } from '../../graphql/operations/teams';
+import { GET_COURT_PRICING } from '../../graphql/operations/club-slots';
 import {
   GET_MY_CLUB_RESERVATIONS,
   CREATE_RESERVATION,
@@ -39,6 +40,16 @@ interface UseClubReservationsParams {
 interface MutationOutcome {
   success: boolean;
   message: string;
+}
+
+// Forma de la fila devuelta por la query courtPricing (reglas de precio por cancha).
+interface CourtPricingRow {
+  basePrice: number | null;
+  peakStart: string | null;
+  peakEnd: string | null;
+  peakDays: number[] | null;
+  peakMultiplier: number | null;
+  offPeakDiscount: number | null;
 }
 
 export function useClubReservations({
@@ -134,6 +145,61 @@ export function useClubReservations({
     }
   }, [accessToken]);
 
+  /*
+   * suggestCourtPrice — precio sugerido para una reserva/partido según las reglas de precio
+   * de la cancha (las mismas que configura CourtPricingPanel: base + recargo de hora pico +
+   * descuento fuera de pico). Replica la fórmula del preview de pricing: si el día/hora cae en
+   * la ventana pico → base × peakMultiplier; si no → base × offPeakDiscount. Se escala por la
+   * duración (la base es "precio por slot" de 1 hora). El resultado es solo una sugerencia:
+   * el club puede sobreescribirlo en el form. Devuelve null si la cancha no tiene precio base.
+   * El pricing por cancha se cachea (pricingCache) para no re-consultar en cada cambio de campo.
+   * Previously fixed bugs: none relevant (nueva funcionalidad).
+   */
+  const pricingCache = useRef<Map<string, CourtPricingRow | null>>(new Map());
+
+  const suggestCourtPrice = useCallback(
+    async (courtId: string, reservedAtISO: string, durationMin: number): Promise<number | null> => {
+      if (!courtId || !reservedAtISO) return null;
+      try {
+        let pricing = pricingCache.current.get(courtId);
+        if (pricing === undefined) {
+          const data = await gqlAuth<{ courtPricing: CourtPricingRow | null }>(
+            GET_COURT_PRICING,
+            { courtId },
+            accessToken,
+          );
+          pricing = data.courtPricing ?? null;
+          pricingCache.current.set(courtId, pricing);
+        }
+        if (!pricing || !pricing.basePrice || pricing.basePrice <= 0) return null;
+
+        const when = new Date(reservedAtISO);
+        if (Number.isNaN(when.getTime())) return null;
+        const minutes = when.getHours() * 60 + when.getMinutes();
+        const toMin = (hhmm?: string | null) => {
+          if (!hhmm) return null;
+          const [h, m] = hhmm.split(':').map(Number);
+          return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+        };
+        const peakStart = toMin(pricing.peakStart);
+        const peakEnd = toMin(pricing.peakEnd);
+        const inPeakWindow =
+          (pricing.peakDays ?? []).includes(when.getDay()) &&
+          peakStart != null && peakEnd != null &&
+          minutes >= peakStart && minutes < peakEnd;
+
+        const factor = inPeakWindow ? (pricing.peakMultiplier ?? 1) : (pricing.offPeakDiscount ?? 1);
+        const hours = durationMin > 0 ? durationMin / 60 : 1;
+        const raw = pricing.basePrice * factor * hours;
+        // Redondeo a la decena más cercana para un número prolijo y editable.
+        return Math.max(0, Math.round(raw / 10) * 10);
+      } catch {
+        return null;
+      }
+    },
+    [accessToken],
+  );
+
   return {
     reservations,
     loading,
@@ -146,5 +212,6 @@ export function useClubReservations({
     cancelReservation,
     deleteReservation,
     searchPlayers,
+    suggestCourtPrice,
   };
 }

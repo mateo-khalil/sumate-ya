@@ -1,0 +1,131 @@
+---
+/**
+ * Panel de Club — Estadísticas (SSR, club_admin only)
+ *
+ * Decision Context:
+ * - Same SSR recipe as the other panel pages. Fetches clubStatistics for a default range (last
+ *   30 days) server-side, then hands off to the ClubStatisticsView island with the data + token.
+ * - The default range is computed here AND passed as initialFilters so the date inputs render
+ *   pre-filled and consistent with the SSR-fetched data (the backend defaults to the same window
+ *   when filters are omitted).
+ * - Navigation lives in ClubTopbar (sidebar removed) — Estadísticas is one of its links.
+ * - Previously fixed bugs: none relevant (new feature).
+ */
+export const prerender = false;
+
+import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
+import Layout from '../../layouts/Layout.astro';
+import ClubStatisticsView from '../../components/club/ClubStatisticsView';
+import { readAccessToken } from '../../lib/auth';
+import type { ClubStatistics, ClubStatisticsFilters } from '../../graphql/operations/club-statistics';
+
+const user = Astro.locals.user;
+
+if (!user || user.role !== 'club_admin') {
+  return Astro.redirect('/login?reason=role-required');
+}
+
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
+
+const now = new Date();
+const endDate = now.toISOString().slice(0, 10);
+const startDate = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const initialFilters: ClubStatisticsFilters = { startDate, endDate };
+
+const STATS_QUERY = `
+  query CLUB_STATISTICS_SSR($filters: ClubStatisticsFilters) {
+    clubStatistics(filters: $filters) {
+      range { startDate endDate }
+      summary {
+        totalMatches completedMatches cancelledMatches cancellationRate
+        totalReservations uniquePlayers estimatedRevenue occupancyRate activeCourts
+      }
+      matchesByStatus { status count }
+      revenueByCourt { courtId courtName matches revenue }
+      matchesByDayOfWeek { dayOfWeek label count }
+      matchesByHour { hour count }
+      matchesTrend { date count }
+    }
+  }
+`;
+
+let initialData: ClubStatistics | null = null;
+let initialError: string | null = null;
+
+try {
+  const res = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ query: STATS_QUERY, variables: { filters: initialFilters } }),
+  });
+  const json = (await res.json()) as {
+    data?: { clubStatistics?: ClubStatistics };
+    errors?: Array<{ message: string }>;
+  };
+  if (json.errors?.length) {
+    initialError = json.errors[0].message;
+  } else {
+    initialData = json.data?.clubStatistics ?? null;
+  }
+} catch (err) {
+  console.error('[panel-club/estadisticas] SSR statistics fetch failed:', err);
+  initialError = 'No se pudieron cargar las estadísticas. Intentá de nuevo.';
+}
+---
+
+<Layout title="Estadísticas — Panel de Club — Sumate Ya">
+  <div class="app-shell">
+    <ClubTopbar user={user} currentPath={Astro.url.pathname} />
+
+    <div class="page-layout">
+      <main class="page-content">
+        <header class="section-header">
+          <div class="section-label">REPORTES</div>
+          <h1 class="section-title">Estadísticas</h1>
+          <p class="section-sub">Analizá ocupación, ingresos, días y horas pico de tu club</p>
+        </header>
+
+        <ClubStatisticsView
+          client:load
+          initialData={initialData}
+          initialError={initialError}
+          initialFilters={initialFilters}
+          accessToken={accessToken}
+        />
+      </main>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .page-layout { flex: 1; display: block; max-width: 1280px; width: 100%; margin: 0 auto; padding: 2rem 1.25rem; }
+  .page-content { width: 100%; min-width: 0; }
+  .section-header { margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700;
+    letter-spacing: 0.2em; color: hsl(42 100% 55%); text-transform: uppercase; margin-bottom: 0.5rem;
+  }
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: clamp(1.6rem, 5vw, 2.5rem);
+    font-weight: 400; letter-spacing: 0.04em; color: #ffffff; margin: 0 0 0.375rem; line-height: 1;
+  }
+  .section-sub { margin: 0; color: hsl(215 20% 50%); font-size: 0.9rem; font-family: 'Barlow', sans-serif; }
+
+  :global(html.light) .section-header { border-bottom-color: rgba(0,0,0,0.07); }
+  :global(html.light) .section-title { color: hsl(220 72% 10%); }
+  :global(html.light) .section-sub { color: hsl(215 16% 38%); }
+  :global(html.light) .section-label { color: hsl(42 100% 38%); }
+
+  @media (max-width: 767px) {
+    .page-layout { padding: 1rem; }
+    .section-header { margin-bottom: 1rem; }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .page-layout { padding: 1.5rem 1.25rem; }
+  }
+</style>
