@@ -5,6 +5,11 @@
  * - View: uses CalendarGrid (same base as ClubScheduleView / SlotCalendarView) so the
  *   admin sees a 7-column × 17-row weekly grid instead of a scrollable card list.
  *   Consistency with the horarios and dashboard calendars reduces cognitive overhead.
+ * - Compact height: this picker lives inside the 3-step match wizard (step indicator +
+ *   heading + nav + grid + footer). The default 68vh grid made the whole wizard taller
+ *   than the viewport, forcing a long page scroll. We cap the grid body via bodyMaxHeight
+ *   (clamp 260–440px ~ 42vh) so the entire step fits on one screen and only the grid
+ *   scrolls internally; it auto-scrolls to the relevant hour on mount.
  * - 15-minute grace period: a slot is bookable if `now < slotStart + 15 min`. This lets
  *   the admin create a match for a slot that already started (e.g., 14:10 → 14:00 slot
  *   is still selectable because 14:15 > 14:10). After 14:15 the slot is shown as past.
@@ -248,6 +253,7 @@ export default function AvailableSlotsPicker({ accessToken, prefillSlotId, prefi
         renderCell={renderCell}
         navSlot={nav}
         legendSlot={legend}
+        bodyMaxHeight="clamp(260px, 42vh, 440px)"
       />
 
       <style>{`

@@ -5,6 +5,10 @@
  * Decision Context:
  * - Both players and club_admins may create tournaments, so the page is auth-only with
  *   no role gate.
+ * - Navbar consistency: this page no longer ships a bespoke inline topbar. It reuses the
+ *   role-appropriate shared navbar — ClubTopbar for club_admin (matches the rest of the
+ *   club panel and highlights "Crear torneo"), shared Topbar for players. This removed a
+ *   third, divergent navbar that looked "old" next to the unified player/club bars.
  * - Clubs are prefetched SSR for a fast first paint; slot availability stays client-side
  *   because it depends on the chosen date.
  * - accessToken is passed to the React island so createTournament can call the authenticated
@@ -12,11 +16,12 @@
  */
 export const prerender = false;
 
-import { Trophy, Volleyball, Shield } from 'lucide-react';
+import { Trophy, Shield } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import CreateTournamentFlow from '../../components/tournaments/create/CreateTournamentFlow';
 import { NewTournamentWizard } from '../../components/tournaments/create/NewTournamentWizard';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import Topbar from '../../components/shared/Topbar.astro';
+import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
 import { ACCESS_TOKEN_COOKIE } from '../../lib/auth';
 import { GET_CLUBS, type ClubDetail } from '../../graphql/operations/matches';
 import { MY_TEAMS, type TeamData } from '../../graphql/operations/teams';
@@ -50,7 +55,7 @@ try {
 }
 
 const displayName = user.displayName || user.email;
-const backHref = user.role === 'club_admin' ? '/panel-club/dashboard' : '/partidos';
+const isClubAdmin = user.role === 'club_admin';
 
 // F9: verificar capitanía SSR — non-captains ven gate screen en lugar del form
 let isCaptain = false;
@@ -69,28 +74,9 @@ try {
 
 <Layout title="Crear Torneo - Sumate Ya">
   <div class="app-shell">
-    <nav class="topbar">
-      <div class="topbar-inner">
-        <a class="topbar-brand" href={backHref}>
-          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
-          <span class="topbar-name">SUMATE YA</span>
-        </a>
-        <div class="topbar-actions">
-          <a href="/partidos" class="nav-link">Partidos</a>
-          {user.role === 'club_admin' && <a href="/panel-club/dashboard" class="nav-link">Panel</a>}
-          {user.role === 'player' && <a href="/perfil" class="nav-link">Mi Perfil</a>}
-          <span class="user-badge">
-            <span class="user-dot"></span>
-            {displayName}
-          </span>
-          <ThemeToggle client:load />
-          <form method="POST" action="/api/auth/logout">
-            <button type="submit" class="btn-logout">Salir</button>
-          </form>
-        </div>
-      </div>
-      <div class="topbar-accent"></div>
-    </nav>
+    {isClubAdmin
+      ? <ClubTopbar user={user} currentPath={Astro.url.pathname} />
+      : <Topbar user={user} />}
 
     <main class="page-content">
       <header class="section-header">
@@ -188,73 +174,6 @@ try {
     border: 1px solid var(--color-border); transition: border-color 0.15s;
   }
   .btn-secondary-gate:hover { border-color: var(--color-primary); }
-  .topbar {
-    position: sticky; top: 0; z-index: 50;
-    background: rgba(7,15,31,0.85);
-    backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .topbar-inner {
-    max-width: 1280px; margin: 0 auto;
-    height: 56px; padding: 0 1.25rem;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .topbar-brand {
-    display: flex; align-items: center; gap: 0.5rem;
-    text-decoration: none;
-  }
-  .topbar-ball { display: inline-flex; color: hsl(42 100% 60%); }
-  .topbar-name {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 1.35rem;
-    letter-spacing: 0.1em;
-    color: #fff;
-  }
-  .topbar-actions { display: flex; align-items: center; gap: 0.75rem; }
-  .topbar-accent {
-    height: 2px;
-    background: linear-gradient(90deg, hsl(42 100% 55%), hsl(216 85% 45%), transparent);
-  }
-  .nav-link {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    text-decoration: none;
-    color: hsl(215 20% 65%);
-    padding: 0.3rem 0.6rem;
-    border-radius: 6px;
-  }
-  .nav-link:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 92%); }
-  .user-badge {
-    display: flex; align-items: center; gap: 0.4rem;
-    background: rgba(246,164,0,0.1);
-    border: 1px solid rgba(246,164,0,0.24);
-    color: hsl(42 100% 65%);
-    border-radius: 20px;
-    padding: 0.25rem 0.875rem;
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 0.8125rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-  }
-  .user-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: hsl(42 100% 58%);
-    box-shadow: 0 0 4px hsl(42 100% 58%);
-  }
-  .btn-logout {
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 6px;
-    padding: 0.3rem 0.75rem;
-    color: hsl(215 20% 60%);
-    font-family: 'Barlow', sans-serif;
-    font-size: 0.8125rem;
-    cursor: pointer;
-  }
-  .btn-logout:hover { background: rgba(255,255,255,0.07); color: hsl(210 20% 90%); }
   .page-content {
     flex: 1;
     width: 100%;

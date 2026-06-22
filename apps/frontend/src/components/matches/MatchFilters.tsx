@@ -5,6 +5,10 @@
  * - Filters are controlled by the parent so list and map views can share the same state.
  * - The list applies filters locally over the loaded open matches for instant feedback.
  * - URL persistence is handled by MatchesView, keeping this component UI-only.
+ * - Selects keep native <select> semantics (decorative lucide leading icons only) so
+ *   Playwright `selectOption` in the match-filters e2e suite keeps targeting them by
+ *   aria-label. Do NOT swap them for a custom listbox without updating those specs.
+ * - Previously fixed bugs: none relevant.
  */
 
 import { useCallback } from 'react';
@@ -12,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Search, X } from 'lucide-react';
+import { Search, X, LayoutGrid, MapPin, Clock } from 'lucide-react';
 import {
   DEFAULT_MATCH_FILTERS,
   normalizeMatchFilters,
@@ -106,6 +110,7 @@ export function MatchFilters({ filters, onFiltersChange }: MatchFiltersProps) {
           aria-label="Formato"
           value={filters.format || ''}
           placeholder="Formato"
+          icon={<LayoutGrid className="h-4 w-4" />}
           options={FORMAT_OPTIONS}
           onValueChange={(value) =>
             updateFilters({ format: (value as MatchFormat) || undefined })
@@ -116,6 +121,7 @@ export function MatchFilters({ filters, onFiltersChange }: MatchFiltersProps) {
           aria-label="Zona"
           value={filters.zone || ''}
           placeholder="Zona"
+          icon={<MapPin className="h-4 w-4" />}
           options={ZONE_OPTIONS}
           onValueChange={(value) => updateFilters({ zone: value || undefined })}
         />
@@ -124,6 +130,7 @@ export function MatchFilters({ filters, onFiltersChange }: MatchFiltersProps) {
           aria-label="Horario"
           value={toTimeRangeValue(filters)}
           placeholder="Horario"
+          icon={<Clock className="h-4 w-4" />}
           options={TIME_RANGE_OPTIONS}
           onValueChange={handleTimeRangeChange}
         />

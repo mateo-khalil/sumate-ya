@@ -4,17 +4,26 @@
  *
  * Decision Context:
  * - Adaptada para tema claro y oscuro usando CSS variables del design system.
- * - Las flechas ← → usan history.back/forward para facilitar navegación.
  * - "Crear torneo" y CaptainBadge están en DynamicNavActions (isla React) porque
  *   requieren verificar capitanía en cliente; solo se muestran si el usuario es capitán (F9).
  * - NotificationBell en DynamicNavActions para invitaciones de equipo accesibles desde navbar.
  * - Botones de acción siempre en naranja (color-primary) para identidad FIFA.
+ * - Tab activa: se calcula con Astro.url.pathname y se marca con `aria-current="page"` +
+ *   clase `.is-active` (subrayado naranja). "Partidos & Torneos" cubre /partidos y /torneos.
+ * - Menú de cuenta: las acciones de usuario (ver perfil, configuración, tema, cerrar sesión)
+ *   se agruparon en un único desplegable detrás del nombre para descargar la barra, que estaba
+ *   sobrecargada con ~9 elementos sueltos. El toggle de tema vive ahora dentro de este menú
+ *   (en "configuración"/preferencias) en vez de ocupar un botón fijo en la barra para usuarios
+ *   logueados. Los visitantes anónimos sí conservan el toggle visible (no tienen menú de cuenta).
+ * - El desplegable usa un <script> vanilla (no una isla React extra) para abrir/cerrar:
+ *   click en el trigger, click fuera y Escape lo cierran. Más liviano que hidratar React.
  * - Previously fixed bugs:
  *   - Colores hardcodeados oscuros causaban problemas en tema claro → ahora usa var(--color-*)
  *   - "Crear torneo" aparecía para todos → movido a DynamicNavActions que filtra por capitanía
+ *   - No había indicador de tab activa y la barra estaba saturada → tab activa + menú de cuenta.
  */
 
-import { Volleyball, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
+import { Volleyball, ChevronDown, UserRound, Settings, LogOut } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { DynamicNavActions } from './DynamicNavActions';
 
@@ -29,22 +38,22 @@ interface Props {
 
 const { user } = Astro.props;
 const nombre = user?.displayName || user?.email || '';
+const email = user?.email || '';
 const isPlayer = user?.role === 'player';
 const isClubAdmin = user?.role === 'club_admin';
+
+// Tab activa: una ruta cuenta como activa si es exacta o si es un sub-path (p.ej. /torneos/123).
+const pathname = Astro.url.pathname;
+const matchesPath = (...prefixes: string[]) =>
+  prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+const partidosActive = matchesPath('/partidos', '/torneos');
+const equiposActive = matchesPath('/equipos');
+const rankingActive = matchesPath('/leaderboard');
+const settingsHref = isClubAdmin ? '/panel-club/configuracion' : '/ajustes';
 ---
 
 <nav class="shared-topbar">
   <div class="topbar-inner">
-
-    <!-- Flechas de historial -->
-    <div class="nav-arrows" aria-label="Historial">
-      <button class="nav-arrow" data-nav="back" title="Volver" aria-label="Volver">
-        <ChevronLeft size={17} strokeWidth={2.5} aria-hidden="true" />
-      </button>
-      <button class="nav-arrow" data-nav="forward" title="Adelante" aria-label="Adelante">
-        <ChevronRight size={17} strokeWidth={2.5} aria-hidden="true" />
-      </button>
-    </div>
 
     <!-- Brand -->
     <a href="/partidos" class="topbar-brand">
@@ -54,9 +63,23 @@ const isClubAdmin = user?.role === 'club_admin';
 
     <!-- Links centrales -->
     <div class="topbar-center">
-      <a href="/partidos" class="nav-link">Partidos &amp; Torneos</a>
-      {user && <a href="/equipos" class="nav-link">Equipos</a>}
-      <a href="/leaderboard" class="nav-link">Ranking</a>
+      <a
+        href="/partidos"
+        class:list={['nav-link', { 'is-active': partidosActive }]}
+        aria-current={partidosActive ? 'page' : undefined}
+      >Partidos &amp; Torneos</a>
+      {user && (
+        <a
+          href="/equipos"
+          class:list={['nav-link', { 'is-active': equiposActive }]}
+          aria-current={equiposActive ? 'page' : undefined}
+        >Equipos</a>
+      )}
+      <a
+        href="/leaderboard"
+        class:list={['nav-link', { 'is-active': rankingActive }]}
+        aria-current={rankingActive ? 'page' : undefined}
+      >Ranking</a>
     </div>
 
     <!-- Acciones -->
@@ -73,25 +96,55 @@ const isClubAdmin = user?.role === 'club_admin';
           {isPlayer && (
             <DynamicNavActions client:load userId={user.id} />
           )}
-          {isPlayer && <a href="/perfil" class="nav-link nav-link--perfil">Mi Perfil</a>}
-          {isPlayer && (
-            <a href="/ajustes" class="nav-link nav-link--perfil nav-link--settings" title="Ajustes de cuenta">
-              <Settings size={15} strokeWidth={2} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'middle' }} />
-            </a>
-          )}
-          {isClubAdmin && (
-            <a href="/panel-club/configuracion" class="nav-link nav-link--settings" title="Configuración de cuenta">
-              <Settings size={15} strokeWidth={2} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'middle' }} />
-            </a>
-          )}
-          <span class="user-badge">
-            <span class="user-dot" aria-hidden="true"></span>
-            <span class="user-name">{nombre}</span>
-          </span>
-          <ThemeToggle client:load />
-          <form method="POST" action="/api/auth/logout" style="display:contents">
-            <button type="submit" class="btn-logout">Salir</button>
-          </form>
+
+          {/* Menú de cuenta: agrupa ver perfil, configuración, tema y cerrar sesión */}
+          <div class="account" data-account-menu>
+            <button
+              type="button"
+              class="user-badge"
+              data-account-trigger
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-label="Abrir menú de cuenta"
+            >
+              <span class="user-avatar"><UserRound size={16} strokeWidth={2} aria-hidden="true" /></span>
+              <span class="user-name">{nombre}</span>
+              <ChevronDown className="account-caret" size={14} strokeWidth={2.5} aria-hidden="true" />
+            </button>
+
+            <div class="account-menu" data-account-dropdown role="menu" hidden>
+              <div class="account-head">
+                <span class="account-head-name">{nombre}</span>
+                {email && <span class="account-head-email">{email}</span>}
+              </div>
+
+              {isPlayer && (
+                <a href="/perfil" class="account-item" role="menuitem">
+                  <UserRound size={15} strokeWidth={2} aria-hidden="true" />
+                  <span>Ver mi perfil</span>
+                </a>
+              )}
+
+              <a href={settingsHref} class="account-item" role="menuitem">
+                <Settings size={15} strokeWidth={2} aria-hidden="true" />
+                <span>Configuración</span>
+              </a>
+
+              <div class="account-theme">
+                <span class="account-theme-label">Tema</span>
+                <ThemeToggle client:load />
+              </div>
+
+              <div class="account-sep" role="separator"></div>
+
+              <form method="POST" action="/api/auth/logout">
+                <button type="submit" class="account-item account-item--danger" role="menuitem">
+                  <LogOut size={15} strokeWidth={2} aria-hidden="true" />
+                  <span>Cerrar sesión</span>
+                </button>
+              </form>
+            </div>
+          </div>
         </>
       ) : (
         <>
@@ -109,12 +162,32 @@ const isClubAdmin = user?.role === 'club_admin';
 </nav>
 
 <script>
-  document.querySelectorAll<HTMLButtonElement>('[data-nav="back"]').forEach(btn =>
-    btn.addEventListener('click', () => history.back())
-  );
-  document.querySelectorAll<HTMLButtonElement>('[data-nav="forward"]').forEach(btn =>
-    btn.addEventListener('click', () => history.forward())
-  );
+  // Menú de cuenta: abrir/cerrar el desplegable detrás del nombre del usuario.
+  // Vanilla (sin isla React) para mantener la barra liviana. Cierra al hacer click
+  // fuera o con Escape; clicks dentro (p.ej. el toggle de tema) no lo cierran.
+  const menu = document.querySelector<HTMLElement>('[data-account-menu]');
+  const trigger = menu?.querySelector<HTMLButtonElement>('[data-account-trigger]');
+  const dropdown = menu?.querySelector<HTMLElement>('[data-account-dropdown]');
+
+  if (menu && trigger && dropdown) {
+    const setOpen = (open: boolean) => {
+      dropdown.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+    };
+
+    trigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setOpen(Boolean(dropdown.hidden));
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!menu.contains(event.target as Node)) setOpen(false);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    });
+  }
 </script>
 
 <style>
@@ -145,27 +218,6 @@ const isClubAdmin = user?.role === 'club_admin';
     gap: 0.6rem;
   }
 
-  /* Flechas */
-  .nav-arrows { display: flex; gap: 0.2rem; flex-shrink: 0; }
-  .nav-arrow {
-    width: 30px; height: 30px; border-radius: 7px;
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: hsl(215 20% 55%);
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s, color 0.15s;
-  }
-  .nav-arrow:hover { background: rgba(255,255,255,0.14); color: hsl(215 20% 82%); }
-  :global(html.light) .nav-arrow {
-    background: rgba(0,0,0,0.05);
-    border-color: rgba(0,0,0,0.1);
-    color: hsl(220 20% 45%);
-  }
-  :global(html.light) .nav-arrow:hover {
-    background: rgba(0,0,0,0.1);
-    color: hsl(220 20% 15%);
-  }
-
   /* Brand */
   .topbar-brand {
     display: flex; align-items: center; gap: 0.45rem;
@@ -183,6 +235,7 @@ const isClubAdmin = user?.role === 'club_admin';
   /* Links */
   .topbar-center { display: flex; align-items: center; gap: 0.2rem; flex: 1; }
   .nav-link {
+    position: relative;
     padding: 0.3rem 0.6rem; border-radius: 6px;
     font-size: 0.82rem; font-weight: 500;
     color: hsl(215 20% 65%);
@@ -192,6 +245,18 @@ const isClubAdmin = user?.role === 'club_admin';
   .nav-link:hover { color: hsl(215 20% 90%); background: rgba(255,255,255,0.07); }
   :global(html.light) .nav-link { color: hsl(220 20% 35%); }
   :global(html.light) .nav-link:hover { color: hsl(220 72% 10%); background: rgba(0,0,0,0.05); }
+
+  /* Tab activa: texto naranja + subrayado */
+  .nav-link.is-active { color: hsl(35 100% 62%); font-weight: 600; }
+  .nav-link.is-active::after {
+    content: '';
+    position: absolute;
+    left: 0.6rem; right: 0.6rem; bottom: 0;
+    height: 2px; border-radius: 2px;
+    background: var(--color-primary, hsl(35 100% 48%));
+  }
+  .nav-link.is-active:hover { background: transparent; }
+  :global(html.light) .nav-link.is-active { color: hsl(35 100% 40%); }
 
   /* Acciones */
   .topbar-actions { display: flex; align-items: center; gap: 0.45rem; flex-shrink: 0; }
@@ -211,32 +276,81 @@ const isClubAdmin = user?.role === 'club_admin';
     background: hsl(35 80% 40%);
   }
 
-  /* User badge */
-  .user-badge {
-    display: flex; align-items: center; gap: 0.35rem;
-    font-size: 0.78rem; color: hsl(215 20% 65%); white-space: nowrap;
-  }
-  :global(html.light) .user-badge { color: hsl(220 20% 35%); }
-  .user-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: hsl(140 70% 50%); flex-shrink: 0;
-  }
-  .user-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
+  /* Account menu */
+  .account { position: relative; flex-shrink: 0; }
 
-  /* Logout */
-  .btn-logout {
-    padding: 0.3rem 0.65rem; border-radius: 6px; cursor: pointer;
-    background: transparent; border: 1px solid rgba(255,255,255,0.12);
-    color: hsl(215 20% 60%); font-size: 0.78rem;
-    transition: border-color 0.15s, color 0.15s;
+  /* Trigger (mantiene la clase .user-badge para compatibilidad de selectores e2e) */
+  .user-badge {
+    display: flex; align-items: center; gap: 0.4rem;
+    padding: 0.25rem 0.5rem 0.25rem 0.35rem; border-radius: 999px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    font-size: 0.78rem; color: hsl(215 20% 72%); white-space: nowrap;
+    cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
-  .btn-logout:hover { border-color: rgba(255,255,255,0.28); color: hsl(215 20% 88%); }
-  :global(html.light) .btn-logout {
-    border-color: rgba(0,0,0,0.12); color: hsl(220 20% 40%);
+  .user-badge:hover { background: rgba(255,255,255,0.12); color: hsl(215 20% 90%); }
+  .user-avatar {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(246,164,0,0.16); color: hsl(35 100% 62%); flex-shrink: 0;
   }
-  :global(html.light) .btn-logout:hover {
-    border-color: rgba(0,0,0,0.25); color: hsl(220 72% 12%);
-    background: rgba(0,0,0,0.04);
+  .user-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+  .account-caret { color: hsl(215 20% 55%); transition: transform 0.15s; }
+  .user-badge[aria-expanded='true'] .account-caret { transform: rotate(180deg); }
+  :global(html.light) .user-badge {
+    background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: hsl(220 20% 35%);
+  }
+  :global(html.light) .user-badge:hover { background: rgba(0,0,0,0.07); color: hsl(220 72% 12%); }
+
+  /* Dropdown */
+  .account-menu {
+    position: absolute; top: calc(100% + 10px); right: 0;
+    min-width: 220px;
+    background: var(--color-card, hsl(220 55% 11%));
+    border: 1px solid var(--color-border, hsl(220 30% 20%));
+    border-radius: 12px; padding: 0.4rem;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+    z-index: 200;
+  }
+  .account-menu[hidden] { display: none; }
+  .account-head {
+    display: flex; flex-direction: column; gap: 0.1rem;
+    padding: 0.5rem 0.6rem 0.6rem; margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--color-border, hsl(220 30% 20%));
+  }
+  .account-head-name {
+    font-size: 0.85rem; font-weight: 600;
+    color: var(--color-foreground, hsl(210 20% 94%));
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .account-head-email {
+    font-size: 0.72rem; color: var(--color-muted-foreground, hsl(215 20% 55%));
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .account-item {
+    display: flex; align-items: center; gap: 0.55rem; width: 100%;
+    padding: 0.5rem 0.6rem; border-radius: 8px;
+    background: transparent; border: none; cursor: pointer;
+    font-size: 0.82rem; font-family: inherit; text-align: left;
+    color: var(--color-foreground, hsl(210 20% 90%)); text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+  }
+  .account-item :global(svg) { color: hsl(215 20% 60%); flex-shrink: 0; }
+  .account-item:hover { background: rgba(255,255,255,0.07); }
+  :global(html.light) .account-item:hover { background: rgba(0,0,0,0.05); }
+  .account-item--danger { color: hsl(0 72% 65%); }
+  .account-item--danger :global(svg) { color: hsl(0 72% 60%); }
+  .account-item--danger:hover { background: rgba(220,38,38,0.12); }
+
+  .account-theme {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.35rem 0.6rem; gap: 0.5rem;
+  }
+  .account-theme-label {
+    font-size: 0.82rem; color: var(--color-foreground, hsl(210 20% 90%));
+  }
+  .account-sep {
+    height: 1px; margin: 0.3rem 0.2rem;
+    background: var(--color-border, hsl(220 30% 20%));
   }
 
   /* Login */
@@ -254,7 +368,8 @@ const isClubAdmin = user?.role === 'club_admin';
 
   /* Responsive */
   @media (max-width: 768px) {
-    .nav-link--perfil { display: none; }
+    /* En mobile el trigger queda compacto (avatar + caret); el nombre se oculta.
+       .user-badge sigue visible — la barra de acciones depende de él. */
     .user-name { display: none; }
     .topbar-center { display: none; }
   }

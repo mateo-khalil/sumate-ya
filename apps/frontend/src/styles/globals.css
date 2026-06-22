@@ -1442,3 +1442,66 @@ html.light .map-btn:hover {
   border-color: hsl(216 85% 65%);
   color: hsl(216 85% 28%);
 }
+
+/* ── LeaderboardTable.tsx (ranking) ───────────────────────
+   La isla usa colores oscuros hardcodeados en su <style>; en tema
+   claro la tabla quedaba negra (Image #3). Las clases CSS (spec 0,2,1)
+   ganan a la regla inyectada (0,1,0). El naranja del winrate y los
+   acentos oro/plata/bronce se mantienen iguales en ambos temas. */
+html.light .leaderboard {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .leaderboard-head {
+  color: hsl(215 20% 42%);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.025);
+}
+html.light .leaderboard-row + .leaderboard-row { border-top-color: rgba(0, 0, 0, 0.06); }
+html.light .leaderboard-row:hover { background: rgba(0, 0, 0, 0.03); }
+html.light .leaderboard-row--self {
+  background: rgba(246, 164, 0, 0.1);
+  box-shadow: inset 3px 0 0 hsl(35 100% 48%);
+}
+html.light .leaderboard-row--self:hover { background: rgba(246, 164, 0, 0.16); }
+html.light .leaderboard-rank { color: hsl(215 20% 45%); }
+html.light .leaderboard-avatar { background: hsl(210 20% 92%); }
+html.light .leaderboard-avatar-fallback { color: hsl(215 20% 45%); }
+html.light .leaderboard-name { color: hsl(220 72% 10%); }
+html.light .leaderboard-meta { color: hsl(215 20% 46%); }
+html.light .leaderboard-stat { color: hsl(220 72% 14%); }
+html.light .leaderboard-winrate { color: hsl(35 100% 40%); }
+html.light .leaderboard-skeleton-row {
+  background: hsl(210 20% 92%);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ── MatchesView.tsx — toggles Próximos/Pasados + Lista/Mapa ───
+   El contenedor .view-toggle tenía fondo navy hardcodeado y los
+   botones .view-toggle-btn texto oscuro: en tema claro quedaban
+   ilegibles (Image #4). El estado activo (naranja) se mantiene. */
+html.light .view-toggle {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+html.light .view-toggle-btn { color: hsl(215 20% 46%); }
+html.light .view-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: hsl(215 20% 18%);
+}
+html.light .view-toggle-btn + .view-toggle-btn { border-left-color: rgba(0, 0, 0, 0.1); }
+html.light .view-toggle-btn.active { color: hsl(220 72% 7%); }
+html.light .toggle-options { border-left-color: rgba(0, 0, 0, 0.12); }
+html.light .switch-toggle { color: hsl(215 20% 28%); }
+html.light .switch-input { background: hsl(215 16% 78%); }
+html.light .switch-input::before { background: hsl(0 0% 100%); }
+html.light .switch-input:checked { background: hsl(35 100% 48%); }
+
+/* ── UnifiedDiscovery.tsx — tabs Partidos/Torneos (/partidos) ── */
+html.light .discovery-tabs { border-bottom-color: rgba(0, 0, 0, 0.1); }
+html.light .discovery-tab { color: hsl(215 20% 42%); }
+html.light .discovery-tab:hover { color: hsl(215 20% 16%); }
+html.light .discovery-tab--active {
+  color: hsl(35 100% 42%);
+  border-bottom-color: hsl(35 100% 42%);
+}

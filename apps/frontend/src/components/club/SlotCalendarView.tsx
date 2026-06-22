@@ -12,8 +12,13 @@
  *   (an array), so the checkbox selection and +N extras still work correctly.
  * - Past days: cells are grayed regardless of slot status (isPastDay check fires before
  *   any status-based class). Today's past hours are dimmed at 42% opacity.
- * - Checkbox: rendered inside the cell as an absolute-positioned element so it doesn't
- *   affect the cell's flex layout. stopPropagation prevents triggering onEdit.
+ * - Selection control: an absolute-positioned button in the top-right corner so it
+ *   doesn't affect the cell's flex layout. stopPropagation prevents triggering onEdit.
+ *   It is a custom 26px-target checkbox (role="checkbox"/aria-checked), NOT a native
+ *   <input>: the native one was 11px with an 11px hit area, which users found "horrible
+ *   and uncomfortable" to click. The visible 16px box is drawn with ::before so the hit
+ *   target stays comfortably larger than the glyph; orange fill + Check icon on select,
+ *   ring + scale on hover/focus for a clear affordance.
  * - Previously fixed bugs:
  *   - Past days incorrectly showed green because only today's past-HOURS were checked.
  *     Fix: isPastDay check on the whole date, applied before slot-status classes.
@@ -29,7 +34,7 @@
  */
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react';
 import CalendarGrid, { type CellRenderInfo, type CellRenderResult } from '../calendar/CalendarGrid';
 import {
   DISPLAY_HOURS,
@@ -106,14 +111,16 @@ export function SlotCalendarView({ slots, selectedIds, onToggleSelect, onEdit }:
 
     const content = (
       <>
-        <input
-          type="checkbox"
-          className="slot-chk"
-          checked={sel}
-          aria-label="Seleccionar slot"
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={sel}
+          aria-label={sel ? 'Deseleccionar slot' : 'Seleccionar slot'}
+          className={`slot-chk${sel ? ' slot-chk--on' : ''}`}
           onClick={(e) => { e.stopPropagation(); onToggleSelect(primary.id); }}
-          onChange={() => {}}
-        />
+        >
+          <Check size={12} strokeWidth={3.5} className="slot-chk-tick" aria-hidden="true" />
+        </button>
         {primary.priceArs != null && status !== 'match' && (
           <span className="slot-price">${primary.priceArs}</span>
         )}
@@ -201,10 +208,50 @@ export function SlotCalendarView({ slots, selectedIds, onToggleSelect, onEdit }:
         </span>
       ))}
       <style>{`
+        /* Comfortable selection control. The old design was an 11px native
+           checkbox with an 11px hit target jammed into the corner — too small
+           to click reliably and visually crude. This is a 26px square button
+           (a generous tap/click target, well above the 24px a11y minimum) whose
+           visible 16px rounded box is drawn via ::before, so the easy-to-hit
+           area is larger than the box you see. The lucide Check icon only shows
+           when selected; the box fills with FIFA orange on selection and gets a
+           ring + scale on hover so the affordance is obvious. */
         .slot-chk {
-          position: absolute; top: 3px; right: 3px;
-          width: 11px; height: 11px; accent-color: hsl(var(--primary)); cursor: pointer;
+          position: absolute; top: 1px; right: 1px;
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 26px; height: 26px; padding: 0; margin: 0;
+          border: none; background: transparent; cursor: pointer; z-index: 1;
+          -webkit-tap-highlight-color: transparent;
         }
+        .slot-chk::before {
+          content: '';
+          position: absolute;
+          width: 16px; height: 16px; border-radius: 5px;
+          border: 1.5px solid hsl(var(--muted-foreground) / 0.6);
+          background: hsl(var(--card) / 0.9);
+          box-shadow: 0 1px 2px hsl(0 0% 0% / 0.25);
+          transition: border-color 0.12s, background 0.12s, transform 0.12s, box-shadow 0.12s;
+        }
+        .slot-chk:hover::before {
+          border-color: hsl(var(--primary));
+          transform: scale(1.1);
+          box-shadow: 0 0 0 3px hsl(var(--primary) / 0.18);
+        }
+        .slot-chk:focus-visible { outline: none; }
+        .slot-chk:focus-visible::before {
+          border-color: hsl(var(--primary));
+          box-shadow: 0 0 0 3px hsl(var(--ring) / 0.45);
+        }
+        .slot-chk--on::before {
+          background: hsl(var(--primary));
+          border-color: hsl(var(--primary));
+        }
+        .slot-chk-tick {
+          position: relative; z-index: 1;
+          color: hsl(var(--primary-foreground));
+          opacity: 0; transform: scale(0.5); transition: opacity 0.12s, transform 0.12s;
+        }
+        .slot-chk--on .slot-chk-tick { opacity: 1; transform: scale(1); }
         /* Top-left corner. Previously was bottom-left which overlapped with
            .cal-court-label (also bottom-left after the shared-grid refactor).
            Mirrors AvailableSlotsPicker's .pk-price corner + color so both

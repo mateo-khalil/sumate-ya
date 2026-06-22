@@ -319,20 +319,34 @@ if (Astro.request.method === 'POST') {
     /* min 16px to prevent iOS Safari from auto-zooming on focus */
     font-size: 1rem;
     font-family: 'Barlow', sans-serif;
-    color: hsl(210 20% 94%);
+    /* Theme token + explicit -webkit-text-fill-color so text stays legible in light
+       mode and in Safari (which prioritizes text-fill-color, incl. on autofill). */
+    color: var(--color-foreground);
+    -webkit-text-fill-color: var(--color-foreground);
+    caret-color: var(--color-foreground);
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     outline: none;
     width: 100%;
   }
 
   .field input::placeholder {
-    color: hsl(215 20% 38%);
+    color: var(--color-muted-foreground);
+    -webkit-text-fill-color: var(--color-muted-foreground);
+    opacity: 1;
   }
 
   .field input:focus {
     border-color: hsl(216 85% 55%);
     background: rgba(27, 105, 224, 0.08);
     box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.2);
+  }
+
+  .field input:-webkit-autofill,
+  .field input:-webkit-autofill:hover,
+  .field input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--color-foreground);
+    caret-color: var(--color-foreground);
+    transition: background-color 9999s ease-in-out 0s, border-color 0.15s, box-shadow 0.15s;
   }
 
   .field-error {

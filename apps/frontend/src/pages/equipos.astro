@@ -7,6 +7,9 @@
  * - Si no está autenticado redirige a /login.
  * - El formulario de creación está en una isla React (CreateTeamDialog) para
  *   poder llamar /api/graphql-auth sin exponer credenciales en el cliente.
+ * - Cada tarjeta muestra un stack de miniaturas (hasta 4 + "+N") con las fotos de
+ *   perfil de los miembros (MY_TEAMS ya trae members.player.avatarUrl), con inicial
+ *   como fallback, para previsualizar el plantel sin abrir el equipo.
  * - Previously fixed bugs: none relevant.
  */
 export const prerender = false;
@@ -104,10 +107,27 @@ function myRole(team: TeamData): 'CAPTAIN' | 'MEMBER' {
                 <ChevronRight size={20} strokeWidth={2} aria-hidden="true" style={{ color: 'var(--color-muted-foreground)', flexShrink: 0 }} />
               </div>
               <div class="team-card-bottom">
-                <span class="member-count">
-                  <Users size={14} strokeWidth={2} aria-hidden="true" />
-                  {team.memberCount} {team.memberCount === 1 ? 'jugador' : 'jugadores'}
-                </span>
+                <div class="member-summary">
+                  {/* Miniaturas de hasta 4 miembros + contador "+N" para previsualizar
+                      el plantel sin entrar al equipo (foto de perfil o inicial como fallback). */}
+                  <span class="member-avatars" aria-hidden="true">
+                    {team.members.slice(0, 4).map(entry => (
+                      <span class="member-avatar">
+                        {entry.player.avatarUrl
+                          ? <img src={entry.player.avatarUrl} alt="" class="member-avatar-img" loading="lazy" />
+                          : <span class="member-avatar-fallback">{entry.player.displayName.charAt(0).toUpperCase()}</span>
+                        }
+                      </span>
+                    ))}
+                    {team.memberCount > 4 && (
+                      <span class="member-avatar member-avatar-more">+{team.memberCount - 4}</span>
+                    )}
+                  </span>
+                  <span class="member-count">
+                    <Users size={14} strokeWidth={2} aria-hidden="true" />
+                    {team.memberCount} {team.memberCount === 1 ? 'jugador' : 'jugadores'}
+                  </span>
+                </div>
                 <span class={`role-badge ${isCaptain ? 'role-captain' : 'role-member'}`}>
                   {isCaptain
                     ? <><Shield size={12} strokeWidth={2} aria-hidden="true" /> Capitán</>
@@ -182,10 +202,26 @@ function myRole(team: TeamData): 'CAPTAIN' | 'MEMBER' {
   .team-format { font-size: 0.8rem; color: var(--color-muted-foreground); }
   .chevron { color: var(--color-muted-foreground); flex-shrink: 0; }
 
-  .team-card-bottom { display: flex; align-items: center; justify-content: space-between; }
+  .team-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .member-summary { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+  .member-avatars { display: inline-flex; align-items: center; }
+  .member-avatar {
+    width: 26px; height: 26px; border-radius: 50%; overflow: hidden;
+    background: var(--color-muted); color: var(--color-muted-foreground);
+    border: 2px solid var(--color-card);
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 0.7rem; font-weight: 600;
+  }
+  .member-avatar + .member-avatar { margin-left: -8px; }
+  .member-avatar-img { width: 100%; height: 100%; object-fit: cover; }
+  .member-avatar-fallback { line-height: 1; }
+  .member-avatar-more {
+    background: var(--color-muted); color: var(--color-foreground);
+    font-size: 0.65rem;
+  }
   .member-count {
     display: flex; align-items: center; gap: 0.35rem;
-    font-size: 0.8rem; color: var(--color-muted-foreground);
+    font-size: 0.8rem; color: var(--color-muted-foreground); white-space: nowrap;
   }
   .role-badge {
     display: inline-flex; align-items: center; gap: 0.3rem;
