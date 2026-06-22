@@ -63,6 +63,7 @@ import {
 import { clubSlotRepository } from '../repositories/clubSlotRepository.js';
 import { clubRepository } from '../repositories/clubRepository.js';
 import { profileRepository } from '../repositories/profileRepository.js';
+import { notificationService } from './notificationService.js';
 import { dateToDayOfWeek } from './clubService.js';
 import { geocodeAddresses } from './geocodingService.js';
 import type { ServiceContext } from '../types/context.js';
@@ -564,6 +565,28 @@ export async function joinMatch(
   console.info(
     `[matchService.joinMatch] userId=${ctx.userId} joined matchId=${input.matchId} team=${dbTeam}`,
   );
+
+  // 6b. Notify the organizer that a new player joined their match.
+  //
+  // Decision Context:
+  // - This is a "real event" hook for the notification feature: the player-facing bell
+  //   stays empty unless events create rows. joinMatch is the most common positive event,
+  //   so it is the highest-signal place to start.
+  // - notificationService.notify() is preference-aware (skips if the organizer disabled
+  //   matchActivity) and best-effort (logs + swallows), so a notification failure can never
+  //   roll back a successful join — the participant INSERT above has already committed.
+  // - Skip self-joins: the organizer joining their own match should not notify themselves.
+  // - Mirrors the existing service-layer notification pattern (cancellation/reminder helpers
+  //   already fire from services), keeping all notification creation in the service tier.
+  // - Previously fixed bugs: none relevant.
+  if (matchRow.organizerId && matchRow.organizerId !== ctx.userId) {
+    await notificationService.notify(matchRow.organizerId, {
+      type: 'match_player_joined',
+      title: 'Nuevo jugador en tu partido',
+      body: `${profile.displayName} se sumó a tu partido.`,
+      referenceId: input.matchId,
+    });
+  }
 
   // 7. If now full, update match status (service-role — see repository comment)
   const totalAfterJoin = matchRow.matchParticipants.length + 1;
