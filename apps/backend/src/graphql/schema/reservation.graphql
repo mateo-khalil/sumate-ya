@@ -1,0 +1,116 @@
+# Reservations — GraphQL schema for club admin manual court bookings (Reservas)
+#
+# Decision Context:
+# - New domain: no reservation concept existed before. A reservation is a manual booking the
+#   club admin creates for a specific datetime on one of their courts. The booker is EITHER an
+#   app user (playerId) OR a manual contact (contactName + optional contactPhone) — per the
+#   product decision "el club manager puede seleccionar un usuario de la app o poner datos
+#   manuales". The DB CHECK constraint reservations_booker_required enforces this.
+# - reservedAt is a full ISO datetime (timestamptz), unlike clubSlots which are recurring
+#   weekly templates. A reservation occupies concrete court time on a concrete day.
+# - courtName is denormalised onto the Reservation (joined from courts) so the list UI renders
+#   without a second round-trip; player is resolved to a minimal profile projection.
+# - Overlap protection: the service rejects a new/edited reservation that overlaps a non-
+#   cancelled reservation on the same court (double-booking guard). Computed in the service
+#   because it depends on reservedAt + durationMin arithmetic.
+# - ReservationStatus mirrors the DB enum reservationStatus (confirmed/cancelled/completed).
+# - extend type Query/Mutation because both root types already exist.
+# - Previously fixed bugs: none relevant (new feature).
+
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+# Minimal app-user projection for a reservation booker.
+type ReservationPlayer {
+  id: ID!
+  displayName: String!
+  avatarUrl: String
+}
+
+type Reservation {
+  id: ID!
+  clubId: ID!
+  courtId: ID!
+  courtName: String!
+  reservedAt: String!
+  durationMin: Int!
+  status: ReservationStatus!
+  # Present when the booking is linked to an app user; null for manual bookings.
+  player: ReservationPlayer
+  # Present for manual bookings (or as a fallback label); null when an app user is linked.
+  contactName: String
+  contactPhone: String
+  priceArs: Float
+  notes: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+# =====================================================
+# Result type
+# =====================================================
+
+type ReservationMutationResult {
+  success: Boolean!
+  reservation: Reservation
+  message: String
+}
+
+# =====================================================
+# Inputs
+# =====================================================
+
+input ReservationFilters {
+  # YYYY-MM-DD inclusive range over reservedAt (defaults to a wide window if omitted).
+  startDate: String
+  endDate: String
+  courtId: ID
+  status: ReservationStatus
+}
+
+input CreateReservationInput {
+  courtId: ID!
+  # ISO 8601 datetime, e.g. "2026-06-22T18:00:00Z" or local "2026-06-22T18:00".
+  reservedAt: String!
+  durationMin: Int
+  # Provide playerId for an app user, OR contactName for a manual booking. One is required.
+  playerId: ID
+  contactName: String
+  contactPhone: String
+  priceArs: Float
+  notes: String
+}
+
+input UpdateReservationInput {
+  reservationId: ID!
+  courtId: ID
+  reservedAt: String
+  durationMin: Int
+  playerId: ID
+  contactName: String
+  contactPhone: String
+  status: ReservationStatus
+  priceArs: Float
+  notes: String
+}
+
+# =====================================================
+# Query / Mutation extensions
+# =====================================================
+
+extend type Query {
+  # Admin: list reservations for the authenticated admin's club (filterable).
+  myClubReservations(filters: ReservationFilters): [Reservation!]!
+}
+
+extend type Mutation {
+  createReservation(input: CreateReservationInput!): ReservationMutationResult!
+  updateReservation(input: UpdateReservationInput!): ReservationMutationResult!
+  # Soft transition to CANCELLED (keeps the row for history).
+  cancelReservation(reservationId: ID!): ReservationMutationResult!
+  # Hard-delete a reservation row.
+  deleteReservation(reservationId: ID!): ReservationMutationResult!
+}
