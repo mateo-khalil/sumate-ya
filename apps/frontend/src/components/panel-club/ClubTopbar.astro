@@ -1,0 +1,340 @@
+---
+/**
+ * ClubTopbar — barra de navegación superior del panel de club.
+ *
+ * Decision Context:
+ * - Antes el panel de club usaba una barra superior mínima (brand + "Salir") + un
+ *   sidebar lateral (ClubSidebar) con NAVEGACIÓN/GESTIÓN/REPORTES. Eso era visualmente
+ *   inconsistente con la app del jugador (Topbar.astro), que usa una barra horizontal
+ *   con links centrales + un menú de cuenta desplegable. Por pedido del usuario se eliminó
+ *   el sidebar lateral y toda la navegación del club vive ahora ARRIBA, replicando el
+ *   patrón del jugador para que ambas vistas se sientan iguales.
+ * - Links centrales (con iconos lucide): Dashboard, Crear partido, Horarios, Crear torneo.
+ *   Son acciones de GESTIÓN del club — la vista es "a nivel club", no de jugador (ya no
+ *   linkea al hub /partidos ni a /equipos como hacía el sidebar).
+ * - Menú de cuenta: mismo desplegable que el jugador (avatar + nombre + chevron). Agrupa
+ *   Configuración, el toggle de tema (modo claro/oscuro) y Cerrar sesión. Antes el club no
+ *   tenía este dropdown (solo un botón "Salir" suelto y un ThemeToggle a veces presente).
+ * - Mobile: ClubMobileNav (hamburguesa + drawer) sigue cubriendo pantallas chicas; los
+ *   links centrales se ocultan < 768px igual que en el Topbar del jugador.
+ * - El desplegable usa un <script> vanilla (no isla React) para abrir/cerrar — más liviano.
+ *   Click en el trigger, click fuera y Escape lo cierran.
+ * - Previously fixed bugs: none relevant (componente nuevo que unifica el patrón).
+ */
+
+import { Volleyball, ChevronDown, UserRound, Settings, LogOut, LayoutDashboard, Plus, Calendar, Trophy } from 'lucide-react';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import ClubMobileNav from './ClubMobileNav.tsx';
+
+interface Props {
+  user: {
+    displayName?: string | null;
+    email?: string | null;
+  };
+  currentPath: string;
+}
+
+const { user, currentPath } = Astro.props;
+const nombre = user.displayName || user.email || '';
+const email = user.email || '';
+
+const isActive = (href: string) => currentPath === href;
+const startsWith = (prefix: string) => currentPath.startsWith(prefix);
+---
+
+<nav class="club-topbar">
+  <div class="topbar-inner">
+
+    <!-- Brand -->
+    <a href="/panel-club/dashboard" class="topbar-brand">
+      <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
+      <span class="topbar-name">SUMATE YA</span>
+      <span class="topbar-role-pill">CLUB</span>
+    </a>
+
+    <!-- Links centrales (con iconos) — ocultos en mobile -->
+    <div class="topbar-center">
+      <a
+        href="/panel-club/dashboard"
+        class:list={['nav-link', { 'is-active': isActive('/panel-club/dashboard') }]}
+        aria-current={isActive('/panel-club/dashboard') ? 'page' : undefined}
+      >
+        <LayoutDashboard size={16} strokeWidth={2} aria-hidden="true" />
+        <span>Dashboard</span>
+      </a>
+      <a
+        href="/panel-club/crear-partido"
+        class:list={['nav-link', { 'is-active': isActive('/panel-club/crear-partido') }]}
+        aria-current={isActive('/panel-club/crear-partido') ? 'page' : undefined}
+      >
+        <Plus size={16} strokeWidth={2.5} aria-hidden="true" />
+        <span>Crear partido</span>
+      </a>
+      <a
+        href="/panel-club/horarios"
+        class:list={['nav-link', { 'is-active': isActive('/panel-club/horarios') }]}
+        aria-current={isActive('/panel-club/horarios') ? 'page' : undefined}
+      >
+        <Calendar size={16} strokeWidth={2} aria-hidden="true" />
+        <span>Horarios</span>
+      </a>
+      <a
+        href="/torneos/crear"
+        class:list={['nav-link', { 'is-active': startsWith('/torneos/crear') }]}
+        aria-current={startsWith('/torneos/crear') ? 'page' : undefined}
+      >
+        <Trophy size={16} strokeWidth={2} aria-hidden="true" />
+        <span>Crear torneo</span>
+      </a>
+    </div>
+
+    <!-- Acciones -->
+    <div class="topbar-actions">
+      <!-- Mobile nav: hamburguesa (oculta en md+) -->
+      <ClubMobileNav client:load currentPath={currentPath} userName={nombre} />
+
+      <!-- Menú de cuenta: Configuración + tema + cerrar sesión -->
+      <div class="account" data-account-menu>
+        <button
+          type="button"
+          class="user-badge"
+          data-account-trigger
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-label="Abrir menú de cuenta"
+        >
+          <span class="user-avatar"><UserRound size={16} strokeWidth={2} aria-hidden="true" /></span>
+          <span class="user-name">{nombre}</span>
+          <ChevronDown className="account-caret" size={14} strokeWidth={2.5} aria-hidden="true" />
+        </button>
+
+        <div class="account-menu" data-account-dropdown role="menu" hidden>
+          <div class="account-head">
+            <span class="account-head-name">{nombre}</span>
+            {email && <span class="account-head-email">{email}</span>}
+          </div>
+
+          <a href="/panel-club/configuracion" class="account-item" role="menuitem">
+            <Settings size={15} strokeWidth={2} aria-hidden="true" />
+            <span>Configuración</span>
+          </a>
+
+          <div class="account-theme">
+            <span class="account-theme-label">Tema</span>
+            <ThemeToggle client:load />
+          </div>
+
+          <div class="account-sep" role="separator"></div>
+
+          <form method="POST" action="/api/auth/logout">
+            <button type="submit" class="account-item account-item--danger" role="menuitem">
+              <LogOut size={15} strokeWidth={2} aria-hidden="true" />
+              <span>Cerrar sesión</span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="topbar-accent" aria-hidden="true"></div>
+</nav>
+
+<script>
+  // Menú de cuenta: abrir/cerrar el desplegable detrás del nombre del usuario.
+  // Vanilla (sin isla React) para mantener la barra liviana. Cierra al hacer click
+  // fuera o con Escape; clicks dentro (p.ej. el toggle de tema) no lo cierran.
+  const menu = document.querySelector<HTMLElement>('[data-account-menu]');
+  const trigger = menu?.querySelector<HTMLButtonElement>('[data-account-trigger]');
+  const dropdown = menu?.querySelector<HTMLElement>('[data-account-dropdown]');
+
+  if (menu && trigger && dropdown) {
+    const setOpen = (open: boolean) => {
+      dropdown.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+    };
+
+    trigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setOpen(Boolean(dropdown.hidden));
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!menu.contains(event.target as Node)) setOpen(false);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    });
+  }
+</script>
+
+<style>
+  .club-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(7, 15, 31, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    transition: background 0.2s, border-color 0.2s;
+  }
+
+  /* Tema claro */
+  :global(html.light) .club-topbar {
+    background: rgba(255, 255, 255, 0.94);
+    border-bottom-color: rgba(0, 0, 0, 0.09);
+  }
+
+  .topbar-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 1.25rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  /* Brand */
+  .topbar-brand {
+    display: flex; align-items: center; gap: 0.5rem;
+    text-decoration: none; flex-shrink: 0;
+  }
+  .topbar-ball { color: hsl(42 100% 60%); line-height: 1; display: inline-flex; }
+  .topbar-name {
+    font-family: 'Bebas Neue', 'Barlow Condensed', sans-serif;
+    font-size: 1.15rem; letter-spacing: 0.06em;
+    color: hsl(210 20% 94%);
+    transition: color 0.2s;
+  }
+  :global(html.light) .topbar-name { color: hsl(220 72% 12%); }
+  .topbar-role-pill {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    background: rgba(246, 164, 0, 0.15); border: 1px solid rgba(246, 164, 0, 0.35);
+    color: hsl(42 100% 60%); border-radius: 4px; padding: 0.125rem 0.5rem;
+  }
+  :global(html.light) .topbar-role-pill {
+    background: rgba(246, 164, 0, 0.1); border-color: rgba(246, 164, 0, 0.25);
+  }
+
+  /* Links centrales */
+  .topbar-center { display: flex; align-items: center; gap: 0.2rem; flex: 1; }
+  .nav-link {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.3rem 0.65rem; border-radius: 6px;
+    font-size: 0.82rem; font-weight: 500;
+    color: hsl(215 20% 65%);
+    text-decoration: none; white-space: nowrap;
+    transition: color 0.15s, background 0.15s;
+  }
+  .nav-link :global(svg) { color: inherit; opacity: 0.85; }
+  .nav-link:hover { color: hsl(215 20% 90%); background: rgba(255,255,255,0.07); }
+  :global(html.light) .nav-link { color: hsl(220 20% 35%); }
+  :global(html.light) .nav-link:hover { color: hsl(220 72% 10%); background: rgba(0,0,0,0.05); }
+
+  /* Tab activa: texto naranja + subrayado */
+  .nav-link.is-active { color: hsl(35 100% 62%); font-weight: 600; }
+  .nav-link.is-active :global(svg) { opacity: 1; }
+  .nav-link.is-active::after {
+    content: '';
+    position: absolute;
+    left: 0.65rem; right: 0.65rem; bottom: 0;
+    height: 2px; border-radius: 2px;
+    background: var(--color-primary, hsl(35 100% 48%));
+  }
+  .nav-link.is-active:hover { background: transparent; }
+  :global(html.light) .nav-link.is-active { color: hsl(35 100% 40%); }
+
+  /* Acciones */
+  .topbar-actions { display: flex; align-items: center; gap: 0.45rem; flex-shrink: 0; }
+
+  /* Account menu */
+  .account { position: relative; flex-shrink: 0; }
+  .user-badge {
+    display: flex; align-items: center; gap: 0.4rem;
+    padding: 0.25rem 0.5rem 0.25rem 0.35rem; border-radius: 999px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    font-size: 0.78rem; color: hsl(215 20% 72%); white-space: nowrap;
+    cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .user-badge:hover { background: rgba(255,255,255,0.12); color: hsl(215 20% 90%); }
+  .user-avatar {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(246,164,0,0.16); color: hsl(35 100% 62%); flex-shrink: 0;
+  }
+  .user-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  .account-caret { color: hsl(215 20% 55%); transition: transform 0.15s; }
+  .user-badge[aria-expanded='true'] .account-caret { transform: rotate(180deg); }
+  :global(html.light) .user-badge {
+    background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: hsl(220 20% 35%);
+  }
+  :global(html.light) .user-badge:hover { background: rgba(0,0,0,0.07); color: hsl(220 72% 12%); }
+
+  /* Dropdown */
+  .account-menu {
+    position: absolute; top: calc(100% + 10px); right: 0;
+    min-width: 220px;
+    background: var(--color-card, hsl(220 55% 11%));
+    border: 1px solid var(--color-border, hsl(220 30% 20%));
+    border-radius: 12px; padding: 0.4rem;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+    z-index: 200;
+  }
+  .account-menu[hidden] { display: none; }
+  .account-head {
+    display: flex; flex-direction: column; gap: 0.1rem;
+    padding: 0.5rem 0.6rem 0.6rem; margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--color-border, hsl(220 30% 20%));
+  }
+  .account-head-name {
+    font-size: 0.85rem; font-weight: 600;
+    color: var(--color-foreground, hsl(210 20% 94%));
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .account-head-email {
+    font-size: 0.72rem; color: var(--color-muted-foreground, hsl(215 20% 55%));
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .account-item {
+    display: flex; align-items: center; gap: 0.55rem; width: 100%;
+    padding: 0.5rem 0.6rem; border-radius: 8px;
+    background: transparent; border: none; cursor: pointer;
+    font-size: 0.82rem; font-family: inherit; text-align: left;
+    color: var(--color-foreground, hsl(210 20% 90%)); text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+  }
+  .account-item :global(svg) { color: hsl(215 20% 60%); flex-shrink: 0; }
+  .account-item:hover { background: rgba(255,255,255,0.07); }
+  :global(html.light) .account-item:hover { background: rgba(0,0,0,0.05); }
+  .account-item--danger { color: hsl(0 72% 65%); }
+  .account-item--danger :global(svg) { color: hsl(0 72% 60%); }
+  .account-item--danger:hover { background: rgba(220,38,38,0.12); }
+
+  .account-theme {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.35rem 0.6rem; gap: 0.5rem;
+  }
+  .account-theme-label {
+    font-size: 0.82rem; color: var(--color-foreground, hsl(210 20% 90%));
+  }
+  .account-sep {
+    height: 1px; margin: 0.3rem 0.2rem;
+    background: var(--color-border, hsl(220 30% 20%));
+  }
+
+  /* Accent line */
+  .topbar-accent {
+    height: 2px;
+    background: linear-gradient(90deg, hsl(42 100% 55%) 0%, hsl(216 85% 45%) 60%, transparent 100%);
+  }
+
+  /* Responsive */
+  @media (max-width: 767px) {
+    .user-name { display: none; }
+    .topbar-center { display: none; }
+  }
+</style>
