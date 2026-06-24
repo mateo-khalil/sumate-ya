@@ -26,3 +26,6 @@ pnpm-debug.log*
 # Vercel local state
 .vercel/
 .vercel
+
+# Cloudflare Wrangler local state
+.wrangler/
