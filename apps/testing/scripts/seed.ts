@@ -80,6 +80,15 @@ const EMPTY_AUTO_CANCEL_MATCH_FORMAT = '5v5';
 const EMPTY_AUTO_CANCEL_MATCH_DURATION_MIN = 60;
 const EMPTY_AUTO_CANCEL_MATCH_DAYS_AHEAD = 10;
 
+// Quinto partido E5: dedicado al test de ciclo completo multi-usuario. El seed
+// lo garantiza sin participantes para que el spec pueda hacer sus propias uniones
+// via API (harness multi-token) y verificar los conteos reales en SSR.
+const FULL_CYCLE_MATCH_ID = 'e1000000-0000-0000-0000-000000000005';
+const FULL_CYCLE_MATCH_CAPACITY = 10;
+const FULL_CYCLE_MATCH_FORMAT = '5v5';
+const FULL_CYCLE_MATCH_DURATION_MIN = 60;
+const FULL_CYCLE_MATCH_DAYS_AHEAD = 21;
+
 const CLUB_DASHBOARD_FIXTURE = {
   clubId: 'b2000000-0000-0000-0000-000000000001',
   courtId: 'c2000000-0000-0000-0000-000000000001',
@@ -546,6 +555,85 @@ async function ensureEmptyAutoCancelMatchFixture(
     throw new Error(
       `[seed] No se pudo crear el participante unico del partido E4: ${insertParticipantsError.message}`,
     );
+  }
+}
+
+/**
+ * E5 — ciclo completo multi-usuario.
+ *
+ * Decision Context:
+ * - E5 es el partido dedicado al spec ciclo-completo-partido.spec.ts. El spec
+ *   hace sus propias uniones vía API (loginApiAndGetToken + gqlPostOrThrow) y
+ *   las limpia en afterAll. El seed sólo garantiza que el partido exista y que
+ *   no haya participantes residuales de corridas anteriores.
+ * - Se elimina a Mateo y Ricardo de este partido en cada corrida del seed para
+ *   que el spec siempre parta de un estado limpio (0 participantes).
+ * - Previously fixed bugs: none relevant.
+ */
+async function ensureFullCycleMatchExists(client: SupabaseClient): Promise<void> {
+  const { data: existing, error: selectError } = await client
+    .from('matches')
+    .select('id, capacity, status, format')
+    .eq('id', FULL_CYCLE_MATCH_ID)
+    .maybeSingle();
+  if (selectError) {
+    throw new Error(`[seed] Error consultando matches (E5): ${selectError.message}`);
+  }
+
+  if (existing) {
+    const needsUpdate =
+      existing.capacity !== FULL_CYCLE_MATCH_CAPACITY ||
+      existing.status !== 'open' ||
+      existing.format !== FULL_CYCLE_MATCH_FORMAT;
+    if (needsUpdate) {
+      const { error: updateError } = await client
+        .from('matches')
+        .update({ capacity: FULL_CYCLE_MATCH_CAPACITY, status: 'open', format: FULL_CYCLE_MATCH_FORMAT })
+        .eq('id', FULL_CYCLE_MATCH_ID);
+      if (updateError) {
+        throw new Error(`[seed] No se pudo ajustar el partido E5: ${updateError.message}`);
+      }
+    }
+    // Clear any leftover participants so the spec starts from 0.
+    const { error: deleteError } = await client
+      .from('matchParticipants')
+      .delete()
+      .eq('matchId', FULL_CYCLE_MATCH_ID);
+    if (deleteError) {
+      throw new Error(`[seed] No se pudieron limpiar participantes del partido E5: ${deleteError.message}`);
+    }
+    return;
+  }
+
+  const { data: club, error: clubError } = await client
+    .from('clubs')
+    .select('id, ownerId')
+    .order('createdAt', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (clubError) {
+    throw new Error(`[seed] Error consultando clubs (E5): ${clubError.message}`);
+  }
+  if (!club) {
+    throw new Error('[seed] No hay clubes en la DB para crear el partido E5.');
+  }
+
+  const scheduledAt = new Date(
+    Date.now() + FULL_CYCLE_MATCH_DAYS_AHEAD * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const { error: insertError } = await client.from('matches').insert({
+    id: FULL_CYCLE_MATCH_ID,
+    organizerId: club.ownerId,
+    clubId: club.id,
+    format: FULL_CYCLE_MATCH_FORMAT,
+    capacity: FULL_CYCLE_MATCH_CAPACITY,
+    scheduledAt,
+    durationMin: FULL_CYCLE_MATCH_DURATION_MIN,
+    status: 'open',
+    description: 'Partido E5 (seed E2E) — ciclo completo multi-usuario, sin participantes.',
+  });
+  if (insertError) {
+    throw new Error(`[seed] No se pudo crear el partido E5: ${insertError.message}`);
   }
 }
 
@@ -1401,12 +1489,13 @@ async function seed(): Promise<void> {
   await ensureTestUserNotInOpenMatch(client);
   await ensureResultVotingMatchFixture(client, ricardoId);
   await ensureEmptyAutoCancelMatchFixture(client, ricardoId);
+  await ensureFullCycleMatchExists(client);
   await seedClubDashboard(client);
   await seedTournaments(client);
   await seedPermanentTeams(client, ricardoId);
   // eslint-disable-next-line no-console
   console.log(
-    '[seed] Fixtures listas: E1 lleno, E2 abierto, E3 resultado, E4 auto-cancel, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture, equipos permanentes.',
+    '[seed] Fixtures listas: E1 lleno, E2 abierto, E3 resultado, E4 auto-cancel, E5 ciclo-completo, dashboard club, T1 torneo abierto, T2 torneo con capitan, T3 torneo con fixture, equipos permanentes.',
   );
 }
 

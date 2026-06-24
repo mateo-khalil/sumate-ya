@@ -13,6 +13,11 @@ import { FRONTEND_URL } from '../constants';
  * - Why filter by `client="load"` (not all islands): islands with
  *   `client:visible` (e.g. MatchResultsSection at the bottom) never hydrate
  *   without scrolling; waiting for them would timeout.
+ * - Participant count locators: the page renders two `.team-count` spans —
+ *   first is team A, second is team B. Format: "{count} / {spotsPerTeam}".
+ *   `teamACountLabel` and `teamBCountLabel` select these spans by position.
+ * - `fullBanner`: `.banner--full` is rendered by [id].astro when
+ *   `!isJoined && matchFull`. Contains "Este partido está completo".
  * - Previously fixed bugs:
  *   1. Join-team tests failing with `expected 1, received 0` because the click
  *      ran before hydration.
@@ -28,6 +33,12 @@ export class MatchDetailPage {
   readonly confirmDialog: Locator;
   readonly confirmLeaveButton: Locator;
   readonly cancelLeaveButton: Locator;
+  /** "N / M" label for team A — first .team-count span on the page. */
+  readonly teamACountLabel: Locator;
+  /** "N / M" label for team B — second .team-count span on the page. */
+  readonly teamBCountLabel: Locator;
+  /** Banner shown to non-joined users when the match is full. */
+  readonly fullBanner: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -38,6 +49,9 @@ export class MatchDetailPage {
     this.confirmDialog = page.getByRole('dialog');
     this.confirmLeaveButton = page.getByRole('button', { name: /sí, salirme/i });
     this.cancelLeaveButton = page.getByRole('button', { name: /cancelar/i });
+    this.teamACountLabel = page.locator('.team-count').first();
+    this.teamBCountLabel = page.locator('.team-count').last();
+    this.fullBanner = page.locator('.banner--full');
   }
 
   async goto(matchId: string): Promise<void> {
@@ -84,5 +98,20 @@ export class MatchDetailPage {
   /** All .division-badge elements visible inside any .player-card on the page. */
   get allPlayerDivisionBadges(): Locator {
     return this.page.locator('.player-card .division-badge');
+  }
+
+  /**
+   * Asserts that the team A and team B count labels match the expected counts.
+   * @param spotsPerTeam - the max capacity per team (e.g. 5 for a 5v5 match)
+   */
+  async expectTeamCounts(teamACount: number, teamBCount: number, spotsPerTeam = 5): Promise<void> {
+    await expect(this.teamACountLabel).toHaveText(`${teamACount} / ${spotsPerTeam}`);
+    await expect(this.teamBCountLabel).toHaveText(`${teamBCount} / ${spotsPerTeam}`);
+  }
+
+  /** Asserts the "Este partido está completo" banner is visible (non-joined view). */
+  async expectIsFull(): Promise<void> {
+    await expect(this.fullBanner).toBeVisible();
+    await expect(this.fullBanner).toContainText('Este partido está completo');
   }
 }

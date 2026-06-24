@@ -74,6 +74,12 @@ export const SEED_MATCHES = {
   resultVoting: 'e1000000-0000-0000-0000-000000000003',
   /** OPEN match with a single Ricardo participant; leaving it auto-cancels the match. */
   emptyAutoCancel: 'e1000000-0000-0000-0000-000000000004',
+  /**
+   * OPEN match with 0 participants, dedicated to ciclo-completo-partido.spec.ts.
+   * The spec joins Mateo (team A) and Ricardo (team B) via API and cleans up in afterAll.
+   * The seed guarantees the match exists and wipes any leftover participants on each run.
+   */
+  fullCycle: 'e1000000-0000-0000-0000-000000000005',
 } as const;
 
 /**
