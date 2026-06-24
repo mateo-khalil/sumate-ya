@@ -6,7 +6,10 @@
  * - Solo el capitán ve todos los tabs (Miembros, Torneos, Disponibilidad, Configuración).
  * - Los miembros no-capitán ven solo el tab de Disponibilidad.
  * - Los datos iniciales del equipo vienen del SSR; las mutaciones refrescan el estado local.
- * - Previously fixed bugs: none relevant.
+ * - La tab-bar usa overflow-x:auto para scroll horizontal en viewports angostos, pero
+ *   oculta la barra de scroll (scrollbar-width/::-webkit-scrollbar) porque en desktop
+ *   los tabs entran completos y la barra se veía superpuesta sobre la fila (Image #1).
+ * - Previously fixed bugs: scrollbar nativa de la tab-bar visible y superpuesta a los tabs.
  */
 
 import { useState } from 'react';
@@ -138,7 +141,12 @@ const _styles = `
 .tab-bar {
   display: flex; gap: 0.25rem; border-bottom: 1px solid var(--color-border);
   overflow-x: auto; padding-bottom: 0; margin-bottom: 1.5rem;
+  /* Keep horizontal scroll on narrow viewports but hide the scrollbar track —
+     it was visually bleeding over the tab row (see Image #1). */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
 }
+.tab-bar::-webkit-scrollbar { display: none; } /* Chromium/WebKit */
 .tab-btn {
   display: flex; align-items: center; gap: 0.45rem; padding: 0.6rem 1rem;
   background: none; border: none; border-bottom: 2px solid transparent;

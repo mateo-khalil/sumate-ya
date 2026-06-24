@@ -20,6 +20,7 @@ import Layout from '../layouts/Layout.astro';
 import Topbar from '../components/shared/Topbar.astro';
 import PrivacySettingsContainer from '@/components/settings/PrivacySettingsContainer';
 import ChangePasswordForm from '@/components/settings/ChangePasswordForm';
+import NotificationPreferencesForm from '@/components/settings/NotificationPreferencesForm';
 import { ACCESS_TOKEN_COOKIE } from '../lib/auth';
 import {
   GET_MY_SETTINGS,
@@ -27,6 +28,10 @@ import {
   type PrivacySettings,
   type Profile,
 } from '../graphql/operations/profile';
+import {
+  GET_MY_NOTIFICATION_PREFERENCES,
+  type NotificationPreferences,
+} from '../graphql/operations/notifications';
 
 const backendUrl =
   import.meta.env.PRIVATE_BACKEND_URL ||
@@ -49,8 +54,16 @@ const DEFAULT_SETTINGS: PrivacySettings = {
   showDivision: true,
 };
 
+const DEFAULT_NOTIF_PREFS: NotificationPreferences = {
+  matchActivity: true,
+  matchUpdates: true,
+  matchResults: true,
+  invitations: true,
+};
+
 let settings: PrivacySettings = DEFAULT_SETTINGS;
 let profile: Profile | null = null;
+let notifPrefs: NotificationPreferences = DEFAULT_NOTIF_PREFS;
 let fetchError = false;
 
 if (accessToken) {
@@ -59,7 +72,7 @@ if (accessToken) {
     Authorization: `Bearer ${accessToken}`,
   };
 
-  const [settingsRes, profileRes] = await Promise.allSettled([
+  const [settingsRes, profileRes, notifPrefsRes] = await Promise.allSettled([
     fetch(graphqlUrl, {
       method: 'POST',
       headers,
@@ -69,6 +82,11 @@ if (accessToken) {
       method: 'POST',
       headers,
       body: JSON.stringify({ query: GET_MY_PROFILE }),
+    }),
+    fetch(graphqlUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query: GET_MY_NOTIFICATION_PREFERENCES }),
     }),
   ]);
 
@@ -91,6 +109,15 @@ if (accessToken) {
       | null;
     if (json?.data?.myProfile) {
       profile = json.data.myProfile;
+    }
+  }
+
+  if (notifPrefsRes.status === 'fulfilled') {
+    const json = (await notifPrefsRes.value.json().catch(() => null)) as
+      | { data?: { myNotificationPreferences: NotificationPreferences }; errors?: Array<{ message: string }> }
+      | null;
+    if (json?.data?.myNotificationPreferences) {
+      notifPrefs = json.data.myNotificationPreferences;
     }
   }
 }
@@ -126,11 +153,10 @@ if (accessToken) {
             <ShieldCheck size={16} strokeWidth={2} aria-hidden="true" />
             Seguridad
           </a>
-          <span class="settings-nav-item settings-nav-item--disabled" aria-disabled="true">
+          <a href="#notificaciones" class="settings-nav-item">
             <Bell size={16} strokeWidth={2} aria-hidden="true" />
             Notificaciones
-            <span class="coming-soon">Próximamente</span>
-          </span>
+          </a>
         </nav>
 
         <!-- Main settings panel -->
@@ -168,6 +194,25 @@ if (accessToken) {
 
             <ChangePasswordForm
               client:load
+              accessToken={accessToken}
+              backendUrl={backendUrl}
+            />
+          </section>
+
+          <section id="notificaciones" class="settings-section">
+            <div class="settings-section-header">
+              <Bell size={18} strokeWidth={2} aria-hidden="true" className="settings-section-icon" />
+              <div>
+                <h2 class="settings-section-title">Notificaciones</h2>
+                <p class="settings-section-sub">
+                  Elegí qué eventos te avisamos desde la campana
+                </p>
+              </div>
+            </div>
+
+            <NotificationPreferencesForm
+              client:load
+              initialPreferences={notifPrefs}
               accessToken={accessToken}
               backendUrl={backendUrl}
             />

@@ -26,6 +26,11 @@
  *   already sent this reminder") so only the tick that wins the insert sends notifications.
  *   This is what makes reminders safe under a 5-min tick AND under multiple backend
  *   instances.
+ * - Demo exemption: both candidate reads filter `.eq('isDemo', false)`. The demo simulation
+ *   (pg_cron, demo_simulation_tick) deliberately keeps under-filled matches open near kickoff
+ *   and settles them itself; without this filter the worker would cancel them (and spam
+ *   reminders) the moment the Render backend woke up, breaking the "always ≥5 active matches"
+ *   showcase. Real matches (isDemo=false, the default) are unaffected.
  * - Previously fixed bugs: none relevant (new module).
  */
 
@@ -88,6 +93,7 @@ export async function getCancelCandidates(
     .from('matches')
     .select(CANDIDATE_COLUMNS)
     .in('status', ['open', 'full'])
+    .eq('isDemo', false)
     .gte('scheduledAt', nowISO)
     .lte('scheduledAt', windowEndISO);
 
@@ -114,6 +120,7 @@ export async function getReminderCandidates(
     .from('matches')
     .select(CANDIDATE_COLUMNS)
     .in('status', ['open', 'full'])
+    .eq('isDemo', false)
     .gte('scheduledAt', nowISO)
     .lte('scheduledAt', windowEndISO);
 

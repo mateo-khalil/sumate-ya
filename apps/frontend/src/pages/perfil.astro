@@ -49,6 +49,14 @@ const graphqlUrl =
   `${backendUrl}/graphql`;
 
 const user = Astro.locals.user;
+
+// Un club no tiene "ficha de jugador" (partidos jugados, posiciones, etc.). Si un club_admin
+// entra a /perfil lo mandamos a su panel, que ES su vista de perfil a nivel club. Antes veía
+// una "MI PERFIL" enmarcada como jugador, lo cual era incoherente para una cuenta de club.
+if (user?.role === 'club_admin') {
+  return Astro.redirect('/panel-club/dashboard');
+}
+
 const accessToken = Astro.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
 const displayName = user?.displayName || user?.email || 'Jugador';
 

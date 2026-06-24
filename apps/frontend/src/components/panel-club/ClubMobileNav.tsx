@@ -2,22 +2,22 @@
  * ClubMobileNav — hamburger button + slide-in drawer for mobile navigation
  *
  * Decision Context:
- * - ClubSidebar hides via CSS on mobile (max-width: 768px) leaving zero navigation
- *   access on small screens. This component fills that gap with a hamburger button
- *   visible only on mobile that opens a full-height slide-in drawer.
- * - Pattern: hamburger button is in the topbar (right of brand), drawer slides in
- *   from the left replicating the sidebar links + user info + logout.
- * - Backdrop click closes the drawer; same nav links as ClubSidebar to stay in sync.
+ * - ClubTopbar hides its centered nav links via CSS on mobile (max-width: 768px),
+ *   leaving zero navigation access on small screens. This component fills that gap with
+ *   a hamburger button visible only on mobile that opens a full-height slide-in drawer.
+ * - Pattern: hamburger button is in the topbar (right side), drawer slides in
+ *   from the left replicating the GESTIÓN links + user info + logout.
+ * - Backdrop click closes the drawer; same nav links as ClubTopbar to stay in sync.
  * - Touch targets: all interactive elements are min 48px tall to meet Apple HIG.
- * - currentPath prop drives active link detection (strict equality, same as ClubSidebar).
+ * - currentPath prop drives active link detection (strict equality, same as ClubTopbar).
  * - Logout uses a native <form method="POST"> so it works without JS on the action.
  * - Previously fixed bugs: none relevant (new component for responsive epic).
  */
 
 import { useState } from 'react';
 import {
-  Menu, X, LayoutDashboard, Calendar, Plus,
-  Volleyball, Users, Settings, BarChart3, LogOut, Trophy,
+  Menu, X, LayoutDashboard, Calendar,
+  Volleyball, CalendarClock, Settings, BarChart3, LogOut, Trophy,
 } from 'lucide-react';
 
 interface Props {
@@ -25,18 +25,17 @@ interface Props {
   userName: string;
 }
 
+// Decision Context: Canchas, Reservas y Estadísticas eran placeholders ("Próximo") hasta que se
+// implementaron las features completas. Ahora son links reales (igual que el ClubTopbar), por lo
+// que se eliminó la lista PLACEHOLDER_LINKS y su render.
 const NAV_LINKS = [
   { href: '/panel-club/dashboard', icon: LayoutDashboard, label: 'Dashboard', highlight: false },
-  { href: '/panel-club/crear-partido', icon: Plus, label: 'Crear partido', highlight: true },
   { href: '/panel-club/horarios', icon: Calendar, label: 'Horarios', highlight: false },
-  { href: '/torneos/crear', icon: Trophy, label: 'Crear torneo', highlight: false },
-];
-
-const PLACEHOLDER_LINKS = [
-  { icon: Volleyball, label: 'Canchas' },
-  { icon: Users, label: 'Reservas' },
-  { icon: Settings, label: 'Configuración' },
-  { icon: BarChart3, label: 'Estadísticas' },
+  { href: '/panel-club/canchas', icon: Volleyball, label: 'Canchas', highlight: false },
+  { href: '/panel-club/reservas', icon: CalendarClock, label: 'Reservas', highlight: false },
+  { href: '/panel-club/estadisticas', icon: BarChart3, label: 'Estadísticas', highlight: false },
+  { href: '/panel-club/torneos', icon: Trophy, label: 'Torneos', highlight: false },
+  { href: '/panel-club/configuracion', icon: Settings, label: 'Configuración', highlight: false },
 ];
 
 export default function ClubMobileNav({ currentPath, userName }: Props) {
@@ -107,12 +106,6 @@ export default function ClubMobileNav({ currentPath, userName }: Props) {
                   </a>
                 );
               })}
-              {PLACEHOLDER_LINKS.map(({ icon: Icon, label }) => (
-                <span key={label} className="mob-link mob-link--placeholder" aria-disabled="true">
-                  <Icon size={18} strokeWidth={2} aria-hidden="true" />
-                  {label}
-                </span>
-              ))}
             </div>
 
             {/* Logout */}

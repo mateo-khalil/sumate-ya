@@ -18,6 +18,11 @@
  * - Scroll: bodyRef auto-scrolls to SCROLL_TO_HOUR on mount. The offset formula is
  *   (SCROLL_TO_HOUR - firstHour) * ROW_HEIGHT_PX so it works correctly whether the
  *   hours array starts at 0 (legacy all-day) or 7 (DISPLAY_HOURS).
+ * - bodyMaxHeight: optional override for the scroll-area cap (default 68vh via CSS).
+ *   AvailableSlotsPicker passes a shorter value so the whole match wizard (step
+ *   indicator + heading + grid + footer) fits in one viewport instead of forcing a
+ *   long page scroll. The grid still scrolls internally and auto-scrolls to the
+ *   relevant hour on mount.
  * - 60px time column is fixed; day columns share remaining width equally via 1fr.
  * - cal-time--now highlights the current hour label in orange for at-a-glance awareness.
  * - Previously fixed bugs: none relevant (new extracted component).
@@ -64,6 +69,8 @@ interface Props {
   navSlot?: ReactNode;
   /** Optional legend rendered below the grid body */
   legendSlot?: ReactNode;
+  /** Optional override for the scroll-area max height (default 68vh). */
+  bodyMaxHeight?: string;
 }
 
 export default function CalendarGrid({
@@ -74,6 +81,7 @@ export default function CalendarGrid({
   renderCell,
   navSlot,
   legendSlot,
+  bodyMaxHeight,
 }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -119,7 +127,11 @@ export default function CalendarGrid({
       </div>
 
       {/* Grid body */}
-      <div className="cal-body" ref={bodyRef}>
+      <div
+        className="cal-body"
+        ref={bodyRef}
+        style={bodyMaxHeight ? { maxHeight: bodyMaxHeight } : undefined}
+      >
         {hours.map((h) => (
           <div key={h} className="cal-row" style={{ gridTemplateColumns: gridCols }}>
             <div className={`cal-time${h === nowHour ? ' cal-time--now' : ''}`}>

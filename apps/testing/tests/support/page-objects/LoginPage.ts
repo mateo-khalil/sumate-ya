@@ -23,6 +23,7 @@ export class LoginPage {
   readonly form: Locator;
   readonly emailInput: Locator;
   readonly passwordInput: Locator;
+  readonly passwordToggle: Locator;
   readonly submitButton: Locator;
   readonly registeredBanner: Locator;
 
@@ -30,9 +31,18 @@ export class LoginPage {
     this.page = page;
     this.form = page.locator('form.login-form');
     this.emailInput = page.getByLabel('Email');
-    this.passwordInput = page.getByLabel('Contraseña');
+    // exact: true so this resolves only to the input — the reveal button's aria-label
+    // ("Mostrar/Ocultar contraseña") also contains "Contraseña" and would otherwise match.
+    this.passwordInput = page.getByLabel('Contraseña', { exact: true });
+    // Icon-only reveal button; located by its accessible name (flips Mostrar/Ocultar).
+    this.passwordToggle = page.getByRole('button', { name: /(mostrar|ocultar) contraseña/i });
     this.submitButton = page.getByRole('button', { name: /ingresar/i });
     this.registeredBanner = page.getByText(/Registro exitoso\. Ya podés iniciar sesión/i);
+  }
+
+  /** Click the reveal toggle inside the password field. */
+  async togglePasswordVisibility(): Promise<void> {
+    await this.passwordToggle.click();
   }
 
   async goto(query?: string): Promise<void> {

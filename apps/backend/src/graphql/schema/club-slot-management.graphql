@@ -144,6 +144,22 @@ type CourtPricingMutationResult {
   message: String
 }
 
+# Result of reconciling a court's whole weekly schedule in one operation.
+# Decision Context: the simplified "Horarios" configurator sends ONE schedule per court
+# (open days + open/close hours + base/peak price) instead of managing slots one by one.
+# applyCourtSchedule diffs that intent against existing slots and reports what changed so
+# the UI can show a clear "creados / actualizados / liberados / protegidos" summary.
+type ApplyCourtScheduleResult {
+  success: Boolean!
+  message: String
+  createdCount: Int!
+  updatedCount: Int!
+  removedCount: Int!
+  # Slots kept untouched because they have a scheduled match or a manual block.
+  protectedCount: Int!
+  slots: [ManagedClubSlot!]!
+}
+
 # =====================================================
 # Inputs
 # =====================================================
@@ -194,6 +210,24 @@ input UpdateCourtPricingInput {
   offPeakDiscount: Float
 }
 
+# Whole-court weekly schedule, expressed the way a club owner thinks about it.
+# Decision Context: dayOfWeek values are the lowercase DB enum strings (monday … sunday).
+# Times are "HH:mm". slotMinutes defaults to 60 (hourly). peak* fields are only honoured
+# when peakEnabled is true; peakDays must be a subset of openDays.
+input ApplyCourtScheduleInput {
+  courtId: ID!
+  openDays: [String!]!
+  openTime: String!
+  closeTime: String!
+  slotMinutes: Int
+  basePrice: Float!
+  peakEnabled: Boolean
+  peakDays: [String!]
+  peakStart: String
+  peakEnd: String
+  peakPrice: Float
+}
+
 # =====================================================
 # Query extensions
 # =====================================================
@@ -238,4 +272,8 @@ extend type Mutation {
 
   # Update or create pricing config for a court
   updateCourtPricing(input: UpdateCourtPricingInput!): CourtPricingMutationResult!
+
+  # Reconcile a court's entire weekly schedule from a simple open-hours + price config.
+  # Generates/updates/removes recurring slots to match, protecting booked and blocked slots.
+  applyCourtSchedule(input: ApplyCourtScheduleInput!): ApplyCourtScheduleResult!
 }

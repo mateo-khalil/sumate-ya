@@ -524,10 +524,16 @@ export async function createTournament(
   const db = ctx.supabase;
   if (!db) throw new Error('User-scoped client required for write operations');
 
-  // F9: solo capitanes de equipo permanente pueden crear torneos
+  // Authorization: un torneo puede crearlo (a) un capitán de equipo permanente, o
+  // (b) el club_admin dueño del club organizador (torneos de club, issue: clubs crean
+  // torneos y luego los equipos se suman). El organizerId siempre es ctx.userId, así que
+  // la policy RLS tournaments_insert_own ("organizerId" = auth.uid()) lo permite en ambos
+  // casos sin cambios de esquema. Para clubs validamos la propiedad del club elegido para
+  // que un club_admin no pueda crear torneos en clubes ajenos.
   const captainTeams = await teamRepository.getTeamsByCaptainId(ctx.userId);
-  if (captainTeams.length === 0) {
-    throw new Error('Solo capitanes de equipo pueden crear torneos. Primero creá un equipo y convertite en capitán.');
+  const ownsClub = (await clubRepository.getClubOwnerId(input.clubId)) === ctx.userId;
+  if (captainTeams.length === 0 && !ownsClub) {
+    throw new Error('Solo capitanes de equipo o el club organizador pueden crear torneos.');
   }
 
   const name = input.name.trim();
@@ -563,9 +569,10 @@ export async function createTournament(
 
   // Auto-inscripción: si el creador es capitán de un equipo permanente, se lo anota
   // automáticamente al torneo que acaba de crear. Comportamiento solicitado en issue #137.
+  // Para torneos de club (creador = club_admin sin equipo) captainTeams está vacío y este
+  // bloque se saltea: los equipos se suman después vía joinTournament.
   // Falla silenciosamente (solo log) para no impedir la creación del torneo.
   if (ctx.userId && db) {
-    const captainTeams = await teamRepository.getTeamsByCaptainId(ctx.userId);
     if (captainTeams.length > 0) {
       const captainTeam = captainTeams[0];
       try {
@@ -957,9 +964,13 @@ export async function createTournamentAutoSchedule(
   const db = ctx.supabase;
   if (!db) throw new Error('User-scoped client required');
 
+  // Authorization: capitán de equipo permanente O club_admin dueño del club organizador.
+  // Mismo criterio que createTournament (ver Decision Context allí). organizerId = ctx.userId
+  // satisface la RLS tournaments_insert_own en ambos casos; para clubs validamos propiedad.
   const captainTeams = await teamRepository.getTeamsByCaptainId(ctx.userId);
-  if (captainTeams.length === 0) {
-    throw new Error('Solo capitanes de equipo pueden crear torneos. Primero creá un equipo y convertite en capitán.');
+  const ownsClub = (await clubRepository.getClubOwnerId(input.clubId)) === ctx.userId;
+  if (captainTeams.length === 0 && !ownsClub) {
+    throw new Error('Solo capitanes de equipo o el club organizador pueden crear torneos.');
   }
 
   const name = input.name.trim();
@@ -1055,8 +1066,9 @@ export async function createTournamentAutoSchedule(
     await tournamentRepository.insertFixtureMatchesWithPhase(placeholderRows, supabase);
   }
 
-  // Auto-inscripción del creador
-  if (db) {
+  // Auto-inscripción del creador. Para torneos de club (club_admin sin equipo) captainTeams
+  // está vacío y se saltea: los equipos se suman después vía joinTournament.
+  if (db && captainTeams.length > 0) {
     try {
       const team = captainTeams[0];
       await teamRepository.enrollPermanentTeamInTournament(

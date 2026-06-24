@@ -14,8 +14,10 @@ import { LEADERBOARD_URL } from '../constants';
  *   authenticated session's userId matches a row, so those specs set storageState.
  * - Loading skeletons are plain <div> (.leaderboard-skeleton-row); the settled state
  *   is the table, the empty state, or the error panel. expectSettled() waits on that.
- * - Rows are <li> elements inside [data-testid="leaderboard-table"]; we locate a row
- *   by visible player name, matching how the real user scans the table.
+ * - Rows are <a class="leaderboard-row"> elements (wrapped in <li class="leaderboard-item">)
+ *   inside [data-testid="leaderboard-table"]; we locate a row by visible player name,
+ *   matching how the real user scans the table. Each row links to /perfil/{id} so clicking
+ *   a player opens their public profile.
  * - Previously fixed bugs: none relevant.
  */
 export class LeaderboardPage {

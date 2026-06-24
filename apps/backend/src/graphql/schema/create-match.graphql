@@ -65,6 +65,8 @@ input CreateMatchInput {
   date: String!
   format: MatchFormat!
   capacity: Int!
+  # User-supplied or auto-generated title for the match (e.g. "Partido 5v5 · Club X · sáb 28 jun")
+  title: String
   description: String
 }
 

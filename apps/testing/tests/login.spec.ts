@@ -57,6 +57,27 @@ test.describe('Login (/login) — render y estructura', () => {
     await expect(loginPage.submitButton).toBeVisible();
   });
 
+  test('el botón de ver contraseña alterna el tipo del input', async ({ loginPage, page }) => {
+    await loginPage.goto();
+    await loginPage.fillCredentials('', 'secreto123');
+
+    const passwordField = page.locator('input#password');
+    // Por defecto está oculta.
+    await expect(passwordField).toHaveAttribute('type', 'password');
+    await expect(loginPage.passwordToggle).toHaveAttribute('aria-label', /mostrar/i);
+
+    // Al activar revela el texto.
+    await loginPage.togglePasswordVisibility();
+    await expect(passwordField).toHaveAttribute('type', 'text');
+    await expect(loginPage.passwordToggle).toHaveAttribute('aria-label', /ocultar/i);
+    await expect(loginPage.passwordToggle).toHaveAttribute('aria-pressed', 'true');
+
+    // Al desactivar vuelve a ocultar.
+    await loginPage.togglePasswordVisibility();
+    await expect(passwordField).toHaveAttribute('type', 'password');
+    await expect(loginPage.passwordToggle).toHaveAttribute('aria-pressed', 'false');
+  });
+
   test('muestra los links a registro de club y de jugador', async ({ loginPage, page }) => {
     await loginPage.goto();
 

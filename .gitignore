@@ -9,3 +9,4 @@ node_modules/
 .mcp.json
 apps/backend/load-tests/results/*
 !apps/backend/load-tests/results/.gitkeep
+docs/presentation

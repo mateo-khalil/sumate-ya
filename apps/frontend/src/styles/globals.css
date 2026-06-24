@@ -274,6 +274,151 @@ body > * {
 .empty-state { padding: 2.5rem; text-align: center; }
 .empty-text { color: hsl(215 20% 50%); font-family: 'Barlow',sans-serif; margin: 0; }
 
+/* ─────────────────────────────────────────────────────────────
+   Schedule configurator (simplified Horarios)
+   ───────────────────────────────────────────────────────────── */
+.court-tabs { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.court-tab {
+  padding: 0.4rem 0.9rem; border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  color: hsl(215 20% 62%); font-family: 'Barlow',sans-serif; font-size: 0.85rem; font-weight: 600;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.court-tab:hover { background: rgba(255,255,255,0.08); color: hsl(210 20% 85%); }
+.court-tab--active {
+  background: rgba(246,164,0,0.12); border-color: rgba(246,164,0,0.4); color: hsl(42 100% 66%);
+}
+
+.cfg-card {
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px; padding: 1.25rem;
+}
+.cfg-grid { display: flex; flex-direction: column; gap: 1.4rem; }
+.cfg-section { display: flex; flex-direction: column; gap: 0.7rem; }
+.cfg-head {
+  display: flex; align-items: center; gap: 0.45rem;
+  font-family: 'Barlow Condensed',sans-serif; font-weight: 700; font-size: 0.8rem;
+  letter-spacing: 0.1em; text-transform: uppercase; color: hsl(42 100% 60%);
+}
+.cfg-head--inline { color: hsl(210 20% 82%); text-transform: none; letter-spacing: 0.02em; font-size: 0.9rem; }
+
+.cfg-days { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.cfg-day {
+  min-width: 46px; padding: 0.45rem 0.4rem; border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+  color: hsl(215 20% 58%); font-family: 'Barlow',sans-serif; font-size: 0.8rem; font-weight: 600;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.cfg-day:hover { background: rgba(255,255,255,0.08); color: hsl(210 20% 85%); }
+.cfg-day--on {
+  background: hsl(35 100% 48%); border-color: hsl(35 100% 48%); color: #fff;
+}
+.cfg-day--peak-on {
+  background: rgba(99,102,241,0.18); border-color: hsl(239 84% 67%); color: hsl(239 90% 80%);
+}
+.cfg-days--peak { margin-bottom: 0.2rem; }
+
+.cfg-row { display: flex; flex-wrap: wrap; gap: 0.85rem; }
+.cfg-field { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; min-width: 120px; }
+.cfg-field--price { min-width: 180px; }
+.cfg-label {
+  font-family: 'Barlow',sans-serif; font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.02em; color: hsl(215 20% 52%);
+}
+.cfg-input {
+  background: hsl(220 30% 16%); border: 1px solid rgba(255,255,255,0.12); border-radius: 7px;
+  padding: 0.5rem 0.7rem; color: hsl(210 20% 90%); font-family: 'Barlow',sans-serif; font-size: 0.875rem;
+  width: 100%;
+}
+.cfg-input:focus { outline: none; border-color: hsl(35 100% 48%); }
+.cfg-price-wrap { display: flex; align-items: center; gap: 0.4rem; }
+.cfg-currency { font-family: 'Barlow',sans-serif; font-size: 0.85rem; color: hsl(215 20% 55%); }
+.cfg-suffix { font-family: 'Barlow',sans-serif; font-size: 0.78rem; color: hsl(215 20% 48%); white-space: nowrap; }
+
+.cfg-toggle { display: flex; align-items: center; gap: 0.55rem; cursor: pointer; }
+.cfg-toggle input { width: 16px; height: 16px; accent-color: hsl(239 84% 67%); cursor: pointer; }
+.cfg-peak {
+  display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;
+  padding: 0.85rem; border-radius: 9px;
+  background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.18);
+}
+
+.cfg-summary {
+  margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.07);
+  display: flex; flex-direction: column; gap: 0.35rem;
+}
+.cfg-summary-text { font-family: 'Barlow',sans-serif; font-size: 0.9rem; color: hsl(210 20% 82%); }
+.cfg-summary-text strong { color: hsl(42 100% 62%); font-size: 1.05rem; }
+.cfg-note {
+  display: flex; align-items: center; gap: 0.4rem; margin: 0;
+  font-family: 'Barlow',sans-serif; font-size: 0.78rem; color: hsl(215 20% 52%);
+}
+
+.cfg-actions {
+  display: flex; align-items: center; justify-content: flex-end; gap: 0.85rem;
+  margin-top: 1rem; flex-wrap: wrap;
+}
+.cfg-feedback { display: inline-flex; align-items: center; gap: 0.3rem; font-family: 'Barlow',sans-serif; font-size: 0.82rem; }
+.cfg-feedback--ok { color: hsl(142 72% 58%); }
+.cfg-feedback--err { color: hsl(0 72% 68%); }
+
+/* Advanced panel toggle */
+.adv-wrap { display: flex; flex-direction: column; gap: 0.85rem; }
+.adv-toggle {
+  display: flex; align-items: center; gap: 0.5rem; cursor: pointer;
+  padding: 0.6rem 0.9rem; border-radius: 9px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+  color: hsl(215 20% 62%); font-family: 'Barlow',sans-serif; font-size: 0.85rem; font-weight: 600;
+}
+.adv-toggle:hover { background: rgba(255,255,255,0.06); color: hsl(210 20% 82%); }
+.adv-toggle svg:last-child { margin-left: auto; }
+.adv-panel { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Weekly preview (read-only "así queda tu semana") */
+.prev-list { display: flex; flex-direction: column; gap: 0.3rem; }
+.prev-row {
+  display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 0.75rem;
+  padding: 0.4rem 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.02);
+}
+.prev-row--closed { opacity: 0.5; }
+.prev-day {
+  font-family: 'Barlow Condensed',sans-serif; font-weight: 700; font-size: 0.82rem;
+  letter-spacing: 0.04em; text-transform: uppercase; color: hsl(210 20% 78%);
+}
+.prev-detail { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.prev-bar {
+  position: relative; height: 7px; border-radius: 4px; overflow: hidden;
+  background: rgba(255,255,255,0.06);
+}
+.prev-bar-open { position: absolute; inset: 0; background: hsl(35 100% 48%); opacity: 0.55; border-radius: 4px; }
+.prev-bar-peak { position: absolute; top: 0; bottom: 0; background: hsl(239 84% 67%); border-radius: 4px; }
+.prev-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.7rem; }
+.prev-time { font-family: 'Barlow',sans-serif; font-size: 0.82rem; font-weight: 600; color: hsl(210 20% 82%); }
+.prev-slots { font-family: 'Barlow',sans-serif; font-size: 0.76rem; color: hsl(215 20% 50%); }
+.prev-price {
+  font-family: 'Barlow',sans-serif; font-size: 0.76rem; font-weight: 600;
+  color: hsl(142 60% 60%); background: rgba(34,197,94,0.1); border-radius: 5px; padding: 0.05rem 0.4rem;
+}
+.prev-price--peak { color: hsl(239 90% 80%); background: rgba(99,102,241,0.14); }
+.prev-closed { font-family: 'Barlow',sans-serif; font-size: 0.8rem; color: hsl(215 20% 45%); }
+
+/* Light theme overrides for the configurator */
+html.light .court-tab { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: hsl(215 16% 42%); }
+html.light .court-tab--active { background: rgba(246,164,0,0.14); border-color: rgba(246,164,0,0.5); color: hsl(35 100% 36%); }
+html.light .cfg-card,
+html.light .adv-toggle { background: #fff; border-color: rgba(0,0,0,0.09); }
+html.light .cfg-input { background: #fff; border-color: rgba(0,0,0,0.15); color: hsl(220 40% 16%); }
+html.light .cfg-day { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: hsl(215 16% 42%); }
+/* Keep the selected-day colours in light mode: the generic `html.light .cfg-day` rule
+   above is more specific than `.cfg-day--on`, so without these the active state vanished. */
+html.light .cfg-day--on { background: hsl(35 100% 48%); border-color: hsl(35 100% 48%); color: #fff; }
+html.light .cfg-day--peak-on { background: rgba(99,102,241,0.16); border-color: hsl(239 84% 67%); color: hsl(239 60% 45%); }
+html.light .cfg-summary-text { color: hsl(220 30% 22%); }
+html.light .adv-toggle { color: hsl(215 16% 40%); }
+html.light .prev-row { background: rgba(0,0,0,0.03); }
+html.light .prev-day { color: hsl(220 30% 25%); }
+html.light .prev-time { color: hsl(220 30% 25%); }
+
 /* Slot table */
 .list-wrap { overflow-x: auto; }
 .slot-table {
@@ -888,11 +1033,15 @@ html.light .sidebar-link--highlight { color: hsl(35 100% 42%); }
 }
 
 html.light .field input {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.12);
+  background: hsl(210 20% 94%);
+  border-color: rgba(0, 0, 0, 0.15);
   color: hsl(220 72% 10%);
+  -webkit-text-fill-color: hsl(220 72% 10%);
 }
-html.light .field input::placeholder { color: hsl(215 20% 55%); }
+html.light .field input::placeholder {
+  color: hsl(215 20% 52%);
+  -webkit-text-fill-color: hsl(215 20% 52%);
+}
 html.light .field input:focus {
   background: white;
   border-color: hsl(35 100% 44%);
@@ -1205,9 +1354,10 @@ html.light .eyebrow         { color: hsl(35 100% 38%); }
 /* .field span es el label — diferente de .field-label del wizard */
 html.light .field > span    { color: hsl(215 20% 42%); }
 html.light .field input, html.light .field select, html.light .field textarea {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.1);
+  background: hsl(210 20% 94%);
+  border-color: rgba(0, 0, 0, 0.15);
   color: hsl(220 72% 8%);
+  -webkit-text-fill-color: hsl(220 72% 8%);
 }
 html.light .field input:focus,
 html.light .field select:focus,
@@ -1367,6 +1517,51 @@ html.light .btn-back:hover {
   background: rgba(0, 0, 0, 0.05);
   color: hsl(215 20% 12%);
 }
+/* Step nav & wizard nav divider borders */
+html.light .step-nav  { border-bottom-color: rgba(0, 0, 0, 0.08); }
+html.light .wizard-nav { border-top-color:   rgba(0, 0, 0, 0.08); }
+/* ClubSelector.tsx — club cards (step 1) */
+html.light .club-card {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.10);
+}
+html.light .club-card:hover {
+  background: hsl(210 40% 97%);
+  border-color: rgba(0, 0, 0, 0.18);
+}
+html.light .club-card--selected {
+  border-color: hsl(35 100% 44%);
+  background: rgba(246, 164, 0, 0.04);
+}
+html.light .club-img   { background: hsl(210 20% 92%); }
+html.light .club-img--placeholder { color: hsl(215 20% 44%); }
+html.light .club-meta  { color: hsl(215 20% 44%); }
+html.light .club-phone { color: hsl(215 20% 52%); }
+
+/* ── /partidos/crear — summary step fields ───────────── */
+html.light .title-input {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
+  color: hsl(220 20% 14%);
+}
+html.light .title-input:focus { border-color: hsl(35 100% 44%); }
+html.light .title-input--over { border-color: hsl(0 72% 51%); }
+html.light .desc-area {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
+  color: hsl(220 20% 14%);
+}
+html.light .desc-area:focus { border-color: hsl(35 100% 44%); }
+html.light .summary-card {
+  background: hsl(210 40% 97%);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .summary-title { color: hsl(220 20% 14%); }
+html.light .summary-list dt { color: hsl(215 20% 44%); }
+html.light .summary-list dd { color: hsl(220 20% 18%); }
+html.light .summary-sub { color: hsl(215 20% 55%); }
+html.light .field-hint { color: hsl(215 20% 50%); }
+html.light .char-count { color: hsl(215 20% 50%); }
 
 /* ── /partidos/[id] — equipo cards ───────────────────── */
 html.light .team-card {
@@ -1441,4 +1636,67 @@ html.light .map-btn:hover {
   background: hsl(216 85% 92%);
   border-color: hsl(216 85% 65%);
   color: hsl(216 85% 28%);
+}
+
+/* ── LeaderboardTable.tsx (ranking) ───────────────────────
+   La isla usa colores oscuros hardcodeados en su <style>; en tema
+   claro la tabla quedaba negra (Image #3). Las clases CSS (spec 0,2,1)
+   ganan a la regla inyectada (0,1,0). El naranja del winrate y los
+   acentos oro/plata/bronce se mantienen iguales en ambos temas. */
+html.light .leaderboard {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .leaderboard-head {
+  color: hsl(215 20% 42%);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.025);
+}
+html.light .leaderboard-row + .leaderboard-row { border-top-color: rgba(0, 0, 0, 0.06); }
+html.light .leaderboard-row:hover { background: rgba(0, 0, 0, 0.03); }
+html.light .leaderboard-row--self {
+  background: rgba(246, 164, 0, 0.1);
+  box-shadow: inset 3px 0 0 hsl(35 100% 48%);
+}
+html.light .leaderboard-row--self:hover { background: rgba(246, 164, 0, 0.16); }
+html.light .leaderboard-rank { color: hsl(215 20% 45%); }
+html.light .leaderboard-avatar { background: hsl(210 20% 92%); }
+html.light .leaderboard-avatar-fallback { color: hsl(215 20% 45%); }
+html.light .leaderboard-name { color: hsl(220 72% 10%); }
+html.light .leaderboard-meta { color: hsl(215 20% 46%); }
+html.light .leaderboard-stat { color: hsl(220 72% 14%); }
+html.light .leaderboard-winrate { color: hsl(35 100% 40%); }
+html.light .leaderboard-skeleton-row {
+  background: hsl(210 20% 92%);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ── MatchesView.tsx — toggles Próximos/Pasados + Lista/Mapa ───
+   El contenedor .view-toggle tenía fondo navy hardcodeado y los
+   botones .view-toggle-btn texto oscuro: en tema claro quedaban
+   ilegibles (Image #4). El estado activo (naranja) se mantiene. */
+html.light .view-toggle {
+  background: var(--color-card);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+html.light .view-toggle-btn { color: hsl(215 20% 46%); }
+html.light .view-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: hsl(215 20% 18%);
+}
+html.light .view-toggle-btn + .view-toggle-btn { border-left-color: rgba(0, 0, 0, 0.1); }
+html.light .view-toggle-btn.active { color: hsl(220 72% 7%); }
+html.light .toggle-options { border-left-color: rgba(0, 0, 0, 0.12); }
+html.light .switch-toggle { color: hsl(215 20% 28%); }
+html.light .switch-input { background: hsl(215 16% 78%); }
+html.light .switch-input::before { background: hsl(0 0% 100%); }
+html.light .switch-input:checked { background: hsl(35 100% 48%); }
+
+/* ── UnifiedDiscovery.tsx — tabs Partidos/Torneos (/partidos) ── */
+html.light .discovery-tabs { border-bottom-color: rgba(0, 0, 0, 0.1); }
+html.light .discovery-tab { color: hsl(215 20% 42%); }
+html.light .discovery-tab:hover { color: hsl(215 20% 16%); }
+html.light .discovery-tab--active {
+  color: hsl(35 100% 42%);
+  border-bottom-color: hsl(35 100% 42%);
 }

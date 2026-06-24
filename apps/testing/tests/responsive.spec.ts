@@ -199,15 +199,22 @@ test.describe('Responsive listado de partidos', () => {
 test.describe('Responsive panel de club', () => {
   test.use({ storageState: TEST_USERS.clubAdmin.storageStatePath });
 
-  test('mobile 390px: hamburger abre drawer y oculta sidebar desktop', async ({ page }) => {
+  // Decision Context: el panel de club dejó de usar un sidebar lateral (ClubSidebar,
+  // eliminado). Ahora la navegación vive en una barra superior (ClubTopbar) con links
+  // centrales (.topbar-center) visibles en tablet/desktop y ocultos en mobile, donde el
+  // hamburger (ClubMobileNav) abre el drawer. Estos tests verifican ese nuevo patrón.
+  test('mobile 390px: hamburger abre drawer y oculta los links superiores', async ({ page }) => {
     await page.setViewportSize(VIEWPORTS.mobile);
     await page.goto(`${FRONTEND_URL}/panel-club/dashboard`);
     await waitForClientLoadIslands(page);
 
-    const menuButton = page.getByRole('button', { name: /abrir men/i });
+    // Scope al hamburger por su nombre completo: el topbar también tiene un botón
+    // "Abrir menú de cuenta" (dropdown de cuenta), que comparte el prefijo "Abrir menú".
+    const menuButton = page.getByRole('button', { name: /abrir men.* de navegaci/i });
     await expect(menuButton).toBeVisible();
     await expectMinTouchSize(menuButton);
-    await expect(page.locator('.sidebar')).toBeHidden();
+    // Los links centrales del topbar se ocultan en mobile (los cubre el drawer).
+    await expect(page.locator('.topbar-center')).toBeHidden();
     await expect(page.locator('.page-content')).toBeVisible();
 
     await menuButton.click();
@@ -222,13 +229,13 @@ test.describe('Responsive panel de club', () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test('tablet 768px: sidebar visible y hamburger oculto', async ({ page }) => {
+  test('tablet 768px: links superiores visibles y hamburger oculto', async ({ page }) => {
     await page.setViewportSize(VIEWPORTS.tablet);
     await page.goto(`${FRONTEND_URL}/panel-club/dashboard`);
     await waitForClientLoadIslands(page);
 
-    await expect(page.locator('.sidebar')).toBeVisible();
-    await expect(page.getByRole('button', { name: /abrir men/i })).toBeHidden();
+    await expect(page.locator('.topbar-center')).toBeVisible();
+    await expect(page.getByRole('button', { name: /abrir men.* de navegaci/i })).toBeHidden();
     await expect(page.getByRole('link', { name: /crear partido/i }).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

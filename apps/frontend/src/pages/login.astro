@@ -7,11 +7,30 @@
  * - Pattern: Progressive enhancement — works without JS. POST + redirect, no client fetch.
  * - Security: Frontend does not call Supabase directly; credentials are posted to backend auth.
  *   HttpOnly cookies store tokens for subsequent SSR middleware checks.
- * - Previously fixed bugs: none relevant.
+ * - Back-button "logout" fix: this SSR page is restored from the browser bfcache when the user
+ *   presses Back after logging in, so the SSR redirect below never re-runs and the user sees the
+ *   stale login form (looked like a logout). The pageshow handler at the bottom forces a reload
+ *   on bfcache restore so an authenticated user is bounced to their panel instead of the form.
+ * - Resilience: an invalid/expired access token now triggers a silent refresh (mirroring the
+ *   middleware) BEFORE clearing cookies, so a transient session-validation failure no longer
+ *   destroys the refresh token and logs the user out for real.
+ * - Password reveal toggle: a button inside the password field switches input type between
+ *   password/text. It is progressive enhancement (the field works as a normal password input
+ *   without JS) and is type="button" so it never submits the form. aria-pressed/aria-label and
+ *   the Eye/EyeOff icon swap keep the state accessible. Both icons are rendered statically by
+ *   Astro; the client script toggles their `hidden` attribute instead of re-rendering.
+ * - Previously fixed bugs:
+ *   - Back button after login showed the cached login form (bfcache) — fixed via pageshow reload.
+ *   - A failed getSessionFromBackend() unconditionally cleared BOTH cookies, logging the user out
+ *     on any transient backend hiccup — fixed by attempting refreshFromBackend() first.
+ *   - Invisible input text in light mode / Safari: the scoped `.field input` rule outranks the
+ *     global `html.light .field input` override, so the input kept the dark-theme near-white text
+ *     on the light card. Fixed by coloring inputs with `var(--color-foreground)` (auto-flips per
+ *     theme) plus explicit `-webkit-text-fill-color` (Safari prioritizes it, incl. on autofill).
  */
 export const prerender = false;
 
-import { Volleyball, Check, TriangleAlert } from 'lucide-react';
+import { Volleyball, Check, TriangleAlert, Eye, EyeOff } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
 import {
   ACCESS_TOKEN_COOKIE,
@@ -25,6 +44,8 @@ import {
   isProduction,
   loginWithBackend,
   readAccessToken,
+  readRefreshToken,
+  refreshFromBackend,
 } from '../lib/auth';
 
 const accessToken = readAccessToken(Astro.cookies);
@@ -35,7 +56,31 @@ if (accessToken) {
     return Astro.redirect(getRoleRedirect(user.role));
   }
 
-  clearAuthCookies(Astro.cookies);
+  // Access token presente pero inválido (p.ej. expirado). Antes de cerrar la sesión,
+  // intentar un refresh silencioso igual que el middleware (P3): así una validación
+  // fallida transitoria no borra el refresh token ni desloguea al usuario.
+  const refreshToken = readRefreshToken(Astro.cookies);
+  if (refreshToken) {
+    try {
+      const result = await refreshFromBackend(refreshToken);
+      const isProd = isProduction(Astro.request);
+      Astro.cookies.set(
+        ACCESS_TOKEN_COOKIE,
+        result.accessToken,
+        getAuthCookieOptions(isProd, ACCESS_TOKEN_MAX_AGE),
+      );
+      Astro.cookies.set(
+        REFRESH_TOKEN_COOKIE,
+        result.refreshToken,
+        getAuthCookieOptions(isProd, REFRESH_TOKEN_MAX_AGE),
+      );
+      return Astro.redirect(getRoleRedirect(result.user.role));
+    } catch {
+      clearAuthCookies(Astro.cookies);
+    }
+  } else {
+    clearAuthCookies(Astro.cookies);
+  }
 }
 
 // --- Mensaje de registro exitoso ---
@@ -137,14 +182,31 @@ if (Astro.request.method === 'POST') {
 
         <div class="field">
           <label for="password">Contraseña</label>
-          <input
-            id="password"
-            type="password"
-            name="password"
-            autocomplete="current-password"
-            required
-            placeholder="••••••••"
-          />
+          <div class="password-wrap">
+            <input
+              id="password"
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              required
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              id="toggle-password"
+              class="password-toggle"
+              aria-label="Mostrar contraseña"
+              aria-pressed="false"
+              aria-controls="password"
+            >
+              <span class="password-toggle-icon" data-icon="show">
+                <Eye size={18} strokeWidth={2} aria-hidden="true" />
+              </span>
+              <span class="password-toggle-icon" data-icon="hide" hidden>
+                <EyeOff size={18} strokeWidth={2} aria-hidden="true" />
+              </span>
+            </button>
+          </div>
         </div>
 
         <button type="submit" class="btn-submit">INGRESAR</button>
@@ -159,6 +221,38 @@ if (Astro.request.method === 'POST') {
     </div>
   </main>
 </Layout>
+
+<script>
+  // bfcache fix (back-button "logout"): cuando el usuario presiona "atrás" tras loguearse,
+  // el navegador restaura esta página de login desde el back/forward cache (bfcache) y NO
+  // vuelve a ejecutar el SSR, mostrando el formulario en vez de redirigir al panel. Forzar
+  // un reload en la restauración desde bfcache hace que el SSR corra de nuevo y mande al
+  // usuario autenticado a su panel.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      window.location.reload();
+    }
+  });
+
+  // Toggle de visibilidad de la contraseña: progressive enhancement — sin JS el campo
+  // sigue siendo un input type="password" normal. Al activar, cambia el type del input,
+  // intercambia los iconos Eye/EyeOff y actualiza aria-pressed/aria-label para lectores.
+  const toggleBtn = document.getElementById('toggle-password');
+  const passwordInput = document.getElementById('password');
+  if (toggleBtn instanceof HTMLButtonElement && passwordInput instanceof HTMLInputElement) {
+    const showIcon = toggleBtn.querySelector('[data-icon="show"]');
+    const hideIcon = toggleBtn.querySelector('[data-icon="hide"]');
+    toggleBtn.addEventListener('click', () => {
+      const reveal = passwordInput.type === 'password';
+      passwordInput.type = reveal ? 'text' : 'password';
+      toggleBtn.setAttribute('aria-pressed', String(reveal));
+      toggleBtn.setAttribute('aria-label', reveal ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      showIcon?.toggleAttribute('hidden', reveal);
+      hideIcon?.toggleAttribute('hidden', !reveal);
+      passwordInput.focus();
+    });
+  }
+</script>
 
 <style>
   /* ---- Layout ---- */
@@ -313,6 +407,12 @@ if (Astro.request.method === 'POST') {
     font-family: 'Barlow Condensed', sans-serif;
   }
 
+  /* Text color uses the theme token (auto-flips in light mode) instead of a hardcoded
+     dark-theme value. The scoped selector here outranks the global `html.light .field
+     input` override, so without the token the input kept the dark-theme near-white text
+     and became invisible on the light card. `-webkit-text-fill-color` is set explicitly
+     because Safari prioritizes it over `color` (and applies it on autofill), which made
+     the typed/autofilled text invisible there even when `color` was correct. */
   .field input {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -320,20 +420,101 @@ if (Astro.request.method === 'POST') {
     padding: 0.75rem 1rem;
     font-size: 1rem;
     font-family: 'Barlow', sans-serif;
-    color: hsl(210 20% 94%);
+    color: var(--color-foreground);
+    -webkit-text-fill-color: var(--color-foreground);
+    caret-color: var(--color-foreground);
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     outline: none;
     width: 100%;
   }
 
+  /* ---- Password field with reveal toggle ---- */
+  .password-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  /* Reserve room on the right so typed text never slides under the toggle button. */
+  .password-wrap input {
+    padding-right: 3rem;
+  }
+  .password-toggle {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-muted-foreground);
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+  }
+  .password-toggle:hover {
+    color: var(--color-foreground);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .password-toggle:focus-visible {
+    outline: none;
+    color: var(--color-foreground);
+    box-shadow: 0 0 0 2px rgba(27, 105, 224, 0.45);
+  }
+  .password-toggle-icon {
+    display: inline-flex;
+    line-height: 0;
+  }
+  :global(html.light) .password-toggle:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
   .field input::placeholder {
-    color: hsl(215 20% 40%);
+    color: var(--color-muted-foreground);
+    -webkit-text-fill-color: var(--color-muted-foreground);
+    opacity: 1;
   }
 
   .field input:focus {
     border-color: hsl(216 85% 55%);
     background: rgba(27, 105, 224, 0.08);
     box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.2);
+  }
+
+  /* Safari/Chrome autofill: force legible text in both themes and stop the browser from
+     repainting its own (near-white) autofill text color over ours. The 9999s transition
+     is the standard hack to suppress the autofill background flash without !important. */
+  .field input:-webkit-autofill,
+  .field input:-webkit-autofill:hover,
+  .field input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--color-foreground);
+    caret-color: var(--color-foreground);
+    transition: background-color 9999s ease-in-out 0s, border-color 0.15s, box-shadow 0.15s;
+  }
+
+  /* Light theme: the scoped rules above win over the global `html.light .field input`
+     override, so restore the light-card field surface and focus here at the same scope.
+     Previously fixed bugs: text was invisible (white-on-white) in light mode because
+     background resolved to near-transparent and -webkit-text-fill-color wasn't overridden.
+     Fix: solid visible background + explicit color + -webkit-text-fill-color for Safari. */
+  :global(html.light) .field input {
+    background: hsl(210 20% 94%);
+    border-color: rgba(0, 0, 0, 0.15);
+    color: hsl(220 72% 10%);
+    -webkit-text-fill-color: hsl(220 72% 10%);
+  }
+  :global(html.light) .field input::placeholder {
+    color: hsl(215 20% 52%);
+    -webkit-text-fill-color: hsl(215 20% 52%);
+  }
+  :global(html.light) .field input:focus {
+    background: white;
+    border-color: hsl(35 100% 44%);
+    box-shadow: 0 0 0 3px hsl(35 100% 44% / 0.15);
   }
 
   /* ---- Submit button ---- */

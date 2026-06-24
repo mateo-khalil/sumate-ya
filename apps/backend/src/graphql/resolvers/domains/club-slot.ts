@@ -290,6 +290,38 @@ const Mutation: MutationResolvers = {
       return { success: false, courtPricing: null, message: msg };
     }
   },
+
+  applyCourtSchedule: async (_parent, args, ctx) => {
+    requireAuth(ctx);
+    await requireClubAdminRole(ctx.user!.id);
+    const userClient = userClientFrom(ctx);
+
+    try {
+      const r = await clubSlotManagementService.applyCourtSchedule(
+        { userId: ctx.user!.id, supabase: userClient },
+        args.input,
+      );
+      const parts: string[] = [];
+      if (r.createdCount) parts.push(`${r.createdCount} creado(s)`);
+      if (r.updatedCount) parts.push(`${r.updatedCount} actualizado(s)`);
+      if (r.removedCount) parts.push(`${r.removedCount} liberado(s)`);
+      if (r.protectedCount) parts.push(`${r.protectedCount} protegido(s) por reservas`);
+      const message = parts.length ? `Horarios guardados: ${parts.join(', ')}.` : 'Horarios guardados.';
+      return {
+        success: true,
+        message,
+        createdCount: r.createdCount,
+        updatedCount: r.updatedCount,
+        removedCount: r.removedCount,
+        protectedCount: r.protectedCount,
+        slots: r.slots,
+      };
+    } catch (error) {
+      const msg = toClientMessage(error, 'Error al guardar los horarios');
+      console.error('[club-slot.resolver.applyCourtSchedule] Error:', msg);
+      return { success: false, message: msg, createdCount: 0, updatedCount: 0, removedCount: 0, protectedCount: 0, slots: [] };
+    }
+  },
 };
 
 export const clubSlotResolvers = { Query, Mutation };

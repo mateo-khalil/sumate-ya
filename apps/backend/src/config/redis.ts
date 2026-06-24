@@ -81,6 +81,11 @@ export const CACHE_PREFIX = {
   // leaderboard:{limit} — ranking público de jugadores por winrate.
   // Read-heavy y estable (las stats sólo cambian al cerrarse un partido), cacheado a LIST_QUERIES.
   LEADERBOARD: 'leaderboard:',
+  // notifications:{userId} — lista + contador de no leídas de la campana, scoped al dueño (RLS).
+  // TTL corto (DYNAMIC_DATA) e invalidado al crear/leer/borrar notificaciones de ese usuario.
+  NOTIFICATIONS: 'notifications:',
+  // notifPrefs:{userId} — preferencias de notificación del usuario. Invalidar al actualizar.
+  NOTIF_PREFS: 'notifPrefs:',
 } as const;
 
 // =====================================================

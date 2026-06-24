@@ -319,20 +319,34 @@ if (Astro.request.method === 'POST') {
     /* min 16px to prevent iOS Safari from auto-zooming on focus */
     font-size: 1rem;
     font-family: 'Barlow', sans-serif;
-    color: hsl(210 20% 94%);
+    /* Theme token + explicit -webkit-text-fill-color so text stays legible in light
+       mode and in Safari (which prioritizes text-fill-color, incl. on autofill). */
+    color: var(--color-foreground);
+    -webkit-text-fill-color: var(--color-foreground);
+    caret-color: var(--color-foreground);
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     outline: none;
     width: 100%;
   }
 
   .field input::placeholder {
-    color: hsl(215 20% 38%);
+    color: var(--color-muted-foreground);
+    -webkit-text-fill-color: var(--color-muted-foreground);
+    opacity: 1;
   }
 
   .field input:focus {
     border-color: hsl(216 85% 55%);
     background: rgba(27, 105, 224, 0.08);
     box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.2);
+  }
+
+  .field input:-webkit-autofill,
+  .field input:-webkit-autofill:hover,
+  .field input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--color-foreground);
+    caret-color: var(--color-foreground);
+    transition: background-color 9999s ease-in-out 0s, border-color 0.15s, box-shadow 0.15s;
   }
 
   .field-error {
@@ -422,14 +436,22 @@ if (Astro.request.method === 'POST') {
   :global(html.light) .field label {
     color: hsl(220 20% 30%);
   }
+  /* Previously fixed bugs: -webkit-text-fill-color was missing from the light override,
+     causing invisible typed text in Safari (which prioritizes text-fill-color over color).
+     Background raised from 96% to 94% lightness so the field is clearly distinct from the
+     white card on light mode. */
   :global(html.light) .field input {
-    background: hsl(210 20% 96%);
-    border-color: rgba(0, 0, 0, 0.12);
+    background: hsl(210 20% 94%);
+    border-color: rgba(0, 0, 0, 0.15);
     color: hsl(220 72% 10%);
+    -webkit-text-fill-color: hsl(220 72% 10%);
   }
-  :global(html.light) .field input::placeholder { color: hsl(215 16% 55%); }
+  :global(html.light) .field input::placeholder {
+    color: hsl(215 16% 52%);
+    -webkit-text-fill-color: hsl(215 16% 52%);
+  }
   :global(html.light) .field input:focus {
-    background: hsl(216 60% 97%);
+    background: white;
     border-color: hsl(216 85% 50%);
     box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.12);
   }

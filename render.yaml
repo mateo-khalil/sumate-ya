@@ -1,0 +1,50 @@
+# Render Blueprint (Infrastructure as Code) — Sumate Ya backend
+#
+# Decision Context:
+# - Why Render: replaces the manual DigitalOcean droplet path (apps/backend/deploy/*:
+#   nginx + certbot + systemd) with a managed PaaS that gives free HTTPS + auto-deploy
+#   from GitHub, no domain/TLS/nginx to maintain.
+# - Why build from repo ROOT with pnpm --filter (not rootDir: apps/backend): the repo
+#   is a pnpm workspace and `packageManager: pnpm@10.x` + the root pnpm-workspace.yaml
+#   (with allowBuilds for esbuild/protobufjs) must be honored. Filtering builds only the
+#   backend package while installing from the workspace root so the lockfile resolves.
+# - REDIS_URL is intentionally omitted: config/redis.ts treats it as optional and
+#   gracefully disables caching when unset, so the service boots without a Redis add-on.
+#   Add Upstash later by setting REDIS_URL.
+# - plan: free uses Render's free web instance (spins down after ~15m idle, ~30-50s cold
+#   start). Fine for MVP; bump to `starter` to remove spin-down.
+# - Secrets use `sync: false` so they are set per-environment in the dashboard/API and
+#   never committed. FRONTEND_URL is set after the Vercel frontend URL is known (CORS).
+# - Previously fixed bugs: none relevant (new file).
+services:
+  - type: web
+    name: sumate-ya-backend
+    runtime: node
+    region: oregon
+    plan: free
+    branch: main
+    autoDeploy: true
+    # NOTE: corepack is intentionally NOT used. Node 22.12's bundled corepack ships stale
+    # signing keys and crashes on `corepack enable` with "Cannot find matching keyid" when it
+    # tries to fetch the pinned pnpm. Installing pnpm via npm sidesteps the signature check.
+    # Start with plain `node` so the runtime container doesn't need pnpm on PATH.
+    buildCommand: npm i -g pnpm@10.32.1 && pnpm install --frozen-lockfile && pnpm --filter @sumate-ya/backend build
+    startCommand: node apps/backend/dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: PRIVATE_SUPABASE_SECRET_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false

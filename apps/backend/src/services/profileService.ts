@@ -321,10 +321,12 @@ export async function updatePrivacy(
  *   The RPC only exposes already-public data, so there is no session to scope.
  * - limit defaults to 50, clamped to [1,100] here AND in the RPC (defense in depth so a
  *   crafted request can never widen the result set / egress).
- * - Caching: leaderboard:<limit> at LIST_QUERIES TTL (1h). Stats only change when a match
- *   is closed (a rare, write-side event), so a 1h stale window is an acceptable tradeoff
- *   for keeping this read-heavy path off the DB. No explicit invalidation is wired on
- *   stat updates yet — the 1h TTL bounds staleness; revisit if real-time ranks are needed.
+ * - Caching: leaderboard:<limit> at DYNAMIC_DATA TTL (3m). Stats change continuously while
+ *   the demo simulation (pg_cron, see demo_simulation_tick) closes matches around the clock,
+ *   so the ranking must feel live; a 3-minute window keeps the read-heavy RPC off the DB
+ *   while still surfacing rank movement within a demo session. (Was LIST_QUERIES/1h, which
+ *   made the ranking look frozen against the simulated activity.) No explicit invalidation is
+ *   wired on stat updates because the writer is pg_cron inside Postgres, not this process.
  * - Rank is assigned from the already-sorted RPC output (1-based), not stored, so it stays
  *   correct regardless of how many rows the limit returns.
  * - Previously fixed bugs: none relevant.
@@ -337,7 +339,7 @@ export async function getLeaderboard(limit?: number | null): Promise<Leaderboard
     const rows = await cacheGetOrSet<LeaderboardRow[]>(
       cacheKey,
       () => profileRepository.getLeaderboard(safeLimit),
-      CACHE_TTL.LIST_QUERIES,
+      CACHE_TTL.DYNAMIC_DATA,
     );
 
     return rows.map(toLeaderboardEntry);

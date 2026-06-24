@@ -32,6 +32,12 @@ import { authService } from '../services/authService.js';
 // ---------------------------------------------------------------------------
 // Zod schema for club admin registration
 // ---------------------------------------------------------------------------
+const URUGUAY_DEPARTMENTS = [
+  'Artigas', 'Canelones', 'Cerro Largo', 'Colonia', 'Durazno', 'Flores', 'Florida',
+  'Lavalleja', 'Maldonado', 'Montevideo', 'Paysandú', 'Río Negro', 'Rivera', 'Rocha',
+  'Salto', 'San José', 'Soriano', 'Tacuarembó', 'Treinta y Tres',
+] as const;
+
 const RegisterSchema = z
   .object({
     displayName: z.string().min(2, 'Nombre completo requerido (mínimo 2 caracteres)'),
@@ -47,6 +53,10 @@ const RegisterSchema = z
       .string()
       .min(1, 'Teléfono requerido')
       .regex(/^[+]?[\d\s\-()+]{8,}$/, 'Formato de teléfono inválido (ej: +598 2 400 1234)'),
+    department: z.enum(URUGUAY_DEPARTMENTS),
+    // Uruguay latitude/longitude bounds with a small margin for GPS drift.
+    lat: z.number().min(-35.5, 'Coordenada fuera de Uruguay').max(-29.0, 'Coordenada fuera de Uruguay'),
+    lng: z.number().min(-59.0, 'Coordenada fuera de Uruguay').max(-52.5, 'Coordenada fuera de Uruguay'),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: 'Las contraseñas no coinciden',

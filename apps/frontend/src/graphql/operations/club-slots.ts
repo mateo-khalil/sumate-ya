@@ -169,6 +169,31 @@ export interface UpdateCourtPricingInput {
   offPeakDiscount?: number;
 }
 
+/** Whole-court weekly schedule — what the simplified configurator sends. */
+export interface ApplyCourtScheduleInput {
+  courtId: string;
+  openDays: string[];        // dayOfWeek strings: 'monday'…'sunday'
+  openTime: string;          // HH:mm
+  closeTime: string;         // HH:mm
+  slotMinutes?: number;      // default 60
+  basePrice: number;
+  peakEnabled?: boolean;
+  peakDays?: string[];
+  peakStart?: string;        // HH:mm
+  peakEnd?: string;          // HH:mm
+  peakPrice?: number;
+}
+
+export interface ApplyCourtScheduleResult {
+  success: boolean;
+  message: string | null;
+  createdCount: number;
+  updatedCount: number;
+  removedCount: number;
+  protectedCount: number;
+  slots: ManagedClubSlot[];
+}
+
 // =====================================================
 // Spanish labels for display
 // =====================================================
@@ -323,6 +348,17 @@ export const UPDATE_COURT_PRICING = `
         id courtId basePrice peakStart peakEnd peakDays
         peakMultiplier offPeakDiscount createdAt
       }
+    }
+  }
+`;
+
+export const APPLY_COURT_SCHEDULE = `
+  ${MANAGED_SLOT_FIELDS}
+  mutation APPLY_COURT_SCHEDULE($input: ApplyCourtScheduleInput!) {
+    applyCourtSchedule(input: $input) {
+      success message
+      createdCount updatedCount removedCount protectedCount
+      slots { ...ManagedSlotFields }
     }
   }
 `;

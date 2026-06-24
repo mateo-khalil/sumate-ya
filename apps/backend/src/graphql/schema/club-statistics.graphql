@@ -1,0 +1,84 @@
+# Club Statistics — GraphQL schema for the club admin analytics page (Estadísticas)
+#
+# Decision Context:
+# - The dashboard already exposes 6 point-in-time KPIs (club-dashboard.graphql). Estadísticas is
+#   the analytics surface: aggregations over a date RANGE that the dashboard never computed —
+#   match/revenue breakdowns by court, peak days, peak hours, and a daily trend.
+# - Everything is derived read-only from existing tables (matches, matchParticipants, clubSlots,
+#   courts, reservations). No new persistence. Heavy aggregation lives in the service, cached.
+# - Day-of-week ints follow JS getDay() (0=Sun … 6=Sat) so the frontend can map labels directly.
+# - estimatedRevenue mirrors the dashboard definition (sum of slot priceArs for non-cancelled
+#   matches) PLUS confirmed/completed reservation prices, so the number reflects both bookings.
+# - occupancyRate is an approximation: non-cancelled matches ÷ active recurring slot-instances
+#   over the range. It is intentionally coarse (recurring slots × weeks) and labelled as such.
+# - extend type Query because Query already exists.
+# - Previously fixed bugs: none relevant (new feature).
+
+type StatsRange {
+  startDate: String!
+  endDate: String!
+}
+
+type StatsSummary {
+  totalMatches: Int!
+  completedMatches: Int!
+  cancelledMatches: Int!
+  cancellationRate: Float!
+  totalReservations: Int!
+  uniquePlayers: Int!
+  estimatedRevenue: Float!
+  occupancyRate: Float!
+  activeCourts: Int!
+}
+
+type StatusCount {
+  status: String!
+  count: Int!
+}
+
+type CourtRevenue {
+  courtId: ID!
+  courtName: String!
+  matches: Int!
+  revenue: Float!
+}
+
+type DayCount {
+  # 0 = Sunday … 6 = Saturday (JS getDay()).
+  dayOfWeek: Int!
+  label: String!
+  count: Int!
+}
+
+type HourCount {
+  # 0–23 local hour bucket.
+  hour: Int!
+  count: Int!
+}
+
+type DateCount {
+  # YYYY-MM-DD
+  date: String!
+  count: Int!
+}
+
+type ClubStatistics {
+  range: StatsRange!
+  summary: StatsSummary!
+  matchesByStatus: [StatusCount!]!
+  revenueByCourt: [CourtRevenue!]!
+  matchesByDayOfWeek: [DayCount!]!
+  matchesByHour: [HourCount!]!
+  matchesTrend: [DateCount!]!
+}
+
+input ClubStatisticsFilters {
+  # YYYY-MM-DD. Defaults to the last 30 days when omitted. Max range 365 days.
+  startDate: String
+  endDate: String
+}
+
+extend type Query {
+  # Admin: aggregated analytics for the authenticated admin's club over a date range.
+  clubStatistics(filters: ClubStatisticsFilters): ClubStatistics!
+}

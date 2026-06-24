@@ -30,9 +30,9 @@ interface Props {
   metrics: ClubMetrics;
 }
 
-const currencyFmt = new Intl.NumberFormat('es-AR', {
+const currencyFmt = new Intl.NumberFormat('es-UY', {
   style: 'currency',
-  currency: 'ARS',
+  currency: 'UYU',
   maximumFractionDigits: 0,
 });
 

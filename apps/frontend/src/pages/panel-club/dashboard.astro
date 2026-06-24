@@ -16,15 +16,12 @@
  */
 export const prerender = false;
 
-import { Volleyball, ChevronLeft, ChevronRight } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import ClubDashboardView from '../../components/club/ClubDashboardView.tsx';
 import { readAccessToken } from '../../lib/auth.js';
 import type { ClubDashboardData } from '../../graphql/operations/club-dashboard.ts';
 import { CLUB_DASHBOARD_QUERY } from '../../graphql/operations/club-dashboard.ts';
-import ClubSidebar from '../../components/panel-club/ClubSidebar.astro';
-import ClubMobileNav from '../../components/panel-club/ClubMobileNav.tsx';
+import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
 
 const user = Astro.locals.user;
 
@@ -79,48 +76,13 @@ try {
   console.error('[panel-club/dashboard] SSR dashboard fetch failed:', err);
   initialError = 'No se pudo cargar el dashboard. Intentá de nuevo.';
 }
-
-const nombre = user.displayName || user.email;
 ---
 
 <Layout title="Dashboard — Panel de Club — Sumate Ya">
   <div class="app-shell">
-    <nav class="topbar">
-      <div class="topbar-inner">
-        <!-- Flechas de historial -->
-        <div class="nav-arrows">
-          <button class="nav-arrow" data-nav="back" title="Volver" aria-label="Volver">
-            <ChevronLeft size={16} strokeWidth={2.5} aria-hidden="true" />
-          </button>
-          <button class="nav-arrow" data-nav="forward" title="Adelante" aria-label="Adelante">
-            <ChevronRight size={16} strokeWidth={2.5} aria-hidden="true" />
-          </button>
-        </div>
-        <a href="/partidos" class="topbar-brand" style="text-decoration:none">
-          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
-          <span class="topbar-name">SUMATE YA</span>
-          <span class="topbar-role-pill">CLUB</span>
-        </a>
-        <!-- Mobile nav: hamburger button (hidden on md+) -->
-        <ClubMobileNav client:load currentPath={Astro.url.pathname} userName={nombre} />
-        <!-- Desktop actions: hidden on mobile -->
-        <div class="topbar-actions">
-          <span class="user-badge">
-            <span class="user-dot"></span>
-            {nombre}
-          </span>
-          <ThemeToggle client:load />
-          <form method="POST" action="/api/auth/logout">
-            <button type="submit" class="btn-logout">Salir</button>
-          </form>
-        </div>
-      </div>
-      <div class="topbar-accent"></div>
-    </nav>
+    <ClubTopbar user={user} currentPath={Astro.url.pathname} />
 
     <div class="page-layout">
-      <ClubSidebar currentPath={Astro.url.pathname} />
-
       <main class="page-content">
         <header class="section-header">
           <div class="section-label">GESTIÓN DE PARTIDOS</div>
@@ -144,59 +106,12 @@ const nombre = user.displayName || user.email;
 <style>
   .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 
-  .topbar {
-    position: sticky; top: 0; z-index: 50;
-    background: rgba(7, 15, 31, 0.85);
-    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-  .topbar-inner {
-    max-width: 1280px; margin: 0 auto; padding: 0 1.25rem;
-    height: 56px; display: flex; align-items: center; justify-content: space-between;
-  }
-  .topbar-brand { display: flex; align-items: center; gap: 0.5rem; }
-  .topbar-ball { line-height:1; display:inline-flex; color:hsl(42 100% 60%); }
-  .topbar-name { font-family:'Bebas Neue',sans-serif; font-size:1.35rem; letter-spacing:.1em; color:#fff; }
-  .topbar-role-pill {
-    font-family:'Barlow Condensed',sans-serif; font-size:.65rem; font-weight:700;
-    letter-spacing:.12em; text-transform:uppercase;
-    background:rgba(246,164,0,.15); border:1px solid rgba(246,164,0,.35);
-    color:hsl(42 100% 60%); border-radius:4px; padding:.125rem .5rem;
-  }
-  .topbar-actions { display:flex; align-items:center; gap:.75rem; }
-  .topbar-accent { height:2px; background:linear-gradient(90deg,hsl(42 100% 55%),hsl(216 85% 45%),transparent); }
-
-  .user-badge {
-    display:flex; align-items:center; gap:.4rem;
-    background:rgba(246,164,0,.1); border:1px solid rgba(246,164,0,.22);
-    color:hsl(42 100% 65%); border-radius:20px; padding:.25rem .875rem;
-    font-size:.8125rem; font-weight:600; font-family:'Barlow Condensed',sans-serif; letter-spacing:.03em;
-  }
-  .user-dot { width:6px; height:6px; border-radius:50%; background:hsl(42 100% 58%); box-shadow:0 0 4px hsl(42 100% 58%); }
-  .btn-logout {
-    background:transparent; border:1px solid rgba(255,255,255,.12); border-radius:6px;
-    padding:.3rem .75rem; font-size:.8125rem; font-family:'Barlow',sans-serif; font-weight:500;
-    cursor:pointer; color:hsl(215 20% 60%); transition:background .15s,color .15s,border-color .15s;
-  }
-  .btn-logout:hover { background:rgba(255,255,255,.07); color:hsl(210 20% 90%); border-color:rgba(255,255,255,.2); }
-
-  .nav-arrows { display:flex; gap:.2rem; flex-shrink:0; }
-  .nav-arrow {
-    width:28px; height:28px; border-radius:6px;
-    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.09);
-    color:hsl(215 20% 55%); cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-    transition:background .15s,color .15s;
-  }
-  .nav-arrow:hover { background:rgba(255,255,255,.13); color:hsl(215 20% 80%); }
-  .topbar-actions { display:flex; align-items:center; gap:.75rem; }
-
   .page-layout {
-    flex:1; display:flex; max-width:1280px; width:100%;
-    margin:0 auto; padding:2rem 1.25rem; gap:2rem;
+    flex:1; display:block; max-width:1280px; width:100%;
+    margin:0 auto; padding:2rem 1.25rem;
   }
 
-  .page-content { flex:1; min-width:0; }
+  .page-content { width:100%; min-width:0; }
   .section-header { margin-bottom:1.5rem; padding-bottom:1.25rem; border-bottom:1px solid rgba(255,255,255,.06); }
   .section-label {
     font-family:'Barlow Condensed',sans-serif; font-size:.75rem; font-weight:700;
@@ -211,36 +126,14 @@ const nombre = user.displayName || user.email;
 
   /* ── Responsive (mobile/tablet) ── */
   @media (max-width: 767px) {
-    .topbar-actions { display: none; }
-    .page-layout { padding: 1rem; gap: 0; }
+    .page-layout { padding: 1rem; }
     .section-header { margin-bottom: 1rem; }
   }
   @media (min-width: 768px) and (max-width: 1023px) {
-    .page-layout { padding: 1.5rem 1.25rem; gap: 1.5rem; }
+    .page-layout { padding: 1.5rem 1.25rem; }
   }
 
   /* ── Tema claro ── */
-  :global(html.light) .topbar {
-    background: rgba(255,255,255,0.93);
-    border-bottom-color: rgba(0,0,0,0.08);
-  }
-  :global(html.light) .topbar-name { color: hsl(220 72% 10%); }
-  :global(html.light) .topbar-role-pill {
-    background: rgba(246,164,0,0.1);
-    border-color: rgba(246,164,0,0.25);
-  }
-  :global(html.light) .user-badge {
-    color: hsl(220 20% 30%);
-    background: rgba(0,0,0,0.04);
-    border-color: rgba(0,0,0,0.1);
-  }
-  :global(html.light) .user-dot { box-shadow: none; }
-  :global(html.light) .btn-logout {
-    color: hsl(220 20% 40%); border-color: rgba(0,0,0,0.12);
-  }
-  :global(html.light) .btn-logout:hover {
-    background: rgba(0,0,0,0.04); color: hsl(220 72% 10%);
-  }
   :global(html.light) .section-header { border-bottom-color: rgba(0,0,0,0.07); }
   :global(html.light) .section-title { color: hsl(220 72% 10%); }
   :global(html.light) .section-sub { color: hsl(215 16% 38%); }
@@ -265,12 +158,3 @@ const nombre = user.displayName || user.email;
     background: conic-gradient(var(--col, hsl(216 85% 55%)) var(--pct, 0%), rgba(0,0,0,0.07) 0);
   }
 </style>
-
-<script>
-  document.querySelectorAll('[data-nav="back"]').forEach(btn =>
-    btn.addEventListener('click', () => history.back())
-  );
-  document.querySelectorAll('[data-nav="forward"]').forEach(btn =>
-    btn.addEventListener('click', () => history.forward())
-  );
-</script>

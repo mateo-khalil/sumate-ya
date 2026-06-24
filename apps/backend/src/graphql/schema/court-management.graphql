@@ -1,0 +1,87 @@
+# Court Management — GraphQL schema for club admin court CRUD
+#
+# Decision Context:
+# - Why ManagedCourt (not the existing Court): the public `Court` type (create-match.graphql)
+#   is a minimal projection embedded in match/slot queries. Admin court management needs
+#   extra context (clubId, referencing counts, createdAt) that should not pollute the public
+#   API. Keeping a separate type clarifies the contract — same rationale as
+#   ManagedClubSlot vs ClubSlot.
+# - CourtSurface lives in create-match.graphql; MatchFormat in match.graphql. Reused here.
+# - slotCount / activeSlotCount / upcomingMatchCount power the management UI (badges) and the
+#   delete guard: a court with referencing rows cannot be hard-deleted (FK + data-integrity).
+# - Mutations return CourtMutationResult { success, court, message } — same wrapper shape as
+#   ClubSlotMutationResult so the frontend hooks stay uniform.
+# - extend type Query/Mutation because both root types already exist (create-match/match).
+# - Previously fixed bugs: courts table only had a public SELECT RLS policy, so admin writes
+#   were silently blocked. Fixed in migration courts_admin_rls_policies (insert/update/delete
+#   scoped to clubs.ownerId = auth.uid()).
+
+# =====================================================
+# Types
+# =====================================================
+
+# Admin view of a court — includes club scope and referencing counts.
+type ManagedCourt {
+  id: ID!
+  clubId: ID!
+  name: String!
+  surface: CourtSurface!
+  isIndoor: Boolean!
+  maxFormat: MatchFormat!
+  # Total recurring slots configured on this court (active + inactive).
+  slotCount: Int!
+  # Slots currently active (isActive = true).
+  activeSlotCount: Int!
+  # Future non-cancelled matches scheduled on this court.
+  upcomingMatchCount: Int!
+  createdAt: String
+}
+
+# =====================================================
+# Result types
+# =====================================================
+
+type CourtMutationResult {
+  success: Boolean!
+  court: ManagedCourt
+  message: String
+}
+
+# =====================================================
+# Inputs
+# =====================================================
+
+input CreateCourtInput {
+  name: String!
+  surface: CourtSurface!
+  isIndoor: Boolean
+  maxFormat: MatchFormat!
+}
+
+input UpdateCourtInput {
+  courtId: ID!
+  name: String
+  surface: CourtSurface
+  isIndoor: Boolean
+  maxFormat: MatchFormat
+}
+
+# =====================================================
+# Query / Mutation extensions
+# =====================================================
+
+extend type Query {
+  # Admin: list all courts for the authenticated admin's club, with referencing counts.
+  myClubCourts: [ManagedCourt!]!
+}
+
+extend type Mutation {
+  # Create a new court on the admin's club.
+  createCourt(input: CreateCourtInput!): CourtMutationResult!
+
+  # Update mutable fields of a court the admin owns.
+  updateCourt(input: UpdateCourtInput!): CourtMutationResult!
+
+  # Hard-delete a court. Blocked (friendly message) if it has slots, matches or reservations.
+  deleteCourt(courtId: ID!): CourtMutationResult!
+}

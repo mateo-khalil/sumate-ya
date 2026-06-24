@@ -959,6 +959,297 @@ export async function updateCourtPricing(
   return rowToCourtPricing(row);
 }
 
+// =====================================================
+// Whole-court schedule reconciliation (simplified configurator)
+// =====================================================
+
+const DAY_STRING_TO_INT: Record<string, number> = {
+  sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+};
+
+/** Minutes-since-midnight → "HH:mm". */
+function minutesToTime(min: number): string {
+  const hh = Math.floor(min / 60);
+  const mm = min % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+/** Normalises a stored "HH:mm:ss" (or "HH:mm") time to "HH:mm". */
+function toHHmm(time: string): string {
+  return time.slice(0, 5);
+}
+
+interface ApplyCourtScheduleInput {
+  courtId: string;
+  openDays: string[];
+  openTime: string;
+  closeTime: string;
+  slotMinutes?: number | null;
+  basePrice: number;
+  peakEnabled?: boolean | null;
+  peakDays?: string[] | null;
+  peakStart?: string | null;
+  peakEnd?: string | null;
+  peakPrice?: number | null;
+}
+
+interface ApplyCourtScheduleOutcome {
+  createdCount: number;
+  updatedCount: number;
+  removedCount: number;
+  protectedCount: number;
+  slots: ManagedClubSlot[];
+}
+
+/**
+ * Reconcile a court's entire weekly schedule from a simple open-hours + price config.
+ *
+ * Decision Context:
+ * - Why a single mutation (not N per-slot calls from the browser): the simplified "Horarios"
+ *   configurator lets a club owner think in "open days + hours + price" instead of 245 slot
+ *   rows. Mapping that intent onto the per-slot model requires a diff that (a) preserves
+ *   booked/blocked slots, (b) respects the UNIQUE(courtId,dayOfWeek,startTime) index which
+ *   ALSO covers soft-deleted rows, and (c) stays atomic-ish and fast. Doing it server-side in
+ *   a handful of bulk queries beats ~100 client round-trips with partial-failure and overlap
+ *   errors.
+ * - Protection rule: a slot with a future scheduled match OR a manual block is NEVER touched.
+ *   The desired hourly slot it covers is considered already satisfied (protectedCount++), and
+ *   new generated slots that would overlap a protected slot are skipped — so we never create
+ *   an overlapping bookable slot.
+ * - Reuse rule: an existing AVAILABLE slot at a desired (day,start):
+ *     · same end time  → repriced + reactivated in bulk (grouped by price).
+ *     · different end   → updated in place (can't delete+insert: the unique index keeps the
+ *                         soft-deleted row, so a fresh insert at that key would collide).
+ *   Available slots NOT in the desired set are bulk soft-deleted (freed), never hard-deleted.
+ * - Pricing: persisted to courtPricing (its designed home, so the form round-trips) AND baked
+ *   into each slot's priceArs so the calendar and player-facing views show the right number.
+ *   peakMultiplier is derived as peakPrice/basePrice for the courtPricing row.
+ * - Audit: ONE summary slotAuditLog entry per run (slotId=null) with the counts — avoids
+ *   writing ~100 per-slot entries on a bulk regenerate.
+ * - Previously fixed bugs: none relevant (new operation).
+ */
+export async function applyCourtSchedule(
+  ctx: ServiceContext,
+  input: ApplyCourtScheduleInput,
+): Promise<ApplyCourtScheduleOutcome> {
+  // ── Validation ───────────────────────────────────────────────
+  validateUuid(input.courtId, 'courtId');
+  if (!input.openDays || input.openDays.length === 0) {
+    throw new Error('Elegí al menos un día de apertura');
+  }
+  for (const d of input.openDays) validateDayOfWeek(d);
+
+  const slotMinutes = input.slotMinutes ?? 60;
+  if (slotMinutes < 30 || slotMinutes > 240) {
+    throw new Error('La duración de cada turno debe estar entre 30 y 240 minutos');
+  }
+
+  const openMin = parseTimeToMinutes(input.openTime);
+  const closeMin = parseTimeToMinutes(input.closeTime);
+  if (closeMin - openMin < slotMinutes) {
+    throw new Error('El horario de cierre debe ser al menos un turno mayor que el de apertura');
+  }
+
+  validatePrice(input.basePrice);
+  if (input.basePrice == null) throw new Error('Ingresá un precio base');
+
+  const peakEnabled = !!input.peakEnabled;
+  let peakStartMin = 0;
+  let peakEndMin = 0;
+  const peakDaySet = new Set<string>();
+  if (peakEnabled) {
+    if (input.peakPrice == null) throw new Error('Ingresá el precio especial (pico)');
+    validatePrice(input.peakPrice);
+    if (!input.peakStart || !input.peakEnd) throw new Error('Definí el horario del precio especial');
+    peakStartMin = parseTimeToMinutes(input.peakStart);
+    peakEndMin = parseTimeToMinutes(input.peakEnd);
+    if (peakEndMin <= peakStartMin) throw new Error('El horario especial: la hora de fin debe ser mayor que la de inicio');
+    for (const d of input.peakDays ?? []) {
+      validateDayOfWeek(d);
+      peakDaySet.add(d);
+    }
+  }
+
+  const { clubId } = await requireClubOwnership(ctx);
+  const db = ctx.supabase ?? supabase;
+  await requireCourtOwnership(input.courtId, clubId, db);
+
+  // Effective price for a slot starting at `startMin` on `day`.
+  const priceFor = (day: string, startMin: number): number => {
+    if (peakEnabled && peakDaySet.has(day) && startMin >= peakStartMin && startMin < peakEndMin) {
+      return input.peakPrice as number;
+    }
+    return input.basePrice;
+  };
+
+  // ── Load current state ──────────────────────────────────────
+  const existingRows = await clubSlotManagementRepository.getManagedSlotsByCourtId(input.courtId, db);
+  const activeRows = existingRows.filter((r) => r.isActive);
+  const activeIds = activeRows.map((r) => r.id);
+  const matchRows = activeIds.length
+    ? await clubSlotManagementRepository.getMatchesAtSlots(activeIds, db)
+    : [];
+  const matchedSlotIds = new Set(matchRows.map((m) => m.clubSlotId));
+
+  // A slot is "protected" when it is booked or manually blocked — never modified or removed.
+  const isProtected = (r: ManagedSlotRow) => r.isBlocked || matchedSlotIds.has(r.id);
+
+  // Index every existing row (active OR soft-deleted) by `${day}|${HH:mm}` — the unique key.
+  const byKey = new Map<string, ManagedSlotRow>();
+  for (const r of existingRows) byKey.set(`${r.dayOfWeek}|${toHHmm(r.startTime)}`, r);
+
+  // Protected ACTIVE slots, grouped by day with minute ranges, to avoid generating overlaps.
+  const protectedRangesByDay = new Map<string, Array<{ start: number; end: number }>>();
+  for (const r of activeRows) {
+    if (!isProtected(r)) continue;
+    const arr = protectedRangesByDay.get(r.dayOfWeek) ?? [];
+    arr.push({ start: parseTimeToMinutes(toHHmm(r.startTime)), end: parseTimeToMinutes(toHHmm(r.endTime)) });
+    protectedRangesByDay.set(r.dayOfWeek, arr);
+  }
+  const overlapsProtected = (day: string, start: number, end: number): boolean =>
+    (protectedRangesByDay.get(day) ?? []).some((r) => r.start < end && r.end > start);
+
+  // ── Build desired schedule + diff ───────────────────────────
+  const toInsert: Array<{
+    clubId: string; courtId: string; dayOfWeek: string; startTime: string; endTime: string;
+    duration: number; priceArs: number | null; allowOnlineBooking: boolean;
+  }> = [];
+  const reactivateByPrice = new Map<number, string[]>(); // available slot, same end, just reprice/reactivate
+  const desiredKeys = new Set<string>();
+  let createdCount = 0;
+  let updatedCount = 0;
+  let protectedCount = 0;
+
+  // Per-slot updates for the rare "same start, different end" (duration changed) case.
+  const inPlaceUpdates: Array<{ id: string; startTime: string; endTime: string; duration: number; priceArs: number }> = [];
+
+  for (const day of input.openDays) {
+    for (let start = openMin; start + slotMinutes <= closeMin; start += slotMinutes) {
+      const end = start + slotMinutes;
+      const startStr = minutesToTime(start);
+      const endStr = minutesToTime(end);
+      const key = `${day}|${startStr}`;
+      desiredKeys.add(key);
+      const price = priceFor(day, start);
+      const existing = byKey.get(key);
+
+      if (existing) {
+        if (isProtected(existing) && existing.isActive) {
+          // Booked/blocked — leave it exactly as is.
+          protectedCount++;
+          continue;
+        }
+        if (toHHmm(existing.endTime) === endStr) {
+          // Same shape → bulk reprice + reactivate.
+          const arr = reactivateByPrice.get(price) ?? [];
+          arr.push(existing.id);
+          reactivateByPrice.set(price, arr);
+          updatedCount++;
+        } else {
+          // Duration changed → update in place (can't delete+reinsert at the same unique key).
+          inPlaceUpdates.push({ id: existing.id, startTime: startStr, endTime: endStr, duration: slotMinutes, priceArs: price });
+          updatedCount++;
+        }
+        continue;
+      }
+
+      // No row at this key → insert, unless it would overlap a protected slot.
+      if (overlapsProtected(day, start, end)) {
+        protectedCount++;
+        continue;
+      }
+      toInsert.push({
+        clubId,
+        courtId: input.courtId,
+        dayOfWeek: day,
+        startTime: startStr,
+        endTime: endStr,
+        duration: slotMinutes,
+        priceArs: price,
+        allowOnlineBooking: true,
+      });
+      createdCount++;
+    }
+  }
+
+  // Active AVAILABLE slots not covered by the desired schedule → free them.
+  const toRemove: string[] = [];
+  for (const r of activeRows) {
+    if (isProtected(r)) {
+      if (!desiredKeys.has(`${r.dayOfWeek}|${toHHmm(r.startTime)}`)) protectedCount++;
+      continue;
+    }
+    if (!desiredKeys.has(`${r.dayOfWeek}|${toHHmm(r.startTime)}`)) toRemove.push(r.id);
+  }
+
+  // ── Apply (order: remove → reprice/update → insert) ─────────
+  const updatedBy = ctx.userId ?? null;
+  await clubSlotManagementRepository.bulkSoftDeleteSlots(toRemove, updatedBy, db);
+  const removedCount = toRemove.length;
+
+  for (const [price, ids] of reactivateByPrice) {
+    await clubSlotManagementRepository.bulkSetSlotPriceActive(ids, price, updatedBy, db);
+  }
+  for (const u of inPlaceUpdates) {
+    await clubSlotManagementRepository.updateSlot(
+      u.id,
+      { startTime: u.startTime, endTime: u.endTime, duration: u.duration, priceArs: u.priceArs, isActive: true, updatedBy },
+      db,
+    );
+  }
+  if (toInsert.length) await clubSlotManagementRepository.bulkInsertSlots(toInsert, db);
+
+  // ── Persist pricing config (round-trips back into the form) ──
+  const peakMultiplier = peakEnabled && input.basePrice > 0 ? (input.peakPrice as number) / input.basePrice : 1.0;
+  await clubSlotManagementRepository.upsertCourtPricing(
+    {
+      courtId: input.courtId,
+      basePrice: input.basePrice,
+      peakStart: peakEnabled ? (input.peakStart ?? null) : null,
+      peakEnd: peakEnabled ? (input.peakEnd ?? null) : null,
+      peakDays: peakEnabled ? [...peakDaySet].map((d) => DAY_STRING_TO_INT[d]).filter((n) => Number.isInteger(n)) : [],
+      peakMultiplier: Math.min(Math.max(peakMultiplier, 0.1), 10),
+      offPeakDiscount: 1.0,
+    },
+    db,
+  );
+
+  // ── Summary audit entry (one per run, not per slot) ─────────
+  await clubSlotManagementRepository.insertAuditLogEntry(
+    {
+      slotId: null,
+      action: 'updated',
+      previousValue: null,
+      newValue: {
+        scope: 'applyCourtSchedule',
+        courtId: input.courtId,
+        openDays: input.openDays,
+        openTime: input.openTime,
+        closeTime: input.closeTime,
+        slotMinutes,
+        basePrice: input.basePrice,
+        peakEnabled,
+        createdCount, updatedCount, removedCount, protectedCount,
+      },
+      changedBy: ctx.userId!,
+      reason: 'Configuración de horarios del club',
+    },
+    db,
+  );
+
+  await invalidateSlotCaches(clubId, input.courtId);
+
+  // Return the fresh slot list for this court (mapped to GraphQL shape).
+  const freshRows = await clubSlotManagementRepository.getManagedSlotsByCourtId(input.courtId, db);
+  const slots = freshRows.filter((r) => r.isActive).map(rowToManagedSlot);
+
+  console.info(
+    `[clubSlotManagementService.applyCourtSchedule] court=${input.courtId} created=${createdCount} updated=${updatedCount} removed=${removedCount} protected=${protectedCount}`,
+  );
+
+  return { createdCount, updatedCount, removedCount, protectedCount, slots };
+}
+
 export const clubSlotManagementService = {
   getManagedSlots,
   getManagedSlotsByCourt,
@@ -971,4 +1262,5 @@ export const clubSlotManagementService = {
   toggleSlotBlock,
   bulkBlockSlots,
   updateCourtPricing,
+  applyCourtSchedule,
 };

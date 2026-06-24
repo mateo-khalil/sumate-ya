@@ -1,0 +1,118 @@
+---
+/**
+ * Panel de Club — Gestión de Canchas (SSR, club_admin only)
+ *
+ * Decision Context:
+ * - Replicates the horarios.astro recipe exactly: prerender=false, explicit club_admin guard,
+ *   SSR fetch of the initial data with the HttpOnly cookie token, then hand off to a React
+ *   island with initialData + accessToken props. The /api/graphql proxy can't reliably read the
+ *   HttpOnly cookie under dev hot-reload, so we fetch server-side here.
+ * - Layout uses ClubTopbar (the unified top-navbar). The sidebar was removed by the user, so all
+ *   navigation lives in ClubTopbar — Canchas is one of its links now.
+ * - Previously fixed bugs: courts had no write RLS policies (added in migration
+ *   courts_admin_rls_policies); without them createCourt/updateCourt/deleteCourt would fail.
+ */
+export const prerender = false;
+
+import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
+import Layout from '../../layouts/Layout.astro';
+import CourtManager from '../../components/club/CourtManager';
+import { readAccessToken } from '../../lib/auth';
+import type { ManagedCourt } from '../../graphql/operations/courts';
+
+const user = Astro.locals.user;
+
+if (!user || user.role !== 'club_admin') {
+  return Astro.redirect('/login?reason=role-required');
+}
+
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
+
+const COURTS_QUERY = `
+  query MY_CLUB_COURTS_SSR {
+    myClubCourts {
+      id clubId name surface isIndoor maxFormat
+      slotCount activeSlotCount upcomingMatchCount createdAt
+    }
+  }
+`;
+
+let initialCourts: ManagedCourt[] = [];
+let initialError: string | null = null;
+
+try {
+  const res = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ query: COURTS_QUERY }),
+  });
+  const json = (await res.json()) as {
+    data?: { myClubCourts?: ManagedCourt[] };
+    errors?: Array<{ message: string }>;
+  };
+  if (json.errors?.length) {
+    initialError = json.errors[0].message;
+  } else {
+    initialCourts = json.data?.myClubCourts ?? [];
+  }
+} catch (err) {
+  console.error('[panel-club/canchas] SSR courts fetch failed:', err);
+  initialError = 'No se pudieron cargar las canchas. Intentá de nuevo.';
+}
+---
+
+<Layout title="Canchas — Panel de Club — Sumate Ya">
+  <div class="app-shell">
+    <ClubTopbar user={user} currentPath={Astro.url.pathname} />
+
+    <div class="page-layout">
+      <main class="page-content">
+        <header class="section-header">
+          <div class="section-label">GESTIÓN DE CANCHAS</div>
+          <h1 class="section-title">Canchas</h1>
+          <p class="section-sub">Creá, editá y eliminá las canchas de tu club</p>
+        </header>
+
+        <CourtManager
+          client:load
+          initialCourts={initialCourts}
+          initialError={initialError}
+          accessToken={accessToken}
+        />
+      </main>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .page-layout { flex: 1; display: block; max-width: 1280px; width: 100%; margin: 0 auto; padding: 2rem 1.25rem; }
+  .page-content { width: 100%; min-width: 0; }
+  .section-header { margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700;
+    letter-spacing: 0.2em; color: hsl(42 100% 55%); text-transform: uppercase; margin-bottom: 0.5rem;
+  }
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: clamp(1.6rem, 5vw, 2.5rem);
+    font-weight: 400; letter-spacing: 0.04em; color: #ffffff; margin: 0 0 0.375rem; line-height: 1;
+  }
+  .section-sub { margin: 0; color: hsl(215 20% 50%); font-size: 0.9rem; font-family: 'Barlow', sans-serif; }
+
+  :global(html.light) .section-header { border-bottom-color: rgba(0,0,0,0.07); }
+  :global(html.light) .section-title { color: hsl(220 72% 10%); }
+  :global(html.light) .section-sub { color: hsl(215 16% 38%); }
+  :global(html.light) .section-label { color: hsl(42 100% 38%); }
+
+  @media (max-width: 767px) {
+    .page-layout { padding: 1rem; }
+    .section-header { margin-bottom: 1rem; }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .page-layout { padding: 1.5rem 1.25rem; }
+  }
+</style>

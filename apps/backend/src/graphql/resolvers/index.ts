@@ -14,8 +14,12 @@ import { clubResolvers } from './domains/club.js';
 import { clubSlotResolvers } from './domains/club-slot.js';
 import { clubDashboardResolvers } from './domains/club-dashboard.js';
 import { clubMatchResolvers } from './domains/club-match.js';
+import { courtResolvers } from './domains/court.js';
+import { reservationResolvers } from './domains/reservation.js';
+import { clubStatisticsResolvers } from './domains/club-statistics.js';
 import { matchResolvers } from './domains/match.js';
 import { matchResultResolvers } from './domains/match-result.js';
+import { notificationResolvers } from './domains/notification.js';
 import { profileResolvers } from './domains/profile.js';
 import { tournamentResolvers } from './domains/tournament.js';
 import { teamResolvers } from './domains/team.js';
@@ -24,20 +28,27 @@ export const resolvers = {
   Query: {
     ...matchResolvers.Query,
     ...matchResultResolvers.Query,
+    ...notificationResolvers.Query,
     ...profileResolvers.Query,
     ...clubResolvers.Query,
     ...clubSlotResolvers.Query,
     ...clubDashboardResolvers.Query,
     ...clubMatchResolvers.Query,
+    ...courtResolvers.Query,
+    ...reservationResolvers.Query,
+    ...clubStatisticsResolvers.Query,
     ...tournamentResolvers.Query,
     ...teamResolvers.Query,
   },
   Mutation: {
     ...matchResolvers.Mutation,
     ...matchResultResolvers.Mutation,
+    ...notificationResolvers.Mutation,
     ...profileResolvers.Mutation,
     ...clubSlotResolvers.Mutation,
     ...clubMatchResolvers.Mutation,
+    ...courtResolvers.Mutation,
+    ...reservationResolvers.Mutation,
     ...tournamentResolvers.Mutation,
     ...teamResolvers.Mutation,
   },

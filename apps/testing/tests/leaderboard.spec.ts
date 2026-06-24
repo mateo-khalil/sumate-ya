@@ -154,6 +154,27 @@ test.describe('Ranking — acceso público', () => {
     await expect(leaderboardPage.selfRow).toHaveCount(0);
   });
 
+  test('cada fila enlaza al perfil del jugador (/perfil/{id})', async ({
+    leaderboardPage,
+    page,
+  }) => {
+    await mockGraphQLAll(page, GRAPHQL_PROXY_ROUTE, {
+      data: {
+        leaderboard: [
+          buildLeaderboardEntry({ rank: 1, id: 'jugador-abc', displayName: 'Crack Perfil', winrate: 80 }),
+        ],
+      },
+    });
+
+    await leaderboardPage.goto();
+    await leaderboardPage.expectSettled();
+
+    await expect(leaderboardPage.row('Crack Perfil')).toHaveAttribute(
+      'href',
+      '/perfil/jugador-abc',
+    );
+  });
+
   test('el link "Ranking" del navbar lleva a /leaderboard', async ({ leaderboardPage, page }) => {
     await mockGraphQLAll(page, GRAPHQL_PROXY_ROUTE, { data: { leaderboard: [] } });
     await leaderboardPage.goto();

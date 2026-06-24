@@ -21,13 +21,12 @@
  */
 export const prerender = false;
 
-import { Volleyball } from 'lucide-react';
-import ClubSidebar from '../../components/panel-club/ClubSidebar.astro';
-import ClubMobileNav from '../../components/panel-club/ClubMobileNav.tsx';
+import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
 import Layout from '../../layouts/Layout.astro';
 import SlotManager from '../../components/club/SlotManager';
 import { readAccessToken } from '../../lib/auth';
 import type { ManagedClubSlot } from '../../graphql/operations/club-slots';
+import type { ManagedCourt } from '../../graphql/operations/courts';
 
 const user = Astro.locals.user;
 
@@ -40,8 +39,11 @@ if (!user || user.role !== 'club_admin') {
 const accessToken = readAccessToken(Astro.cookies) ?? '';
 const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
 
-const SLOTS_QUERY = `
-  query MY_CLUB_SLOTS_SSR {
+// Single SSR round-trip fetches BOTH the slots and the club's courts. Courts are needed so
+// the configurator can offer a tab per court — including courts that have no slots yet (which
+// would be invisible if derived from slots alone).
+const HORARIOS_QUERY = `
+  query HORARIOS_SSR {
     myClubSlots {
       id clubId courtId
       court { id name maxFormat surface isIndoor }
@@ -49,10 +51,15 @@ const SLOTS_QUERY = `
       isBlocked blockReason blockType
       isActive allowOnlineBooking hasScheduledMatch updatedAt
     }
+    myClubCourts {
+      id clubId name surface isIndoor maxFormat
+      slotCount activeSlotCount upcomingMatchCount createdAt
+    }
   }
 `;
 
 let initialSlots: ManagedClubSlot[] = [];
+let initialCourts: ManagedCourt[] = [];
 let initialError: string | null = null;
 
 try {
@@ -62,64 +69,45 @@ try {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ query: SLOTS_QUERY }),
+    body: JSON.stringify({ query: HORARIOS_QUERY }),
   });
   const json = (await res.json()) as {
-    data?: { myClubSlots?: ManagedClubSlot[] };
+    data?: { myClubSlots?: ManagedClubSlot[]; myClubCourts?: ManagedCourt[] };
     errors?: Array<{ message: string }>;
   };
   if (json.errors?.length) {
     initialError = json.errors[0].message;
   } else {
     initialSlots = json.data?.myClubSlots ?? [];
+    initialCourts = json.data?.myClubCourts ?? [];
   }
 } catch (err) {
-  console.error('[panel-club/horarios] SSR slots fetch failed:', err);
+  console.error('[panel-club/horarios] SSR fetch failed:', err);
   initialError = 'No se pudieron cargar los horarios. Intentá de nuevo.';
 }
-
-const nombre = user.displayName || user.email;
 ---
 
 <Layout title="Horarios — Panel de Club — Sumate Ya">
   <div class="app-shell">
-    <!-- Top navigation bar (shared with panel-club/index.astro) -->
-    <nav class="topbar">
-      <div class="topbar-inner">
-        <div class="topbar-brand">
-          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
-          <span class="topbar-name">SUMATE YA</span>
-          <span class="topbar-role-pill">CLUB</span>
-        </div>
-        <!-- Mobile nav: hamburger button (hidden on md+) -->
-        <ClubMobileNav client:load currentPath={Astro.url.pathname} userName={nombre} />
-        <!-- Desktop actions: hidden on mobile -->
-        <div class="topbar-actions">
-          <span class="user-badge">
-            <span class="user-dot"></span>
-            {nombre}
-          </span>
-          <form method="POST" action="/api/auth/logout">
-            <button type="submit" class="btn-logout">Salir</button>
-          </form>
-        </div>
-      </div>
-      <div class="topbar-accent"></div>
-    </nav>
+    <ClubTopbar user={user} currentPath={Astro.url.pathname} />
 
     <div class="page-layout">
-      <ClubSidebar currentPath={Astro.url.pathname} />
-
       <!-- Main content -->
       <main class="page-content">
         <header class="section-header">
           <div class="section-label">GESTIÓN DE HORARIOS</div>
           <h1 class="section-title">Horarios</h1>
-          <p class="section-sub">Gestioná los slots de tus canchas: creá, editá, bloqueá y desbloquea horarios</p>
+          <p class="section-sub">Definí los días y el horario de atención de cada cancha y poné tus precios</p>
         </header>
 
-        <!-- React island: handles all slot management interactions -->
-        <SlotManager client:load initialSlots={initialSlots} initialError={initialError} accessToken={accessToken} />
+        <!-- React island: schedule configurator (primary) + advanced per-slot panel -->
+        <SlotManager
+          client:load
+          initialSlots={initialSlots}
+          initialCourts={initialCourts}
+          initialError={initialError}
+          accessToken={accessToken}
+        />
       </main>
     </div>
   </div>
@@ -132,123 +120,17 @@ const nombre = user.displayName || user.email;
     flex-direction: column;
   }
 
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background: rgba(7, 15, 31, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .topbar-inner {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 0 1.25rem;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .topbar-brand {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .topbar-ball {
-    line-height: 1;
-    display: inline-flex;
-    color: hsl(42 100% 60%);
-  }
-
-  .topbar-name {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 1.35rem;
-    letter-spacing: 0.1em;
-    color: #ffffff;
-  }
-
-  .topbar-role-pill {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    background: rgba(246, 164, 0, 0.15);
-    border: 1px solid rgba(246, 164, 0, 0.35);
-    color: hsl(42 100% 60%);
-    border-radius: 4px;
-    padding: 0.125rem 0.5rem;
-  }
-
-  .topbar-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .topbar-accent {
-    height: 2px;
-    background: linear-gradient(90deg, hsl(42 100% 55%), hsl(216 85% 45%), transparent);
-  }
-
-  .user-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    background: rgba(246, 164, 0, 0.1);
-    border: 1px solid rgba(246, 164, 0, 0.22);
-    color: hsl(42 100% 65%);
-    border-radius: 20px;
-    padding: 0.25rem 0.875rem;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    font-family: 'Barlow Condensed', sans-serif;
-    letter-spacing: 0.03em;
-  }
-
-  .user-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: hsl(42 100% 58%);
-    box-shadow: 0 0 4px hsl(42 100% 58%);
-  }
-
-  .btn-logout {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    padding: 0.3rem 0.75rem;
-    font-size: 0.8125rem;
-    font-family: 'Barlow', sans-serif;
-    font-weight: 500;
-    cursor: pointer;
-    color: hsl(215 20% 60%);
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-  }
-
-  .btn-logout:hover {
-    background: rgba(255, 255, 255, 0.07);
-    color: hsl(210 20% 90%);
-    border-color: rgba(255, 255, 255, 0.2);
-  }
-
   .page-layout {
     flex: 1;
-    display: flex;
+    display: block;
     max-width: 1280px;
     width: 100%;
     margin: 0 auto;
     padding: 2rem 1.25rem;
-    gap: 2rem;
   }
 
   .page-content {
-    flex: 1;
+    width: 100%;
     min-width: 0;
   }
 
@@ -287,11 +169,10 @@ const nombre = user.displayName || user.email;
 
   /* ── Responsive ── */
   @media (max-width: 767px) {
-    .topbar-actions { display: none; }
-    .page-layout { padding: 1rem; gap: 0; }
+    .page-layout { padding: 1rem; }
     .section-header { margin-bottom: 1rem; }
   }
   @media (min-width: 768px) and (max-width: 1023px) {
-    .page-layout { padding: 1.5rem 1.25rem; gap: 1.5rem; }
+    .page-layout { padding: 1.5rem 1.25rem; }
   }
 </style>

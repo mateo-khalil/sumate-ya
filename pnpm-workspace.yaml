@@ -2,3 +2,15 @@ packages:
   - apps/backend
   - apps/frontend
   - packages/*
+
+# pnpm 11 requires explicit approval for dependency build scripts (keyed as
+# `allowBuilds: { <pkg>: true|false }`). These two ship native/postinstall steps the
+# backend toolchain relies on (esbuild powers tsx; protobufjs is an Apollo dep).
+# Approved here so `pnpm install` doesn't abort with ERR_PNPM_IGNORED_BUILDS in CI /
+# on the droplet.
+allowBuilds:
+  esbuild: true
+  '@apollo/protobufjs': true
+  # sharp is pulled in by @astrojs/vercel for build-time image optimization and ships a
+  # native postinstall step. Approved so `pnpm install` doesn't abort with ERR_PNPM_IGNORED_BUILDS.
+  sharp: true

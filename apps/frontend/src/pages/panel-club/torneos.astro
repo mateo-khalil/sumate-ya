@@ -1,0 +1,217 @@
+---
+/**
+ * Panel de Club — Torneos (SSR, club_admin only)
+ *
+ * Decision Context:
+ * - Pestaña general de torneos del club: lista los torneos del club y permite crear uno nuevo.
+ *   Reemplaza el viejo link directo "Crear torneo" del navbar por un hub (ver + crear), pedido
+ *   del usuario ("una pestaña general de torneo donde vea mis torneos listados y pueda crear").
+ * - Scope al club: GET_TOURNAMENTS no expone un filtro por club, así que traemos la lista y
+ *   filtramos por club.id === clubId del admin (volumen chico). El clubId sale de CLUB_DASHBOARD,
+ *   misma fuente que usa /torneos/crear para scopear el selector.
+ * - "Crear torneo" navega a /torneos/crear (el club ya puede crear torneos: el gate de capitán
+ *   se relajó para el dueño del club en el backend).
+ * - SSR + ClubTopbar + page-layout, idéntico recipe que dashboard/horarios para coherencia.
+ * - Previously fixed bugs: none relevant (página nueva).
+ */
+export const prerender = false;
+
+import { Trophy, Plus, Users, Calendar } from 'lucide-react';
+import Layout from '../../layouts/Layout.astro';
+import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
+import { readAccessToken } from '../../lib/auth';
+import { CLUB_DASHBOARD_QUERY, type ClubDashboardData } from '../../graphql/operations/club-dashboard';
+import { GET_TOURNAMENTS, type TournamentListItem, type TournamentStatus } from '../../graphql/operations/tournaments';
+
+const user = Astro.locals.user;
+if (!user || user.role !== 'club_admin') {
+  return Astro.redirect('/login?reason=role-required');
+}
+
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
+
+async function gql<T>(query: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${backendUrl}/graphql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ query }),
+    });
+    const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
+    if (json.errors?.length) {
+      console.error('[panel-club/torneos] GraphQL error:', json.errors[0].message);
+      return null;
+    }
+    return json.data ?? null;
+  } catch (err) {
+    console.error('[panel-club/torneos] request failed:', err);
+    return null;
+  }
+}
+
+const dash = await gql<{ clubDashboard?: ClubDashboardData }>(CLUB_DASHBOARD_QUERY);
+const club = dash?.clubDashboard?.club ?? null;
+const clubId = club?.id ?? null;
+
+const data = await gql<{ tournaments: TournamentListItem[] }>(GET_TOURNAMENTS);
+const loadError = data === null ? 'No se pudieron cargar los torneos. Intentá de nuevo.' : null;
+const tournaments = (data?.tournaments ?? []).filter((t) => t.club?.id === clubId);
+
+const STATUS: Record<TournamentStatus, { label: string; cls: string }> = {
+  REGISTRATION: { label: 'Inscripción abierta', cls: 'tn-badge--open' },
+  IN_PROGRESS: { label: 'En juego', cls: 'tn-badge--live' },
+  COMPLETED: { label: 'Finalizado', cls: 'tn-badge--done' },
+  CANCELLED: { label: 'Cancelado', cls: 'tn-badge--cancel' },
+};
+
+const FORMAT: Record<string, string> = {
+  FIVE_VS_FIVE: '5v5', SEVEN_VS_SEVEN: '7v7', TEN_VS_TEN: '10v10', ELEVEN_VS_ELEVEN: '11v11',
+};
+
+const fmtDate = (iso: string | null) =>
+  iso ? new Date(`${iso}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+---
+
+<Layout title="Torneos — Panel de Club — Sumate Ya">
+  <div class="app-shell">
+    <ClubTopbar user={user} currentPath={Astro.url.pathname} />
+
+    <div class="page-layout">
+      <main class="page-content">
+        <header class="section-header">
+          <div class="section-head-text">
+            <div class="section-label">GESTIÓN DE TORNEOS</div>
+            <h1 class="section-title">Torneos</h1>
+            <p class="section-sub">Mirá los torneos de tu club y creá uno nuevo para que los equipos se sumen</p>
+          </div>
+          <a class="btn-create" href="/torneos/crear">
+            <Plus size={16} strokeWidth={2.5} aria-hidden="true" />
+            Crear torneo
+          </a>
+        </header>
+
+        {loadError ? (
+          <div class="tn-error" role="alert">{loadError}</div>
+        ) : tournaments.length === 0 ? (
+          <section class="tn-empty" role="status">
+            <span class="tn-empty-icon"><Trophy size={40} strokeWidth={1.5} aria-hidden="true" /></span>
+            <h2>Todavía no tenés torneos</h2>
+            <p>Creá tu primer torneo de club y dejá que los equipos se inscriban.</p>
+            <a class="btn-create" href="/torneos/crear">
+              <Plus size={16} strokeWidth={2.5} aria-hidden="true" />
+              Crear torneo
+            </a>
+          </section>
+        ) : (
+          <div class="tn-grid">
+            {tournaments.map((t) => (
+              <a class="tn-card" href={`/torneos/${t.id}`}>
+                <div class="tn-card-top">
+                  <span class={`tn-badge ${STATUS[t.status]?.cls ?? ''}`}>{STATUS[t.status]?.label ?? t.status}</span>
+                  <span class="tn-format">{FORMAT[t.format] ?? t.format}</span>
+                </div>
+                <h3 class="tn-name">{t.name}</h3>
+                <div class="tn-meta">
+                  <span class="tn-meta-item">
+                    <Users size={14} strokeWidth={2} aria-hidden="true" />
+                    {t.registeredTeamsCount}/{t.teamCount} equipos
+                  </span>
+                  {t.startDate && (
+                    <span class="tn-meta-item">
+                      <Calendar size={14} strokeWidth={2} aria-hidden="true" />
+                      {fmtDate(t.startDate)}
+                    </span>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .page-layout { flex: 1; display: block; max-width: 1280px; width: 100%; margin: 0 auto; padding: 2rem 1.25rem; }
+  .page-content { width: 100%; min-width: 0; }
+
+  .section-header {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700;
+    letter-spacing: 0.2em; color: hsl(42 100% 55%); text-transform: uppercase; margin-bottom: 0.5rem;
+  }
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: clamp(1.6rem, 5vw, 2.5rem);
+    font-weight: 400; letter-spacing: 0.04em; color: #fff; margin: 0 0 0.375rem; line-height: 1;
+  }
+  .section-sub { margin: 0; color: hsl(215 20% 50%); font-size: 0.9rem; font-family: 'Barlow', sans-serif; }
+
+  .btn-create {
+    display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0;
+    padding: 0.55rem 1rem; border-radius: 8px; text-decoration: none;
+    background: var(--color-primary, hsl(35 100% 48%)); color: #fff;
+    font-family: 'Barlow', sans-serif; font-size: 0.85rem; font-weight: 700;
+    transition: opacity 0.15s;
+  }
+  .btn-create:hover { opacity: 0.9; }
+
+  .tn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+
+  .tn-card {
+    display: flex; flex-direction: column; gap: 0.6rem;
+    padding: 1.1rem; border-radius: 12px; text-decoration: none;
+    background: hsl(220 55% 10%); border: 1px solid rgba(255, 255, 255, 0.07);
+    transition: border-color 0.15s, transform 0.15s, background 0.15s;
+  }
+  .tn-card:hover { border-color: rgba(246, 164, 0, 0.4); transform: translateY(-2px); background: hsl(220 55% 12%); }
+  .tn-card-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .tn-badge {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.66rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; padding: 0.15rem 0.5rem; border-radius: 5px;
+    border: 1px solid transparent;
+  }
+  .tn-badge--open { background: rgba(246, 164, 0, 0.14); color: hsl(42 100% 62%); border-color: rgba(246, 164, 0, 0.35); }
+  .tn-badge--live { background: rgba(27, 105, 224, 0.16); color: hsl(216 90% 72%); border-color: rgba(27, 105, 224, 0.35); }
+  .tn-badge--done { background: rgba(255, 255, 255, 0.06); color: hsl(215 20% 65%); border-color: rgba(255, 255, 255, 0.12); }
+  .tn-badge--cancel { background: rgba(239, 68, 68, 0.12); color: hsl(0 72% 68%); border-color: rgba(239, 68, 68, 0.3); }
+  .tn-format {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.72rem; font-weight: 700;
+    color: hsl(215 20% 55%); letter-spacing: 0.04em;
+  }
+  .tn-name { margin: 0; font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; letter-spacing: 0.03em; color: #fff; line-height: 1.05; }
+  .tn-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: auto; }
+  .tn-meta-item { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: hsl(215 20% 60%); font-family: 'Barlow', sans-serif; }
+  .tn-meta-item :global(svg) { color: hsl(215 20% 50%); }
+
+  .tn-empty {
+    display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.6rem;
+    padding: 3rem 1.5rem; border: 1px dashed rgba(255, 255, 255, 0.12); border-radius: 14px;
+    background: hsl(220 55% 9%);
+  }
+  .tn-empty-icon { color: hsl(42 100% 58%); display: inline-flex; }
+  .tn-empty h2 { margin: 0.25rem 0 0; font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; color: #fff; }
+  .tn-empty p { margin: 0 0 0.5rem; color: hsl(215 20% 55%); font-family: 'Barlow', sans-serif; font-size: 0.9rem; }
+  .tn-error {
+    padding: 1rem 1.25rem; border-radius: 10px; font-family: 'Barlow', sans-serif; font-size: 0.9rem;
+    background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); color: hsl(0 72% 70%);
+  }
+
+  @media (max-width: 767px) { .page-layout { padding: 1rem; } .section-header { margin-bottom: 1rem; } }
+
+  /* ── Tema claro ── */
+  :global(html.light) .section-header { border-bottom-color: rgba(0, 0, 0, 0.07); }
+  :global(html.light) .section-title { color: hsl(220 72% 10%); }
+  :global(html.light) .section-sub { color: hsl(215 16% 40%); }
+  :global(html.light) .section-label { color: hsl(42 100% 38%); }
+  :global(html.light) .tn-card { background: #fff; border-color: rgba(0, 0, 0, 0.08); }
+  :global(html.light) .tn-card:hover { border-color: rgba(246, 164, 0, 0.5); background: hsl(35 100% 99%); }
+  :global(html.light) .tn-name { color: hsl(220 72% 10%); }
+  :global(html.light) .tn-empty { background: hsl(220 30% 97%); border-color: rgba(0, 0, 0, 0.12); }
+  :global(html.light) .tn-empty h2 { color: hsl(220 72% 10%); }
+</style>

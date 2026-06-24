@@ -1,0 +1,73 @@
+# GraphQL Schema: in-app notifications + per-user notification preferences
+#
+# Decision Context:
+# - The `notifications` table already existed and was written to by system events
+#   (match_needs_players, match_cancelled, match_auto_cancelled, match_result_confirmed).
+#   This schema finally exposes a player-facing READ + MANAGE path for those rows so the
+#   notification bell can show them and the settings page can manage delivery.
+# - RLS gates every row to its owner (auth.uid() = userId), so all queries/mutations here
+#   require auth and operate on the caller's own notifications only.
+# - NotificationPreferences gate which notifications get CREATED (see notificationService.notify).
+#   Reading is never gated by preferences — only insertion is.
+# - createdAt is exposed as an ISO String (consistent with other timestamp fields in the schema).
+# - Previously fixed bugs: none relevant.
+
+type Notification {
+  id: ID!
+  # Free-form system type, e.g. "match_player_joined", "match_cancelled", "match_result_confirmed".
+  type: String!
+  title: String!
+  body: String
+  # ID of the related entity (matchId, etc.) so the client can deep-link. May be null.
+  referenceId: ID
+  isRead: Boolean!
+  # ISO-8601 timestamp.
+  createdAt: String!
+}
+
+# A page of the caller's notifications plus the current unread count, so the bell can
+# render the list and the badge from a single round-trip.
+type NotificationConnection {
+  items: [Notification!]!
+  unreadCount: Int!
+}
+
+# Per-user toggles. Each gates a family of notification types (see notificationService).
+type NotificationPreferences {
+  matchActivity: Boolean!
+  matchUpdates: Boolean!
+  matchResults: Boolean!
+  invitations: Boolean!
+}
+
+input UpdateNotificationPreferencesInput {
+  matchActivity: Boolean
+  matchUpdates: Boolean
+  matchResults: Boolean
+  invitations: Boolean
+}
+
+extend type Query {
+  # Caller's notifications (newest first) plus unread count. Auth required.
+  myNotifications(limit: Int): NotificationConnection!
+
+  # Cheap unread-count-only query for the bell badge. Auth required.
+  unreadNotificationCount: Int!
+
+  # Caller's notification delivery preferences (defaults all-on). Auth required.
+  myNotificationPreferences: NotificationPreferences!
+}
+
+extend type Mutation {
+  # Marks one of the caller's notifications as read. Returns true on success. Auth required.
+  markNotificationRead(id: ID!): Boolean!
+
+  # Marks all of the caller's unread notifications as read. Returns the number updated. Auth required.
+  markAllNotificationsRead: Int!
+
+  # Deletes one of the caller's notifications. Returns true on success. Auth required.
+  deleteNotification(id: ID!): Boolean!
+
+  # Updates the caller's notification preferences (partial update). Auth required.
+  updateNotificationPreferences(input: UpdateNotificationPreferencesInput!): NotificationPreferences!
+}

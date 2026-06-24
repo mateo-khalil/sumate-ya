@@ -1,0 +1,132 @@
+---
+/**
+ * Panel de Club — Gestión de Reservas (SSR, club_admin only)
+ *
+ * Decision Context:
+ * - Same SSR recipe as horarios/canchas: prerender=false, club_admin guard, server-side fetch
+ *   with the HttpOnly cookie token, then hand off to a React island with initial data + token.
+ * - One combined query fetches both reservations (default filter: today onward) AND the club's
+ *   courts, so the form's court picker and the filter dropdown are populated without a second
+ *   round-trip.
+ * - Default filter startDate = today so the list opens on upcoming reservations rather than the
+ *   full history; the user can widen the range from the toolbar.
+ * - Navigation lives in ClubTopbar (sidebar was removed) — Reservas is one of its links.
+ * - Previously fixed bugs: none relevant (new feature; reservations is a brand-new domain).
+ */
+export const prerender = false;
+
+import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
+import Layout from '../../layouts/Layout.astro';
+import ReservationManager from '../../components/club/ReservationManager';
+import { readAccessToken } from '../../lib/auth';
+import type { Reservation, ReservationFilters } from '../../graphql/operations/reservations';
+import type { ManagedCourt } from '../../graphql/operations/courts';
+
+const user = Astro.locals.user;
+
+if (!user || user.role !== 'club_admin') {
+  return Astro.redirect('/login?reason=role-required');
+}
+
+const accessToken = readAccessToken(Astro.cookies) ?? '';
+const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
+
+const today = new Date().toISOString().slice(0, 10);
+const initialFilters: ReservationFilters = { startDate: today };
+
+const RESERVAS_QUERY = `
+  query RESERVAS_SSR($filters: ReservationFilters) {
+    myClubReservations(filters: $filters) {
+      id clubId courtId courtName reservedAt durationMin status
+      player { id displayName avatarUrl }
+      contactName contactPhone priceArs notes createdAt updatedAt
+    }
+    myClubCourts {
+      id clubId name surface isIndoor maxFormat
+      slotCount activeSlotCount upcomingMatchCount createdAt
+    }
+  }
+`;
+
+let initialReservations: Reservation[] = [];
+let courts: ManagedCourt[] = [];
+let initialError: string | null = null;
+
+try {
+  const res = await fetch(`${backendUrl}/graphql`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ query: RESERVAS_QUERY, variables: { filters: initialFilters } }),
+  });
+  const json = (await res.json()) as {
+    data?: { myClubReservations?: Reservation[]; myClubCourts?: ManagedCourt[] };
+    errors?: Array<{ message: string }>;
+  };
+  if (json.errors?.length) {
+    initialError = json.errors[0].message;
+  } else {
+    initialReservations = json.data?.myClubReservations ?? [];
+    courts = json.data?.myClubCourts ?? [];
+  }
+} catch (err) {
+  console.error('[panel-club/reservas] SSR reservations fetch failed:', err);
+  initialError = 'No se pudieron cargar las reservas. Intentá de nuevo.';
+}
+---
+
+<Layout title="Reservas — Panel de Club — Sumate Ya">
+  <div class="app-shell">
+    <ClubTopbar user={user} currentPath={Astro.url.pathname} />
+
+    <div class="page-layout">
+      <main class="page-content">
+        <header class="section-header">
+          <div class="section-label">GESTIÓN DE RESERVAS</div>
+          <h1 class="section-title">Reservas</h1>
+          <p class="section-sub">Reservá canchas para jugadores de la app o contactos manuales</p>
+        </header>
+
+        <ReservationManager
+          client:load
+          initialReservations={initialReservations}
+          initialError={initialError}
+          initialFilters={initialFilters}
+          courts={courts}
+          accessToken={accessToken}
+        />
+      </main>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+  .page-layout { flex: 1; display: block; max-width: 1280px; width: 100%; margin: 0 auto; padding: 2rem 1.25rem; }
+  .page-content { width: 100%; min-width: 0; }
+  .section-header { margin-bottom: 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700;
+    letter-spacing: 0.2em; color: hsl(42 100% 55%); text-transform: uppercase; margin-bottom: 0.5rem;
+  }
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif; font-size: clamp(1.6rem, 5vw, 2.5rem);
+    font-weight: 400; letter-spacing: 0.04em; color: #ffffff; margin: 0 0 0.375rem; line-height: 1;
+  }
+  .section-sub { margin: 0; color: hsl(215 20% 50%); font-size: 0.9rem; font-family: 'Barlow', sans-serif; }
+
+  :global(html.light) .section-header { border-bottom-color: rgba(0,0,0,0.07); }
+  :global(html.light) .section-title { color: hsl(220 72% 10%); }
+  :global(html.light) .section-sub { color: hsl(215 16% 38%); }
+  :global(html.light) .section-label { color: hsl(42 100% 38%); }
+
+  @media (max-width: 767px) {
+    .page-layout { padding: 1rem; }
+    .section-header { margin-bottom: 1rem; }
+  }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .page-layout { padding: 1.5rem 1.25rem; }
+  }
+</style>

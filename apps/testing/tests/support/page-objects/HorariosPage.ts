@@ -11,6 +11,10 @@ import { FRONTEND_URL } from '../constants';
  *   are the browser-issued mutations/queries that fire AFTER hydration — toggleSlotBlock,
  *   bulkBlockSlots and slotAuditLog all POST to `/api/graphql-auth`. Specs mock those at
  *   the browser boundary to stay deterministic regardless of seed contents.
+ * - Redesign (configurator-first): the page now LEADS with the per-court ScheduleConfigurator
+ *   (open days + hours + price). The per-slot calendar/list, block flow and edit modal moved
+ *   behind a collapsible "Vista avanzada y bloqueos puntuales" toggle. So every row-action
+ *   flow must first `openAdvanced()` — `switchToList()` does this for callers automatically.
  * - Why the LIST view (not calendar) for row actions: the calendar is week-bound and a
  *   seeded slot can fall on a "past day" of the current week (see
  *   horarios-calendar-overlap.spec.ts). The list view renders ALL active slots regardless
@@ -28,6 +32,8 @@ export class HorariosPage {
   readonly page: Page;
   readonly url = `${FRONTEND_URL}/panel-club/horarios`;
   readonly heading: Locator;
+  /** Collapsible toggle that reveals the per-slot calendar/list + block tools. */
+  readonly advancedToggle: Locator;
   readonly listViewButton: Locator;
   readonly calendarViewButton: Locator;
   readonly slotTable: Locator;
@@ -49,6 +55,7 @@ export class HorariosPage {
   constructor(page: Page) {
     this.page = page;
     this.heading = page.getByRole('heading', { name: /^horarios$/i });
+    this.advancedToggle = page.getByRole('button', { name: /vista avanzada/i });
     this.listViewButton = page.getByRole('button', { name: /^lista$/i });
     this.calendarViewButton = page.getByRole('button', { name: /^calendario$/i });
     this.slotTable = page.locator('.slot-table');
@@ -86,7 +93,19 @@ export class HorariosPage {
     );
   }
 
+  /**
+   * Expands the collapsible "Vista avanzada" panel that now hosts the per-slot calendar/list
+   * and block tools. Idempotent via aria-expanded so repeat calls are safe.
+   */
+  async openAdvanced(): Promise<void> {
+    if ((await this.advancedToggle.getAttribute('aria-expanded')) !== 'true') {
+      await this.advancedToggle.click();
+    }
+    await expect(this.listViewButton).toBeVisible();
+  }
+
   async switchToList(): Promise<void> {
+    await this.openAdvanced();
     await this.listViewButton.click();
     await expect(this.slotTable).toBeVisible();
   }

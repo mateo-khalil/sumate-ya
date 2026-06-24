@@ -9,6 +9,9 @@ import {
   ArrowRight,
   UserCircle,
   Flame,
+  LayoutDashboard,
+  Plus,
+  CalendarClock,
 } from 'lucide-react';
 import { MatchList } from '@/components/matches';
 import { TournamentList } from '@/components/tournaments/TournamentList';
@@ -53,6 +56,7 @@ import { TournamentList } from '@/components/tournaments/TournamentList';
 interface HomeScreenProps {
   isAuthenticated?: boolean;
   userName?: string;
+  userRole?: string;
 }
 
 const STATS = [
@@ -85,7 +89,11 @@ const STEPS = [
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   isAuthenticated = false,
   userName,
+  userRole,
 }) => {
+  // Vista a nivel club: un club_admin logueado ve un saludo y CTAs orientados a gestión
+  // (Panel, Crear partido, Crear torneo) en vez de las acciones de jugador (Explorar / Mi Perfil).
+  const isClub = isAuthenticated && userRole === 'club_admin';
   return (
     <main className="overflow-x-hidden">
       {/* ── HERO ──────────────────────────────────────────────────── */}
@@ -183,10 +191,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {isAuthenticated && userName && (
             <p
-              className="mb-3 text-sm font-medium uppercase tracking-widest text-primary"
+              className="mb-3 flex items-center gap-2 text-sm font-medium uppercase tracking-widest text-primary"
               style={{ animation: 'fadeUp 0.5s ease both', animationDelay: '40ms' }}
             >
-              ¡Bienvenido de vuelta, {userName}!
+              {isClub && (
+                <span className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[0.62rem] font-bold tracking-[0.12em]">
+                  <Shield className="h-3 w-3" aria-hidden="true" />
+                  Club
+                </span>
+              )}
+              {isClub ? `¡Bienvenido, ${userName}!` : `¡Bienvenido de vuelta, ${userName}!`}
             </p>
           )}
 
@@ -215,15 +229,43 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             className="mt-6 max-w-lg text-lg leading-relaxed text-white/65"
             style={{ animation: 'fadeUp 0.55s ease both', animationDelay: '180ms' }}
           >
-            La plataforma para conectar jugadores de fútbol, armar equipos y
-            sumarte a partidos en tu zona.
+            {isClub
+              ? 'Gestioná los partidos, horarios, canchas y torneos de tu club desde un solo lugar.'
+              : 'La plataforma para conectar jugadores de fútbol, armar equipos y sumarte a partidos en tu zona.'}
           </p>
 
           <div
             className="mt-10 flex flex-wrap gap-4"
             style={{ animation: 'fadeUp 0.55s ease both', animationDelay: '280ms' }}
           >
-            {isAuthenticated ? (
+            {isClub ? (
+              <>
+                <Button size="lg" className="group gap-2" asChild>
+                  <a href="/panel-club/dashboard">
+                    <LayoutDashboard className="h-4 w-4" />
+                    Ir al Panel
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </a>
+                </Button>
+                <Button size="lg" variant="secondary" className="gap-2" asChild>
+                  <a href="/panel-club/crear-partido">
+                    <Plus className="h-4 w-4" />
+                    Crear partido
+                  </a>
+                </Button>
+                <Button size="lg" variant="outline" className="gap-2" asChild>
+                  <a href="/panel-club/horarios">
+                    <CalendarClock className="h-4 w-4" />
+                    Horarios
+                  </a>
+                </Button>
+                <form method="POST" action="/api/auth/logout">
+                  <Button size="lg" variant="outline" type="submit">
+                    Cerrar Sesión
+                  </Button>
+                </form>
+              </>
+            ) : isAuthenticated ? (
               <>
                 <Button size="lg" className="group gap-2" asChild>
                   <a href="/partidos">
@@ -435,14 +477,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             className="ball-watermark pointer-events-none absolute -bottom-10 -right-10 h-56 w-56 select-none object-contain opacity-15 sm:h-72 sm:w-72"
           />
           <h2 className="relative font-['Bebas_Neue'] text-5xl tracking-wide text-foreground">
-            ¿Listo para jugar?
+            {isClub ? '¿Listo para gestionar tu club?' : '¿Listo para jugar?'}
           </h2>
           <p className="relative mt-3 text-muted-foreground">
-            Unite a la comunidad y encontrá tu próximo partido ahora.
+            {isClub
+              ? 'Administrá partidos, horarios y torneos desde tu panel de club.'
+              : 'Unite a la comunidad y encontrá tu próximo partido ahora.'}
           </p>
           <Button size="lg" className="relative mt-8 gap-2" asChild>
-            <a href={isAuthenticated ? '/partidos' : '/login'}>
-              {isAuthenticated ? 'Ver partidos disponibles' : 'Iniciar Sesión'}
+            <a href={isClub ? '/panel-club/dashboard' : isAuthenticated ? '/partidos' : '/login'}>
+              {isClub ? 'Ir al panel del club' : isAuthenticated ? 'Ver partidos disponibles' : 'Iniciar Sesión'}
               <ArrowRight className="h-4 w-4" />
             </a>
           </Button>

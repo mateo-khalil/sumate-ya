@@ -39,7 +39,6 @@ if (!id || !UUID_REGEX.test(id)) {
 
 const user = Astro.locals.user;
 const isAuthenticated = !!user;
-const nombre = user?.displayName || user?.email;
 const accessToken = readAccessToken(Astro.cookies) ?? '';
 const backendUrl =
   import.meta.env.PRIVATE_BACKEND_URL ||

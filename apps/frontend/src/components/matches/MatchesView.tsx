@@ -133,36 +133,40 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
           </button>
         </div>
 
-        {/* "Solo mis partidos" — only renders on Pasados AND only for authenticated users.
-            The flag is server-enforced (see matchService.toFilterOptions) but exposing
-            the toggle to anonymous users would return empty/unfiltered results and
-            confuse the UI. */}
-        {timeframe === 'past' && isAuthenticated && (
-          <label className="only-mine-toggle">
-            <input
-              type="checkbox"
-              checked={onlyMine}
-              onChange={(event) => handleOnlyMineToggle(event.target.checked)}
-              aria-label="Mostrar solo los partidos en los que jugué"
-            />
-            <span>Solo los míos</span>
-          </label>
-        )}
-
-        {/* "Mostrar cancelados" — authenticated-only and timeframe-independent. Reveals
-            ONLY the user's own cancelled matches (auto-cancelled for not filling the roster
-            or admin-cancelled). Hidden for anonymous users because cancelled matches are
-            private and the backend scopes them to the requester. */}
+        {/* Toggles opcionales agrupados a la derecha. Cada uno es un <input checkbox>
+            real (appearance:none → switch visual) para conservar accesibilidad y que
+            Playwright `.check()` (matches-list spec) siga funcionando por aria-label. */}
         {isAuthenticated && (
-          <label className="only-mine-toggle">
-            <input
-              type="checkbox"
-              checked={showCancelled}
-              onChange={(event) => handleShowCancelledToggle(event.target.checked)}
-              aria-label="Mostrar mis partidos cancelados"
-            />
-            <span>Mostrar cancelados</span>
-          </label>
+          <div className="toggle-options">
+            {/* "Solo mis partidos" — only on Pasados. Server-enforced flag; exponerlo a
+                anónimos devolvería resultados vacíos/confusos. */}
+            {timeframe === 'past' && (
+              <label className="switch-toggle">
+                <input
+                  type="checkbox"
+                  className="switch-input"
+                  checked={onlyMine}
+                  onChange={(event) => handleOnlyMineToggle(event.target.checked)}
+                  aria-label="Mostrar solo los partidos en los que jugué"
+                />
+                <span className="switch-text">Solo los míos</span>
+              </label>
+            )}
+
+            {/* "Mostrar cancelados" — autenticado y timeframe-independiente. Revela SOLO
+                los partidos cancelados propios (auto-cancelados por roster vacío o
+                cancelados por admin); el backend los scopea al solicitante. */}
+            <label className="switch-toggle">
+              <input
+                type="checkbox"
+                className="switch-input"
+                checked={showCancelled}
+                onChange={(event) => handleShowCancelledToggle(event.target.checked)}
+                aria-label="Mostrar mis partidos cancelados"
+              />
+              <span className="switch-text">Mostrar cancelados</span>
+            </label>
+          </div>
         )}
       </div>
 
@@ -221,22 +225,59 @@ export function MatchesView({ isAuthenticated = false }: MatchesViewProps) {
           margin-bottom: 0;
         }
 
-        .only-mine-toggle {
+        /* Grupo de toggles opcionales, alineado a la derecha de la fila. */
+        .toggle-options {
           display: inline-flex;
           align-items: center;
-          gap: 0.5rem;
+          flex-wrap: wrap;
+          gap: 0.5rem 1.25rem;
+          margin-left: auto;
+          padding-left: 1rem;
+          border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .switch-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.55rem;
           color: hsl(210 20% 85%);
           font-family: 'Barlow', sans-serif;
           font-size: 0.875rem;
           cursor: pointer;
           user-select: none;
         }
+        .switch-text { line-height: 1; }
 
-        .only-mine-toggle input[type='checkbox'] {
-          width: 1rem;
-          height: 1rem;
-          accent-color: hsl(35 100% 48%);
+        /* Switch visual construido sobre el checkbox real (appearance:none). */
+        .switch-input {
+          appearance: none;
+          -webkit-appearance: none;
+          position: relative;
+          width: 36px;
+          height: 20px;
+          margin: 0;
+          border-radius: 999px;
+          background: hsl(220 30% 28%);
           cursor: pointer;
+          flex-shrink: 0;
+          transition: background 0.15s;
+        }
+        .switch-input::before {
+          content: '';
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: hsl(210 20% 94%);
+          transition: transform 0.15s;
+        }
+        .switch-input:checked { background: hsl(35 100% 48%); }
+        .switch-input:checked::before { transform: translateX(16px); }
+        .switch-input:focus-visible {
+          outline: 2px solid hsl(35 100% 55%);
+          outline-offset: 2px;
         }
 
         .view-toggle {

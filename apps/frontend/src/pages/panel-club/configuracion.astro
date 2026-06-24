@@ -6,21 +6,30 @@
  * - Rol exclusivo club_admin: misma protección que dashboard.astro.
  * - ChangePasswordForm es role-agnostic (llama al backend /api/auth/change-password
  *   que solo necesita el JWT del usuario activo, sin importar el rol).
- * - Layout idéntico al dashboard (Topbar + ClubSidebar + main) para coherencia
+ * - Layout idéntico al dashboard (ClubTopbar + main full-width) para coherencia
  *   dentro del panel de administración.
  * - La sección de privacidad de PrivacySettingsContainer es específica de jugadores
  *   (showStats, showPosition, etc.) y no aplica a club_admin, por eso se omite.
+ * - Foto del Club: sección agregada para cargar la imagen de perfil del club. Consulta
+ *   `clubDashboard { club { imageUrl } }` server-side para mostrar la imagen actual y pasa
+ *   `currentImageUrl` como prop al island ClubImageUpload. El upload va por el proxy Astro
+ *   `/api/club/image` → backend `/api/club/image` → clubImageService → avatars bucket bajo
+ *   `{ownerId}/club-{clubId}-image-{ts}.ext` para satisfacer la policy de Storage existente.
  * - Previously fixed bugs: none relevant.
  */
 export const prerender = false;
 
-import { KeyRound, ShieldCheck, User, Bell, ChevronLeft, ChevronRight, Volleyball } from 'lucide-react';
+import { Camera, KeyRound, ShieldCheck, User, Bell } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import ClubSidebar from '../../components/panel-club/ClubSidebar.astro';
-import ClubMobileNav from '../../components/panel-club/ClubMobileNav.tsx';
+import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
 import ChangePasswordForm from '../../components/settings/ChangePasswordForm.tsx';
+import NotificationPreferencesForm from '../../components/settings/NotificationPreferencesForm.tsx';
+import ClubImageUpload from '../../components/club/ClubImageUpload.tsx';
 import { readAccessToken } from '../../lib/auth.js';
+import {
+  GET_MY_NOTIFICATION_PREFERENCES,
+  type NotificationPreferences,
+} from '../../graphql/operations/notifications';
 
 const user = Astro.locals.user;
 if (!user || user.role !== 'club_admin') {
@@ -29,50 +38,60 @@ if (!user || user.role !== 'club_admin') {
 
 const accessToken = readAccessToken(Astro.cookies) ?? '';
 const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
-const nombre = user.displayName || user.email;
+const graphqlUrl =
+  import.meta.env.PUBLIC_GRAPHQL_URL || process.env.PUBLIC_GRAPHQL_URL || `${backendUrl}/graphql`;
+
+// Fetch current club imageUrl for the photo upload section
+let clubImageUrl: string | null = null;
+if (accessToken) {
+  try {
+    const res = await fetch(graphqlUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ query: '{ clubDashboard { club { id imageUrl } } }' }),
+    });
+    const json = (await res.json().catch(() => null)) as
+      | { data?: { clubDashboard?: { club?: { imageUrl?: string | null } } } }
+      | null;
+    clubImageUrl = json?.data?.clubDashboard?.club?.imageUrl ?? null;
+  } catch {
+    // Graceful degradation: component renders without current image.
+  }
+}
+
+// Notification preferences shared with players — club admins receive notifications too.
+const DEFAULT_NOTIF_PREFS: NotificationPreferences = {
+  matchActivity: true,
+  matchUpdates: true,
+  matchResults: true,
+  invitations: true,
+};
+let notifPrefs: NotificationPreferences = DEFAULT_NOTIF_PREFS;
+
+if (accessToken) {
+  try {
+    const res = await fetch(graphqlUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ query: GET_MY_NOTIFICATION_PREFERENCES }),
+    });
+    const json = (await res.json().catch(() => null)) as
+      | { data?: { myNotificationPreferences: NotificationPreferences } }
+      | null;
+    if (json?.data?.myNotificationPreferences) {
+      notifPrefs = json.data.myNotificationPreferences;
+    }
+  } catch {
+    // Graceful degradation: keep defaults; the form can still save.
+  }
+}
 ---
 
 <Layout title="Configuración de Cuenta — Panel de Club — Sumate Ya">
   <div class="app-shell">
-    <!-- Topbar del panel de club (igual que dashboard) -->
-    <nav class="topbar">
-      <div class="topbar-inner">
-        <!-- Flechas de historial -->
-        <div class="nav-arrows">
-          <button class="nav-arrow" data-nav="back" title="Volver" aria-label="Volver">
-            <ChevronLeft size={16} strokeWidth={2.5} aria-hidden="true" />
-          </button>
-          <button class="nav-arrow" data-nav="forward" title="Adelante" aria-label="Adelante">
-            <ChevronRight size={16} strokeWidth={2.5} aria-hidden="true" />
-          </button>
-        </div>
+    <ClubTopbar user={user} currentPath={Astro.url.pathname} />
 
-        <a href="/partidos" class="topbar-brand" style="text-decoration:none">
-          <span class="topbar-ball"><Volleyball size={20} strokeWidth={2} aria-hidden="true" /></span>
-          <span class="topbar-name">SUMATE YA</span>
-          <span class="topbar-role-pill">CLUB</span>
-        </a>
-
-        <ClubMobileNav client:load currentPath={Astro.url.pathname} userName={nombre} />
-
-        <div class="topbar-actions">
-          <span class="user-badge">
-            <span class="user-dot"></span>
-            {nombre}
-          </span>
-          <ThemeToggle client:load />
-          <form method="POST" action="/api/auth/logout">
-            <button type="submit" class="btn-logout">Salir</button>
-          </form>
-        </div>
-      </div>
-      <div class="topbar-accent"></div>
-    </nav>
-
-    <!-- Layout principal: sidebar + contenido -->
     <div class="page-layout">
-      <ClubSidebar currentPath={Astro.url.pathname} />
-
       <main class="page-content">
         <header class="section-header">
           <div class="section-label">CUENTA</div>
@@ -84,7 +103,11 @@ const nombre = user.displayName || user.email;
 
           <!-- Sidebar de navegación interna -->
           <nav class="settings-nav" aria-label="Secciones">
-            <a href="#cuenta" class="settings-nav-item settings-nav-item--active">
+            <a href="#foto-club" class="settings-nav-item settings-nav-item--active">
+              <Camera size={15} strokeWidth={2} aria-hidden="true" />
+              Foto del Club
+            </a>
+            <a href="#cuenta" class="settings-nav-item">
               <User size={15} strokeWidth={2} aria-hidden="true" />
               Mi Cuenta
             </a>
@@ -92,15 +115,36 @@ const nombre = user.displayName || user.email;
               <ShieldCheck size={15} strokeWidth={2} aria-hidden="true" />
               Seguridad
             </a>
-            <span class="settings-nav-item settings-nav-item--disabled" aria-disabled="true">
+            <a href="#notificaciones" class="settings-nav-item">
               <Bell size={15} strokeWidth={2} aria-hidden="true" />
               Notificaciones
-              <span class="coming-pill">Próximo</span>
-            </span>
+            </a>
           </nav>
 
           <!-- Panel de contenido -->
           <div class="settings-panel">
+
+            <!-- Foto del Club -->
+            <section id="foto-club" class="settings-section">
+              <div class="settings-section-header">
+                <div class="icon-wrap">
+                  <Camera size={18} strokeWidth={2} aria-hidden="true" />
+                </div>
+                <div>
+                  <h2 class="settings-section-title">Foto del Club</h2>
+                  <p class="settings-section-sub">
+                    Imagen de perfil del club visible en partidos y torneos
+                  </p>
+                </div>
+              </div>
+
+              <ClubImageUpload
+                client:load
+                currentImageUrl={clubImageUrl}
+              />
+            </section>
+
+            <div class="section-divider"></div>
 
             <!-- Mi Cuenta -->
             <section id="cuenta" class="settings-section">
@@ -155,6 +199,30 @@ const nombre = user.displayName || user.email;
               />
             </section>
 
+            <div class="section-divider"></div>
+
+            <!-- Notificaciones -->
+            <section id="notificaciones" class="settings-section">
+              <div class="settings-section-header">
+                <div class="icon-wrap">
+                  <Bell size={18} strokeWidth={2} aria-hidden="true" />
+                </div>
+                <div>
+                  <h2 class="settings-section-title">Notificaciones</h2>
+                  <p class="settings-section-sub">
+                    Elegí qué eventos te avisamos desde la campana
+                  </p>
+                </div>
+              </div>
+
+              <NotificationPreferencesForm
+                client:load
+                initialPreferences={notifPrefs}
+                accessToken={accessToken}
+                backendUrl={backendUrl}
+              />
+            </section>
+
           </div>
         </div>
       </main>
@@ -163,13 +231,6 @@ const nombre = user.displayName || user.email;
 </Layout>
 
 <script>
-  document.querySelectorAll('[data-nav="back"]').forEach(btn =>
-    btn.addEventListener('click', () => history.back())
-  );
-  document.querySelectorAll('[data-nav="forward"]').forEach(btn =>
-    btn.addEventListener('click', () => history.forward())
-  );
-
   // Highlight settings-nav-item al hacer scroll hacia las secciones
   const sections = document.querySelectorAll('.settings-section');
   const navItems = document.querySelectorAll('.settings-nav-item:not(.settings-nav-item--disabled)');
@@ -197,43 +258,9 @@ const nombre = user.displayName || user.email;
 <style>
   .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 
-  /* ── Topbar (igual que dashboard) ── */
-  .topbar {
-    position: sticky; top: 0; z-index: 50;
-    background: rgba(7,15,31,0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-  }
-  .topbar-inner {
-    max-width: 1280px; margin: 0 auto; padding: 0 1.25rem;
-    height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-  }
-  .nav-arrows { display: flex; gap: 0.2rem; flex-shrink: 0; }
-  .nav-arrow {
-    width: 28px; height: 28px; border-radius: 6px;
-    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09);
-    color: hsl(215 20% 55%); cursor: pointer;
-    display: flex; align-items: center; justify-content: center; transition: background .15s;
-  }
-  .nav-arrow:hover { background: rgba(255,255,255,0.13); color: hsl(215 20% 80%); }
-  .topbar-brand { display: flex; align-items: center; gap: 0.5rem; }
-  .topbar-ball { line-height:1; display:inline-flex; color:hsl(42 100% 60%); }
-  .topbar-name { font-family:'Bebas Neue',sans-serif; font-size:1.35rem; letter-spacing:.1em; color:#fff; }
-  .topbar-role-pill {
-    font-family:'Barlow Condensed',sans-serif; font-size:.65rem; font-weight:700;
-    letter-spacing:.12em; text-transform:uppercase;
-    background:rgba(246,164,0,.15); border:1px solid rgba(246,164,0,.35);
-    color:hsl(42 100% 60%); border-radius:4px; padding:.125rem .5rem;
-  }
-  .topbar-actions { display:flex; align-items:center; gap:.75rem; }
-  .topbar-accent { height:2px; background:linear-gradient(90deg,hsl(42 100% 55%),hsl(216 85% 45%),transparent); }
-  .user-badge { display:flex; align-items:center; gap:.4rem; background:rgba(246,164,0,.1); border:1px solid rgba(246,164,0,.22); color:hsl(42 100% 65%); border-radius:20px; padding:.25rem .875rem; font-size:.8125rem; font-weight:600; font-family:'Barlow Condensed',sans-serif; }
-  .user-dot { width:6px; height:6px; border-radius:50%; background:hsl(42 100% 58%); }
-  .btn-logout { background:transparent; border:1px solid rgba(255,255,255,.12); border-radius:6px; padding:.3rem .75rem; font-size:.8125rem; font-family:'Barlow',sans-serif; font-weight:500; cursor:pointer; color:hsl(215 20% 60%); transition:background .15s; }
-  .btn-logout:hover { background:rgba(255,255,255,.07); color:hsl(210 20% 90%); }
-
   /* ── Page layout ── */
-  .page-layout { flex:1; display:flex; max-width:1280px; width:100%; margin:0 auto; padding:2rem 1.25rem; gap:2rem; }
-  .page-content { flex:1; min-width:0; }
+  .page-layout { flex:1; display:block; max-width:1280px; width:100%; margin:0 auto; padding:2rem 1.25rem; }
+  .page-content { width:100%; min-width:0; }
   .section-header { margin-bottom:1.75rem; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,.06); }
   .section-label { font-family:'Barlow Condensed',sans-serif; font-size:.75rem; font-weight:700; letter-spacing:.2em; color:hsl(42 100% 55%); text-transform:uppercase; margin-bottom:.4rem; }
   .section-title { font-family:'Bebas Neue',sans-serif; font-size:clamp(1.6rem,5vw,2.2rem); font-weight:400; letter-spacing:.04em; color:#fff; margin:0 0 .3rem; line-height:1; }
@@ -280,12 +307,123 @@ const nombre = user.displayName || user.email;
   /* Divider */
   .section-divider { height:1px; background:rgba(255,255,255,.06); }
 
+  /* ── Club image upload island ── */
+  :global(.club-img-upload) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 420px;
+  }
+  :global(.club-img-upload) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 420px;
+  }
+
+  :global(.club-img-preview-btn) {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 7;
+    border-radius: 10px;
+    border: 2px dashed rgba(255,255,255,0.14);
+    background: hsl(220 55% 11%);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  :global(.club-img-preview-btn:not(.club-img-preview-btn--working):hover) {
+    border-color: hsl(42 100% 55% / 0.5);
+    background: hsl(220 55% 13%);
+  }
+  :global(.club-img-preview-btn--working) { cursor: not-allowed; }
+
+  :global(.club-img-preview) {
+    width: 100%; height: 100%;
+    object-fit: cover; display: block;
+  }
+
+  :global(.club-img-placeholder) {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 0.5rem;
+    color: hsl(215 20% 45%);
+    font-size: 0.8rem; font-family: 'Barlow', sans-serif;
+  }
+
+  /* Upload overlay shown over the preview while working */
+  :global(.club-img-overlay) {
+    position: absolute; inset: 0;
+    background: rgba(7,15,31,0.72);
+    backdrop-filter: blur(4px);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 0.5rem;
+    color: hsl(210 20% 88%);
+    font-size: 0.82rem; font-family: 'Barlow', sans-serif;
+    pointer-events: none;
+  }
+
+  @keyframes club-img-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  :global(.club-img-spinner) {
+    animation: club-img-spin 1s linear infinite;
+    color: hsl(42 100% 60%);
+  }
+
+  :global(.club-img-select-btn) {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.45rem 0.85rem; border-radius: 7px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.86rem; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    transition: background 0.12s, color 0.12s;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.07);
+    color: hsl(210 20% 75%);
+    user-select: none;
+  }
+  :global(.club-img-select-btn:not([aria-disabled="true"]):hover) {
+    background: rgba(255,255,255,0.12);
+    color: hsl(210 20% 90%);
+  }
+
+  :global(.club-img-status) {
+    display: flex; align-items: center; gap: 0.35rem;
+    font-size: 0.82rem; font-family: 'Barlow', sans-serif; margin: 0;
+  }
+  :global(.club-img-status--success) { color: hsl(142 72% 50%); }
+  :global(.club-img-status--error)   { color: hsl(0 72% 65%); }
+
+  :global(.club-img-hint) {
+    font-size: 0.72rem; color: hsl(215 20% 38%);
+    margin: 0; font-family: 'Barlow', sans-serif;
+  }
+
+  /* Light mode overrides */
+  :global(html.light .club-img-preview-btn) {
+    background: hsl(210 20% 96%); border-color: rgba(0,0,0,0.12);
+  }
+  :global(html.light .club-img-preview-btn:not(.club-img-preview-btn--working):hover) {
+    background: hsl(210 20% 93%); border-color: hsl(35 80% 60% / 0.5);
+  }
+  :global(html.light .club-img-placeholder) { color: hsl(215 16% 52%); }
+  :global(html.light .club-img-overlay) { background: rgba(255,255,255,0.8); color: hsl(220 20% 30%); }
+  :global(html.light .club-img-select-btn) {
+    background: hsl(0 0% 97%); color: hsl(220 20% 35%); border-color: rgba(0,0,0,0.12);
+  }
+  :global(html.light .club-img-select-btn:not([aria-disabled="true"]):hover) {
+    background: hsl(0 0% 93%); color: hsl(220 20% 18%);
+  }
+  :global(html.light .club-img-hint) { color: hsl(215 16% 50%); }
+
   /* ── Tema claro ── */
-  :global(html.light) .topbar { background:rgba(255,255,255,.93); border-bottom-color:rgba(0,0,0,.08); }
-  :global(html.light) .topbar-name { color:hsl(220 72% 10%); }
-  :global(html.light) .user-badge { color:hsl(220 20% 30%); background:rgba(0,0,0,.04); border-color:rgba(0,0,0,.1); }
-  :global(html.light) .btn-logout { color:hsl(220 20% 40%); border-color:rgba(0,0,0,.12); }
-  :global(html.light) .nav-arrow { background:rgba(0,0,0,.05); border-color:rgba(0,0,0,.1); color:hsl(220 20% 45%); }
   :global(html.light) .section-title { color:hsl(220 72% 10%); }
   :global(html.light) .section-sub { color:hsl(215 16% 38%); }
   :global(html.light) .section-header { border-bottom-color:rgba(0,0,0,.07); }
@@ -300,7 +438,6 @@ const nombre = user.displayName || user.email;
   :global(html.light) .icon-wrap { background:hsl(35 100% 95%); border-color:hsl(35 80% 80%); color:hsl(35 100% 38%); }
 
   @media (max-width:767px) {
-    .topbar-actions { display:none; }
-    .page-layout { padding:1rem; gap:0; }
+    .page-layout { padding:1rem; }
   }
 </style>

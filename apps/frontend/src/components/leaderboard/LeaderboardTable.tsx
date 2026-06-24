@@ -10,6 +10,14 @@
  *   rendimiento" motivation of the user story.
  * - Podium accents: ranks 1–3 get gold/silver/bronze rank chips for the FIFA aesthetic.
  * - Icons via lucide-react only (project hard rule: no emojis in UI).
+ * - Row navigation: each row is an <a href="/perfil/{id}"> so clicking a player opens
+ *   their public profile (stats, division, position). The entry `id` is the profile id,
+ *   and /perfil/[id].astro already handles auth, privacy filtering, and self-redirect to
+ *   /perfil — so no extra guarding is needed here. The anchor (not an onClick handler) is
+ *   used so the row works as a real link: middle-click/open-in-new-tab, keyboard focus, and
+ *   SSR-less navigation all behave natively. The grid layout/styling moved from <li> to the
+ *   <a>; the row-separator border now targets `.leaderboard-item + .leaderboard-item` since
+ *   the <a> elements are no longer direct siblings.
  * - Previously fixed bugs: none relevant.
  */
 
@@ -157,11 +165,13 @@ export function LeaderboardTable({ limit = 50, currentUserId = null }: Leaderboa
             : null;
           const isSelf = currentUserId != null && entry.id === currentUserId;
           return (
-            <li
-              key={entry.id}
-              className={`leaderboard-row${isSelf ? ' leaderboard-row--self' : ''}`}
-              data-self={isSelf ? 'true' : undefined}
-            >
+            <li key={entry.id} className="leaderboard-item">
+              <a
+                href={`/perfil/${entry.id}`}
+                className={`leaderboard-row${isSelf ? ' leaderboard-row--self' : ''}`}
+                data-self={isSelf ? 'true' : undefined}
+                aria-label={`Ver perfil de ${entry.displayName}`}
+              >
               <span className={`leaderboard-rank ${rankClass(entry.rank)}`}>
                 {entry.rank <= 3 ? (
                   <Crown size={16} strokeWidth={2.25} aria-hidden="true" />
@@ -207,6 +217,7 @@ export function LeaderboardTable({ limit = 50, currentUserId = null }: Leaderboa
               <span className="leaderboard-col-winrate leaderboard-winrate">
                 {entry.winrate.toFixed(1)}%
               </span>
+              </a>
             </li>
           );
         })}
@@ -242,9 +253,21 @@ export function LeaderboardTable({ limit = 50, currentUserId = null }: Leaderboa
         .leaderboard-col-winrate { text-align: right; }
 
         .leaderboard-list { list-style: none; margin: 0; padding: 0; }
-        .leaderboard-row + .leaderboard-row { border-top: 1px solid rgba(255, 255, 255, 0.05); }
-        .leaderboard-row { transition: background 0.15s; }
+        .leaderboard-item + .leaderboard-item .leaderboard-row {
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .leaderboard-row {
+          transition: background 0.15s;
+          color: inherit;
+          text-decoration: none;
+          cursor: pointer;
+        }
         .leaderboard-row:hover { background: rgba(255, 255, 255, 0.03); }
+        .leaderboard-row:focus-visible {
+          outline: none;
+          background: rgba(246, 164, 0, 0.1);
+          box-shadow: inset 0 0 0 2px hsl(35 100% 52%);
+        }
         .leaderboard-row--self {
           background: rgba(246, 164, 0, 0.08);
           box-shadow: inset 3px 0 0 hsl(35 100% 52%);

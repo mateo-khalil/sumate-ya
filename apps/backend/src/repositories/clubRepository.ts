@@ -78,6 +78,39 @@ export async function getClubById(
 }
 
 /**
+ * Update the imageUrl for a club.
+ *
+ * Decision Context:
+ * - Called from clubImageService after a successful Storage upload.
+ * - Uses user-scoped client (default falls back to service-role) so RLS can enforce
+ *   clubs.ownerId = auth.uid() when the caller passes a user-scoped client.
+ * - The `imageUrl` column is camelCase in the DB; the Supabase JS SDK maps the JS
+ *   property name directly, matching the PostgREST column resolution.
+ * - DB update intentionally uses the service-role default (same rationale as
+ *   profileRepository.updateAvatarUrl): no authenticated-role UPDATE policy exists
+ *   for individual columns; authorization is enforced at the controller layer.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function updateClubImageUrl(
+  clubId: string,
+  imageUrl: string,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('clubs')
+    .update({ imageUrl })
+    .eq('id', clubId);
+
+  if (error) {
+    console.error(
+      `[clubRepository.updateClubImageUrl] Supabase error for clubId=${clubId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Persist geocoded coordinates for a club.
  *
  * Decision Context:
@@ -111,4 +144,37 @@ export async function updateClubCoords(
   }
 }
 
-export const clubRepository = { listClubs, getClubById, updateClubCoords };
+/**
+ * Return the ownerId (club_admin user) of a club, or null if the club doesn't exist.
+ *
+ * Decision Context:
+ * - Used to authorize "club tournaments": a club_admin may create a tournament for the
+ *   club they own (clubs.ownerId = auth.uid()), in addition to the legacy captain path.
+ * - ownerId is intentionally NOT part of CLUB_DETAIL_COLUMNS (it isn't exposed via the
+ *   public ClubDetail GraphQL type), so it gets its own minimal projection here to keep
+ *   egress tight.
+ * - Defaults to the service-role client because this is an authorization read in the write
+ *   path; the caller has already authenticated. RLS on clubs (public SELECT) would allow it
+ *   either way, but service-role avoids depending on the user client being present.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function getClubOwnerId(
+  id: string,
+  client: SupabaseClient = supabase,
+): Promise<string | null> {
+  const { data, error } = await client
+    .from('clubs')
+    .select('"ownerId"')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    console.error(`[clubRepository.getClubOwnerId] Supabase error for clubId=${id}:`, error.message);
+    throw new Error(error.message);
+  }
+
+  return (data as unknown as { ownerId: string | null })?.ownerId ?? null;
+}
+
+export const clubRepository = { listClubs, getClubById, updateClubCoords, getClubOwnerId, updateClubImageUrl };
