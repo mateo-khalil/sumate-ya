@@ -44,6 +44,34 @@ export async function loginAndReadToken(page: Page, userKey: TestUserKey): Promi
   return readAccessToken(page);
 }
 
+/**
+ * Multi-token harness: authenticates directly against the backend REST auth endpoint
+ * without a browser, returning the raw Bearer token.
+ *
+ * Decision Context:
+ * - Why REST instead of UI login: tests that need tokens for multiple users in the
+ *   same spec (e.g. joining a match as both Mateo and Ricardo) cannot open two browser
+ *   pages in a single serial test. Direct REST login bypasses the browser and cookies
+ *   entirely, returning only the accessToken needed for gqlPostOrThrow().
+ * - The endpoint POST /api/auth/login returns LoginResult { accessToken, refreshToken,
+ *   user } — we only extract accessToken.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function loginApiAndGetToken(
+  request: APIRequestContext,
+  email: string,
+  password: string,
+): Promise<string> {
+  const response = await request.post('http://localhost:4000/api/auth/login', {
+    data: { email, password },
+    headers: { 'Content-Type': 'application/json' },
+  });
+  expect(response.ok(), `Login REST failed for ${email}: HTTP ${String(response.status())}`).toBeTruthy();
+  const data = (await response.json()) as { accessToken?: string };
+  expect(data.accessToken, `No accessToken in login response for ${email}`).toBeTruthy();
+  return data.accessToken as string;
+}
+
 export type AuthenticatedRequestOptions = {
   request: APIRequestContext;
   accessToken: string;
