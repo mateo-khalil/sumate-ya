@@ -78,6 +78,39 @@ export async function getClubById(
 }
 
 /**
+ * Update the imageUrl for a club.
+ *
+ * Decision Context:
+ * - Called from clubImageService after a successful Storage upload.
+ * - Uses user-scoped client (default falls back to service-role) so RLS can enforce
+ *   clubs.ownerId = auth.uid() when the caller passes a user-scoped client.
+ * - The `imageUrl` column is camelCase in the DB; the Supabase JS SDK maps the JS
+ *   property name directly, matching the PostgREST column resolution.
+ * - DB update intentionally uses the service-role default (same rationale as
+ *   profileRepository.updateAvatarUrl): no authenticated-role UPDATE policy exists
+ *   for individual columns; authorization is enforced at the controller layer.
+ * - Previously fixed bugs: none relevant.
+ */
+export async function updateClubImageUrl(
+  clubId: string,
+  imageUrl: string,
+  client: SupabaseClient = supabase,
+): Promise<void> {
+  const { error } = await client
+    .from('clubs')
+    .update({ imageUrl })
+    .eq('id', clubId);
+
+  if (error) {
+    console.error(
+      `[clubRepository.updateClubImageUrl] Supabase error for clubId=${clubId}:`,
+      error.message,
+    );
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Persist geocoded coordinates for a club.
  *
  * Decision Context:
@@ -144,4 +177,4 @@ export async function getClubOwnerId(
   return (data as unknown as { ownerId: string | null })?.ownerId ?? null;
 }
 
-export const clubRepository = { listClubs, getClubById, updateClubCoords, getClubOwnerId };
+export const clubRepository = { listClubs, getClubById, updateClubCoords, getClubOwnerId, updateClubImageUrl };

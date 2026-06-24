@@ -30,6 +30,7 @@ import type { SupabaseClient } from '../config/supabase.js';
 
 const MATCH_COLUMNS = `
   id,
+  title,
   description,
   "scheduledAt",
   format,
@@ -71,6 +72,7 @@ const CLUB_DETAIL_COLUMNS = `
 
 export interface MatchRow {
   id: string;
+  title: string | null;
   description: string | null;
   scheduledAt: string;
   format: string;
@@ -424,6 +426,7 @@ export async function getOpenMatches(client: SupabaseClient = supabase): Promise
 const MATCH_DETAIL_COLUMNS = `
   id,
   "organizerId",
+  title,
   description,
   "scheduledAt",
   "durationMin",
@@ -460,6 +463,7 @@ export interface ParticipantRow {
 export interface MatchDetailRow {
   id: string;
   organizerId: string;
+  title: string | null;
   description: string | null;
   scheduledAt: string;
   durationMin: number | null;
@@ -589,6 +593,7 @@ export interface CreateMatchInput {
   format: string; // DB enum value: '5v5' | '7v7' | '10v10' | '11v11'
   capacity: number;
   scheduledAt: string; // ISO 8601 timestamp
+  title?: string | null;
   description?: string | null;
   // When true the match was created by the club admin, not by a player.
   // The organizer is NOT auto-enrolled in matchParticipants unless the service explicitly does so.
@@ -605,6 +610,7 @@ export interface NewMatchRow {
   capacity: number;
   scheduledAt: string;
   status: string;
+  title: string | null;
   description: string | null;
   createdAt: string;
   organizedByClub: boolean;
@@ -620,6 +626,7 @@ const NEW_MATCH_COLUMNS = `
   capacity,
   "scheduledAt",
   status,
+  title,
   description,
   "createdAt",
   "organizedByClub"
@@ -652,6 +659,7 @@ export async function createMatch(
       format: input.format,
       capacity: input.capacity,
       scheduledAt: input.scheduledAt,
+      title: input.title ?? null,
       description: input.description ?? null,
       organizedByClub: input.organizedByClub ?? false,
     })
@@ -842,6 +850,7 @@ export async function deleteMatch(matchId: string): Promise<void> {
 // scoreTeamA/scoreTeamB/winningTeam added once "registrar resultado" US is implemented.
 const MATCH_HISTORY_COLUMNS = `
   id,
+  title,
   description,
   "scheduledAt",
   format,
@@ -870,6 +879,7 @@ export interface HistoryParticipantRow {
 
 export interface CompletedMatchRow {
   id: string;
+  title: string | null;
   description: string | null;
   scheduledAt: string;
   format: string;

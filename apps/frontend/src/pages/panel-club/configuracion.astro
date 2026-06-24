@@ -10,15 +10,21 @@
  *   dentro del panel de administración.
  * - La sección de privacidad de PrivacySettingsContainer es específica de jugadores
  *   (showStats, showPosition, etc.) y no aplica a club_admin, por eso se omite.
+ * - Foto del Club: sección agregada para cargar la imagen de perfil del club. Consulta
+ *   `clubDashboard { club { imageUrl } }` server-side para mostrar la imagen actual y pasa
+ *   `currentImageUrl` como prop al island ClubImageUpload. El upload va por el proxy Astro
+ *   `/api/club/image` → backend `/api/club/image` → clubImageService → avatars bucket bajo
+ *   `{ownerId}/club-{clubId}-image-{ts}.ext` para satisfacer la policy de Storage existente.
  * - Previously fixed bugs: none relevant.
  */
 export const prerender = false;
 
-import { KeyRound, ShieldCheck, User, Bell } from 'lucide-react';
+import { Camera, KeyRound, ShieldCheck, User, Bell } from 'lucide-react';
 import Layout from '../../layouts/Layout.astro';
 import ClubTopbar from '../../components/panel-club/ClubTopbar.astro';
 import ChangePasswordForm from '../../components/settings/ChangePasswordForm.tsx';
 import NotificationPreferencesForm from '../../components/settings/NotificationPreferencesForm.tsx';
+import ClubImageUpload from '../../components/club/ClubImageUpload.tsx';
 import { readAccessToken } from '../../lib/auth.js';
 import {
   GET_MY_NOTIFICATION_PREFERENCES,
@@ -34,6 +40,24 @@ const accessToken = readAccessToken(Astro.cookies) ?? '';
 const backendUrl = import.meta.env.PRIVATE_BACKEND_URL || 'http://localhost:4000';
 const graphqlUrl =
   import.meta.env.PUBLIC_GRAPHQL_URL || process.env.PUBLIC_GRAPHQL_URL || `${backendUrl}/graphql`;
+
+// Fetch current club imageUrl for the photo upload section
+let clubImageUrl: string | null = null;
+if (accessToken) {
+  try {
+    const res = await fetch(graphqlUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ query: '{ clubDashboard { club { id imageUrl } } }' }),
+    });
+    const json = (await res.json().catch(() => null)) as
+      | { data?: { clubDashboard?: { club?: { imageUrl?: string | null } } } }
+      | null;
+    clubImageUrl = json?.data?.clubDashboard?.club?.imageUrl ?? null;
+  } catch {
+    // Graceful degradation: component renders without current image.
+  }
+}
 
 // Notification preferences shared with players — club admins receive notifications too.
 const DEFAULT_NOTIF_PREFS: NotificationPreferences = {
@@ -79,7 +103,11 @@ if (accessToken) {
 
           <!-- Sidebar de navegación interna -->
           <nav class="settings-nav" aria-label="Secciones">
-            <a href="#cuenta" class="settings-nav-item settings-nav-item--active">
+            <a href="#foto-club" class="settings-nav-item settings-nav-item--active">
+              <Camera size={15} strokeWidth={2} aria-hidden="true" />
+              Foto del Club
+            </a>
+            <a href="#cuenta" class="settings-nav-item">
               <User size={15} strokeWidth={2} aria-hidden="true" />
               Mi Cuenta
             </a>
@@ -95,6 +123,28 @@ if (accessToken) {
 
           <!-- Panel de contenido -->
           <div class="settings-panel">
+
+            <!-- Foto del Club -->
+            <section id="foto-club" class="settings-section">
+              <div class="settings-section-header">
+                <div class="icon-wrap">
+                  <Camera size={18} strokeWidth={2} aria-hidden="true" />
+                </div>
+                <div>
+                  <h2 class="settings-section-title">Foto del Club</h2>
+                  <p class="settings-section-sub">
+                    Imagen de perfil del club visible en partidos y torneos
+                  </p>
+                </div>
+              </div>
+
+              <ClubImageUpload
+                client:load
+                currentImageUrl={clubImageUrl}
+              />
+            </section>
+
+            <div class="section-divider"></div>
 
             <!-- Mi Cuenta -->
             <section id="cuenta" class="settings-section">
@@ -256,6 +306,122 @@ if (accessToken) {
 
   /* Divider */
   .section-divider { height:1px; background:rgba(255,255,255,.06); }
+
+  /* ── Club image upload island ── */
+  :global(.club-img-upload) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 420px;
+  }
+  :global(.club-img-upload) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 420px;
+  }
+
+  :global(.club-img-preview-btn) {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 7;
+    border-radius: 10px;
+    border: 2px dashed rgba(255,255,255,0.14);
+    background: hsl(220 55% 11%);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  :global(.club-img-preview-btn:not(.club-img-preview-btn--working):hover) {
+    border-color: hsl(42 100% 55% / 0.5);
+    background: hsl(220 55% 13%);
+  }
+  :global(.club-img-preview-btn--working) { cursor: not-allowed; }
+
+  :global(.club-img-preview) {
+    width: 100%; height: 100%;
+    object-fit: cover; display: block;
+  }
+
+  :global(.club-img-placeholder) {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 0.5rem;
+    color: hsl(215 20% 45%);
+    font-size: 0.8rem; font-family: 'Barlow', sans-serif;
+  }
+
+  /* Upload overlay shown over the preview while working */
+  :global(.club-img-overlay) {
+    position: absolute; inset: 0;
+    background: rgba(7,15,31,0.72);
+    backdrop-filter: blur(4px);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 0.5rem;
+    color: hsl(210 20% 88%);
+    font-size: 0.82rem; font-family: 'Barlow', sans-serif;
+    pointer-events: none;
+  }
+
+  @keyframes club-img-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  :global(.club-img-spinner) {
+    animation: club-img-spin 1s linear infinite;
+    color: hsl(42 100% 60%);
+  }
+
+  :global(.club-img-select-btn) {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.45rem 0.85rem; border-radius: 7px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.86rem; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    transition: background 0.12s, color 0.12s;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.07);
+    color: hsl(210 20% 75%);
+    user-select: none;
+  }
+  :global(.club-img-select-btn:not([aria-disabled="true"]):hover) {
+    background: rgba(255,255,255,0.12);
+    color: hsl(210 20% 90%);
+  }
+
+  :global(.club-img-status) {
+    display: flex; align-items: center; gap: 0.35rem;
+    font-size: 0.82rem; font-family: 'Barlow', sans-serif; margin: 0;
+  }
+  :global(.club-img-status--success) { color: hsl(142 72% 50%); }
+  :global(.club-img-status--error)   { color: hsl(0 72% 65%); }
+
+  :global(.club-img-hint) {
+    font-size: 0.72rem; color: hsl(215 20% 38%);
+    margin: 0; font-family: 'Barlow', sans-serif;
+  }
+
+  /* Light mode overrides */
+  :global(html.light .club-img-preview-btn) {
+    background: hsl(210 20% 96%); border-color: rgba(0,0,0,0.12);
+  }
+  :global(html.light .club-img-preview-btn:not(.club-img-preview-btn--working):hover) {
+    background: hsl(210 20% 93%); border-color: hsl(35 80% 60% / 0.5);
+  }
+  :global(html.light .club-img-placeholder) { color: hsl(215 16% 52%); }
+  :global(html.light .club-img-overlay) { background: rgba(255,255,255,0.8); color: hsl(220 20% 30%); }
+  :global(html.light .club-img-select-btn) {
+    background: hsl(0 0% 97%); color: hsl(220 20% 35%); border-color: rgba(0,0,0,0.12);
+  }
+  :global(html.light .club-img-select-btn:not([aria-disabled="true"]):hover) {
+    background: hsl(0 0% 93%); color: hsl(220 20% 18%);
+  }
+  :global(html.light .club-img-hint) { color: hsl(215 16% 50%); }
 
   /* ── Tema claro ── */
   :global(html.light) .section-title { color:hsl(220 72% 10%); }

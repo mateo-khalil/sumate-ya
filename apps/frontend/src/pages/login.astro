@@ -497,13 +497,22 @@ if (Astro.request.method === 'POST') {
   }
 
   /* Light theme: the scoped rules above win over the global `html.light .field input`
-     override, so restore the light-card field surface and focus here at the same scope. */
+     override, so restore the light-card field surface and focus here at the same scope.
+     Previously fixed bugs: text was invisible (white-on-white) in light mode because
+     background resolved to near-transparent and -webkit-text-fill-color wasn't overridden.
+     Fix: solid visible background + explicit color + -webkit-text-fill-color for Safari. */
   :global(html.light) .field input {
-    background: rgba(0, 0, 0, 0.03);
-    border-color: rgba(0, 0, 0, 0.12);
+    background: hsl(210 20% 94%);
+    border-color: rgba(0, 0, 0, 0.15);
+    color: hsl(220 72% 10%);
+    -webkit-text-fill-color: hsl(220 72% 10%);
+  }
+  :global(html.light) .field input::placeholder {
+    color: hsl(215 20% 52%);
+    -webkit-text-fill-color: hsl(215 20% 52%);
   }
   :global(html.light) .field input:focus {
-    background: #fff;
+    background: white;
     border-color: hsl(35 100% 44%);
     box-shadow: 0 0 0 3px hsl(35 100% 44% / 0.15);
   }

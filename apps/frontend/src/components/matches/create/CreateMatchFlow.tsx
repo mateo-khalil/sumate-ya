@@ -144,7 +144,6 @@ export default function CreateMatchFlow({ initialClubs, redirectBase = '/partido
           <FormatSelector
             courtMaxFormat={slot.court.maxFormat}
             selectedFormat={format}
-            capacity={capacity}
             onFormatChange={handleFormatChange}
           />
         )}

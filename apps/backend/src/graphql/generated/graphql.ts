@@ -341,6 +341,7 @@ export type CreateMatchInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   format: MatchFormat;
   slotId: Scalars['ID']['input'];
+  title?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type CreateMatchResult = {
