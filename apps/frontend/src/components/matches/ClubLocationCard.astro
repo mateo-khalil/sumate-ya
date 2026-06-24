@@ -15,7 +15,7 @@
  *   JS-free for this component. Emojis rendered inconsistently on different OSes.
  * - Previously fixed bugs: none relevant.
  */
-import { MapPin, Map as MapIcon } from 'lucide-react';
+import { MapPin, Map as MapIcon, Volleyball } from 'lucide-react';
 
 interface ClubLocationProps {
   id: string;
@@ -39,13 +39,12 @@ const mapsUrl =
     ? `https://www.google.com/maps?q=${club.lat},${club.lng}`
     : null;
 
-// Decision Context: club avatar is shown as a circular thumbnail next to the club name.
-// Falls back to the first letter when imageUrl is null so the layout stays consistent
-// even for legacy clubs that haven't uploaded a logo. Avoiding a broken <img> here also
-// matters because Supabase Storage egress is billed per request (backend rules) — we only
-// render the <img> when imageUrl is present and trust that the bucket exists.
-// Previously fixed bugs: none relevant — first iteration of club avatar in the detail page.
-const clubInitial = club.name.charAt(0).toUpperCase();
+// Decision Context: club avatar shown as circular thumbnail next to the club name.
+// Falls back to a Volleyball icon (lucide-react) when imageUrl is null — consistent
+// with ClubSelector.tsx and MatchCard.tsx fallback (rama Ajustes, 2026-06-23).
+// Avoiding a broken <img> matters because Supabase Storage egress is billed per request.
+// Previously fixed bugs: initial-letter fallback replaced with Volleyball icon for
+// visual consistency across all surfaces that display club identity.
 ---
 
 <div class="location-card">
@@ -53,7 +52,7 @@ const clubInitial = club.name.charAt(0).toUpperCase();
     <div class="club-avatar" aria-hidden="true">
       {club.imageUrl
         ? <img src={club.imageUrl} alt="" class="club-avatar-img" loading="lazy" />
-        : <span class="club-avatar-initial">{clubInitial}</span>
+        : <Volleyball size={22} strokeWidth={1.5} />
       }
     </div>
     <div class="location-title">
@@ -136,12 +135,9 @@ const clubInitial = club.name.charAt(0).toUpperCase();
     object-fit: cover;
   }
 
-  .club-avatar-initial {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: hsl(215 20% 65%);
-    line-height: 1;
+  /* Volleyball icon placeholder — color inherited from .club-avatar */
+  .club-avatar svg {
+    color: hsl(215 20% 55%);
   }
 
   .location-title {

@@ -73,6 +73,9 @@ export interface RegisterInput {
   clubName: string;
   address: string;
   phone: string;
+  department: string;
+  lat: number;
+  lng: number;
 }
 
 export interface RegisterPlayerInput {
@@ -299,14 +302,26 @@ export const authService = {
     }
 
     // Step 3: Insert club linked to the new profile.
-    // zone/lat/lng are no longer collected at registration — they are nullable in the DB
-    // and can be filled in later via an admin profile flow. Map UI already filters clubs
-    // without coordinates, so omitting these here does not break the map view.
+    // Decision Context:
+    // - department: one of the 19 Uruguayan departments; validated by Zod in the controller.
+    // - zone = department: the zone column drives the zone filter on the match-listing page.
+    //   Setting it to department ensures newly registered clubs appear in the zone filter
+    //   without requiring a separate "edit club" flow. Backward-compat: existing clubs
+    //   that have null zone are simply omitted from the filter dropdown, which was already
+    //   the behavior before this change.
+    // - lat/lng: validated within Uruguay bounds by Zod; set to department capital by the
+    //   frontend ClubLocationPicker if the admin doesn't drag the pin.
+    // Previously fixed bugs: zone/lat/lng were omitted from registration, leaving new clubs
+    //   invisible on the match-listing map. Now all three are captured at signup.
     const { error: clubError } = await supabase.from('clubs').insert({
       ownerId: userId,
       name: input.clubName,
       address: input.address,
       phone: input.phone,
+      department: input.department,
+      zone: input.department,
+      lat: input.lat,
+      lng: input.lng,
     });
 
     if (clubError) {

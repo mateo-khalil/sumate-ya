@@ -31,6 +31,7 @@ import { errorObservability, metricsHandler, requestObservability } from './obse
 import { logger } from './observability/logger.js';
 import authRoutes from './routes/authRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
+import clubRoutes from './routes/clubRoutes.js';
 
 const DEFAULT_DEV_ORIGINS = [
   'http://localhost:4321',
@@ -81,6 +82,7 @@ app.get('/metrics', metricsHandler);
 app.use(express.json({ limit: '4mb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/club', clubRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });

@@ -7,10 +7,14 @@
  *   fetch waterfall on an already-SSR page. If the list is empty we show a friendly message
  *   rather than a loading spinner.
  * - Card layout matches the /partidos visual system (dark card, orange accent on selection).
- * - Previously fixed bugs: none relevant.
+ * - Light-mode overrides for .club-card / .club-meta / .club-phone / .club-img live in
+ *   globals.css (html.light .club-card etc.) — JSX <style> blocks can't reference CSS vars
+ *   that change with the theme, so the overrides sit in the global sheet at higher specificity.
+ * - Previously fixed bugs: cards stayed dark navy in light mode — fixed by adding
+ *   html.light .club-card overrides in globals.css (rama Ajustes, 2026-06-23).
  */
 
-import { Check } from 'lucide-react';
+import { Check, Volleyball } from 'lucide-react';
 import type { ClubDetail } from '../../../graphql/operations/matches';
 
 interface Props {
@@ -18,8 +22,6 @@ interface Props {
   selectedId: string | null;
   onSelect: (club: ClubDetail) => void;
 }
-
-const PLACEHOLDER_IMG = '/img/club-placeholder.svg';
 
 export default function ClubSelector({ clubs, selectedId, onSelect }: Props) {
   if (clubs.length === 0) {
@@ -42,13 +44,20 @@ export default function ClubSelector({ clubs, selectedId, onSelect }: Props) {
             onClick={() => onSelect(club)}
             aria-pressed={isSelected}
           >
-            <img
-              src={club.imageUrl ?? PLACEHOLDER_IMG}
-              alt={`Logo de ${club.name}`}
-              className="club-img"
-              width={56}
-              height={56}
-            />
+            {club.imageUrl ? (
+              <img
+                src={club.imageUrl}
+                alt={`Logo de ${club.name}`}
+                className="club-img"
+                width={56}
+                height={56}
+                loading="lazy"
+              />
+            ) : (
+              <span className="club-img club-img--placeholder" aria-hidden="true">
+                <Volleyball size={28} strokeWidth={1.5} />
+              </span>
+            )}
             <div className="club-info">
               <span className="club-name">{club.name}</span>
               <span className="club-meta">{club.zone} · {club.address}</span>
@@ -91,6 +100,10 @@ export default function ClubSelector({ clubs, selectedId, onSelect }: Props) {
           object-fit: cover;
           background: hsl(220 40% 16%);
           flex-shrink: 0;
+        }
+        .club-img--placeholder {
+          display: flex; align-items: center; justify-content: center;
+          color: hsl(215 20% 50%);
         }
         .club-info { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
         .club-name {

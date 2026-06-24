@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, MapPin, Users } from 'lucide-react';
+import { Calendar, MapPin, Users, Volleyball } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MatchFormat, MatchStatus } from '@/graphql/operations/matches';
 
@@ -113,14 +113,13 @@ function formatDisplay(format: MatchFormat): string {
  * Decision Context:
  * - Why a small (40px) circle: matches the FIFA-style player roster aesthetic and keeps
  *   the card visually scannable without dominating the title row.
- * - Fallback to the first character of the club name when imageUrl is null. Legacy clubs
- *   may not have an uploaded image and we want a consistent visual placeholder, not a
- *   broken-image icon (broken images also cost Supabase Storage egress per backend rules).
+ * - Fallback to Volleyball lucide icon when imageUrl is null. Consistent with
+ *   ClubSelector.tsx and ClubLocationCard.astro fallbacks (rama Ajustes, 2026-06-23).
+ *   Avoids broken-image requests that cost Supabase Storage egress per backend rules.
  * - `loading="lazy"` so off-screen cards in long lists don't pull every club image upfront.
- * - Previously fixed bugs: none relevant — new component.
+ * - Previously fixed bugs: initial-letter fallback replaced with Volleyball icon.
  */
 function ClubAvatar({ club }: { club: { name: string; imageUrl?: string | null } }) {
-  const initial = club.name.charAt(0).toUpperCase();
   return (
     <div
       className="h-10 w-10 rounded-full overflow-hidden flex items-center justify-center bg-muted border border-border shrink-0"
@@ -134,9 +133,7 @@ function ClubAvatar({ club }: { club: { name: string; imageUrl?: string | null }
           loading="lazy"
         />
       ) : (
-        <span className="text-sm font-bold text-muted-foreground font-[Barlow_Condensed,sans-serif]">
-          {initial}
-        </span>
+        <Volleyball size={20} strokeWidth={1.5} aria-hidden="true" className="text-muted-foreground" />
       )}
     </div>
   );

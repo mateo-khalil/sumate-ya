@@ -436,14 +436,22 @@ if (Astro.request.method === 'POST') {
   :global(html.light) .field label {
     color: hsl(220 20% 30%);
   }
+  /* Previously fixed bugs: -webkit-text-fill-color was missing from the light override,
+     causing invisible typed text in Safari (which prioritizes text-fill-color over color).
+     Background raised from 96% to 94% lightness so the field is clearly distinct from the
+     white card on light mode. */
   :global(html.light) .field input {
-    background: hsl(210 20% 96%);
-    border-color: rgba(0, 0, 0, 0.12);
+    background: hsl(210 20% 94%);
+    border-color: rgba(0, 0, 0, 0.15);
     color: hsl(220 72% 10%);
+    -webkit-text-fill-color: hsl(220 72% 10%);
   }
-  :global(html.light) .field input::placeholder { color: hsl(215 16% 55%); }
+  :global(html.light) .field input::placeholder {
+    color: hsl(215 16% 52%);
+    -webkit-text-fill-color: hsl(215 16% 52%);
+  }
   :global(html.light) .field input:focus {
-    background: hsl(216 60% 97%);
+    background: white;
     border-color: hsl(216 85% 50%);
     box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.12);
   }

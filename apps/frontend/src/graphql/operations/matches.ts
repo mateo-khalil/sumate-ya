@@ -75,6 +75,7 @@ export interface CreateMatchInput {
   date: string; // YYYY-MM-DD
   format: MatchFormat;
   capacity: number;
+  title?: string;
   description?: string;
 }
 

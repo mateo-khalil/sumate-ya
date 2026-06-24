@@ -9,22 +9,26 @@
  *   frontend only calls the backend REST endpoint.
  * - Security: Passwords never reach the Astro page's client bundle. Field-level errors come
  *   from Zod validation on the backend and are mapped back to the form inline.
- * - Constraints: zona, latitud, longitud removed from the registration flow (and made nullable
- *   in DB). The map UI already filters clubs without coordinates, so existing features keep
- *   working but newly registered clubs won't appear on the map until coordinates are provided
- *   later (e.g. via an admin profile edit).
+ * - Location: the ClubLocationPicker React island (client:only) handles department dropdown,
+ *   address input, and a draggable Leaflet map pin. It renders hidden <input name="lat/lng">
+ *   elements that are submitted with the form. The island is client:only because Leaflet
+ *   requires window/document and cannot run server-side.
+ * - Default pin position: the map centers on the capital of the selected department. If the
+ *   admin doesn't drag the pin, the capital coordinates are saved — always a valid location.
+ * - zone = department: the clubs.zone column drives the zone filter in the match-listing page.
+ *   Setting it to the department at registration ensures newly registered clubs appear in
+ *   the filter without requiring a separate "edit club" flow.
  * - Placeholders use Uruguayan formatting (Montevideo, +598) since this is the target market.
  * - Previously fixed bugs:
- *   - Comment said lat/lng were optional — corrected; they are required by the Zod schema (P2/P8).
- *     [Superseded] lat/lng/zone removed from the registration form entirely.
- *   - No visual indicator that lat/lng are required fields — asterisk + helper text added (P2).
- *     [Superseded] fields no longer present.
+ *   - lat/lng/zone were omitted from registration, leaving new clubs invisible on the
+ *     match-listing map. Now all three are captured at signup via ClubLocationPicker.
  */
 export const prerender = false;
 
 import { Volleyball, TriangleAlert } from 'lucide-react';
 import Layout from '../layouts/Layout.astro';
 import { readAccessToken, getSessionFromBackend, getRoleRedirect, registerClubWithBackend } from '../lib/auth';
+import ClubLocationPicker from '../components/clubs/ClubLocationPicker';
 
 // Redirect already-authenticated users
 const accessToken = readAccessToken(Astro.cookies);
@@ -41,6 +45,9 @@ let fieldErrors: FieldErrors = {};
 let values = {
   displayName: '', email: '', clubName: '',
   address: '', phone: '',
+  department: 'Montevideo',
+  lat: 0,
+  lng: 0,
 };
 
 if (Astro.request.method === 'POST') {
@@ -52,6 +59,9 @@ if (Astro.request.method === 'POST') {
     clubName:    fd.get('clubName')?.toString() ?? '',
     address:     fd.get('address')?.toString() ?? '',
     phone:       fd.get('phone')?.toString() ?? '',
+    department:  fd.get('department')?.toString() ?? 'Montevideo',
+    lat:         parseFloat(fd.get('lat')?.toString() ?? '0') || 0,
+    lng:         parseFloat(fd.get('lng')?.toString() ?? '0') || 0,
   };
 
   const password        = fd.get('password')?.toString() ?? '';
@@ -140,12 +150,18 @@ if (Astro.request.method === 'POST') {
             {fieldErrors.clubName && <span class="field-error">{fieldErrors.clubName}</span>}
           </div>
 
-          <div class="field">
-            <label for="address">Dirección</label>
-            <input id="address" name="address" type="text"
-              value={values.address} placeholder="Av. 18 de Julio 1234, Montevideo" />
-            {fieldErrors.address && <span class="field-error">{fieldErrors.address}</span>}
-          </div>
+          <ClubLocationPicker
+            client:only="react"
+            initialDepartment={values.department}
+            initialAddress={values.address}
+            initialLat={values.lat || undefined}
+            initialLng={values.lng || undefined}
+            fieldErrors={{
+              department: fieldErrors.department,
+              address: fieldErrors.address,
+              lat: fieldErrors.lat ?? fieldErrors.lng,
+            }}
+          />
 
           <div class="field">
             <label for="phone">Teléfono</label>
@@ -200,7 +216,7 @@ if (Astro.request.method === 'POST') {
     border-radius: 16px;
     padding: 2.5rem 2rem;
     width: 100%;
-    max-width: 560px;
+    max-width: 620px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
     position: relative;
     z-index: 1;
@@ -316,16 +332,42 @@ if (Astro.request.method === 'POST') {
     transition: background-color 9999s ease-in-out 0s, border-color 0.15s, box-shadow 0.15s;
   }
 
-  /* Light theme field surface/focus (scoped rules outrank the global override). */
+  /*
+   * Tema claro — overrides exhaustivos para registro-club.
+   * Decision Context:
+   * - Por qué: la tarjeta usa background: rgba(255,255,255,0.04) (glass dark) que en tema
+   *   claro es prácticamente transparente, dejando el fondo de la página como fondo del card.
+   *   Los inputs usan rgba(255,255,255,0.05) = también transparente en claro = texto invisible.
+   * - Fix: opacidad sólida para .reg-card + fondo distinguible para inputs + color explícito
+   *   con -webkit-text-fill-color para Safari (que prioriza text-fill-color sobre color).
+   * - Previously fixed bugs: fondo blanco-sobre-blanco hacía imposible ver lo escrito.
+   */
+  :global(html.light) .reg-card {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.09);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255,255,255,0.9);
+  }
+  :global(html.light) .brand-name { color: hsl(220 72% 10%); }
+  :global(html.light) .reg-subtitle { color: hsl(215 16% 40%); }
+  :global(html.light) .field label { color: hsl(220 20% 30%); }
   :global(html.light) .field input {
-    background: rgba(0, 0, 0, 0.03);
-    border-color: rgba(0, 0, 0, 0.12);
+    background: hsl(210 20% 94%);
+    border-color: rgba(0, 0, 0, 0.15);
+    color: hsl(220 72% 10%);
+    -webkit-text-fill-color: hsl(220 72% 10%);
+  }
+  :global(html.light) .field input::placeholder {
+    color: hsl(215 16% 52%);
+    -webkit-text-fill-color: hsl(215 16% 52%);
   }
   :global(html.light) .field input:focus {
-    background: #fff;
-    border-color: hsl(35 100% 44%);
-    box-shadow: 0 0 0 3px hsl(35 100% 44% / 0.15);
+    background: white;
+    border-color: hsl(216 85% 50%);
+    box-shadow: 0 0 0 3px rgba(27, 105, 224, 0.12);
   }
+  :global(html.light) .login-link { color: hsl(215 16% 38%); }
+  :global(html.light) .login-link a { color: hsl(35 100% 38%); }
+  :global(html.light) .stadium-arc { border-color: rgba(246, 164, 0, 0.08); }
 
   .field-error {
     font-size: 0.78rem; color: hsl(0 72% 65%);

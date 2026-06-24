@@ -138,7 +138,7 @@ function toMatch(row: MatchWithClub): Match {
   const participantCount = row.matchParticipants?.[0]?.count ?? 0;
   return {
     id: row.id,
-    title: row.description ?? 'Partido sin título',
+    title: row.title ?? row.description ?? 'Partido sin título',
     startTime: row.scheduledAt,
     format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
     totalSlots: row.capacity,
@@ -435,7 +435,7 @@ function toMatchDetail(row: MatchDetailRow, userId?: string): Match {
 
   return {
     id: row.id,
-    title: row.description ?? 'Partido sin título',
+    title: row.title ?? row.description ?? 'Partido sin título',
     startTime: row.scheduledAt,
     // durationMin powers the frontend end-of-match gate; null falls back to 60 client-side.
     durationMin: row.durationMin ?? null,
@@ -880,6 +880,7 @@ export async function createMatch(
       format: dbFormat,
       capacity: input.capacity,
       scheduledAt,
+      title: input.title ?? null,
       description: input.description,
     },
     db,
@@ -932,7 +933,7 @@ function toMatchHistoryItem(row: CompletedMatchRow, userId: string): MatchHistor
 
   return {
     id: row.id,
-    title: row.description ?? 'Partido sin título',
+    title: row.title ?? row.description ?? 'Partido sin título',
     startTime: row.scheduledAt,
     format: DB_TO_FORMAT[row.format] ?? MatchFormat.FiveVsFive,
     club: row.clubs

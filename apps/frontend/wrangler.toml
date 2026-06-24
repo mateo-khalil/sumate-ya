@@ -1,0 +1,9 @@
+name = "sumate-ya-frontend"
+main = "dist/_worker.js"
+compatibility_date = "2024-09-23"
+# nodejs_compat habilita process.env y otras APIs de Node.js en el runtime de Cloudflare Workers.
+# Sin esto, las referencias a `process.env.PRIVATE_*` en SSR lanzan ReferenceError.
+compatibility_flags = ["nodejs_compat"]
+
+# dist/ contiene el _worker.js generado por @astrojs/cloudflare y los assets estáticos.
+assets = { directory = "dist" }

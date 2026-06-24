@@ -1,24 +1,23 @@
 /**
  * FormatSelector — Step 3 of the create-match wizard
- * Shows format options (5v5, 7v7, 10v10, 11v11), disables those exceeding court.maxFormat,
- * auto-computes default capacity, and lets the user adjust it within valid bounds.
+ * Shows format options (5v5, 7v7, 10v10, 11v11), disables those exceeding court.maxFormat.
  *
  * Decision Context:
+ * - Capacity is NOT adjustable: in a one-off match the format fully determines the player
+ *   count (5v5 = 10, 7v7 = 14, 10v10 = 20, 11v11 = 22). There are no substitutions in this
+ *   context, unlike a tournament where extra players for changes make sense.
+ *   The capacity selector was removed so the user only needs to pick a format.
  * - Disabled options: a format is disabled when FORMAT_ORDER[format] > FORMAT_ORDER[courtMax].
  *   This matches the backend validation so there is no way to submit an incompatible format.
- * - Capacity range: the wizard shows the default capacity and lets the user reduce it (minimum
- *   is 4 — smallest meaningful match with 2 per side). The backend re-validates on submit.
- * - onChange fires on every valid change so the parent wizard can track state reactively.
+ * - onChange fires on every format selection; capacity is auto-derived = getMaxCapacity(format).
  * - Previously fixed bugs: none relevant.
  */
 
-import { useState, useEffect } from 'react';
 import type { MatchFormat } from '../../../graphql/operations/matches';
 
 interface Props {
   courtMaxFormat: MatchFormat;
   selectedFormat: MatchFormat | null;
-  capacity: number;
   onFormatChange: (format: MatchFormat, capacity: number) => void;
 }
 
@@ -40,28 +39,10 @@ export function getMaxCapacity(format: MatchFormat): number {
 export default function FormatSelector({
   courtMaxFormat,
   selectedFormat,
-  capacity,
   onFormatChange,
 }: Props) {
-  const [localCapacity, setLocalCapacity] = useState(capacity);
-
-  useEffect(() => {
-    setLocalCapacity(capacity);
-  }, [capacity]);
-
   function handleFormatClick(format: MatchFormat) {
-    const maxCap = getMaxCapacity(format);
-    const newCap = Math.min(localCapacity, maxCap);
-    setLocalCapacity(newCap);
-    onFormatChange(format, newCap);
-  }
-
-  function handleCapacityChange(val: number) {
-    if (!selectedFormat) return;
-    const max = getMaxCapacity(selectedFormat);
-    const clamped = Math.max(4, Math.min(val, max));
-    setLocalCapacity(clamped);
-    onFormatChange(selectedFormat, clamped);
+    onFormatChange(format, getMaxCapacity(format));
   }
 
   return (
@@ -88,41 +69,6 @@ export default function FormatSelector({
           );
         })}
       </div>
-
-      {selectedFormat && (
-        <div className="capacity-row">
-          <label className="step-label" htmlFor="capacity-input">
-            Capacidad de jugadores
-          </label>
-          <div className="capacity-controls">
-            <button
-              type="button"
-              className="cap-btn"
-              onClick={() => handleCapacityChange(localCapacity - 1)}
-              aria-label="Reducir capacidad"
-            >–</button>
-            <input
-              id="capacity-input"
-              type="number"
-              value={localCapacity}
-              min={4}
-              max={getMaxCapacity(selectedFormat)}
-              onChange={(e) => handleCapacityChange(Number(e.target.value))}
-              className="cap-input"
-              aria-label="Cantidad de jugadores"
-            />
-            <button
-              type="button"
-              className="cap-btn"
-              onClick={() => handleCapacityChange(localCapacity + 1)}
-              aria-label="Aumentar capacidad"
-            >+</button>
-          </div>
-          <span className="capacity-hint">
-            Máximo para {FORMAT_OPTIONS.find(o => o.value === selectedFormat)?.label}: {getMaxCapacity(selectedFormat)} jugadores
-          </span>
-        </div>
-      )}
 
       <style>{`
         .format-step { display: flex; flex-direction: column; gap: 1.25rem; }
@@ -156,31 +102,6 @@ export default function FormatSelector({
           color: hsl(0 72% 70%);
           padding: 0.1rem 0.4rem; border-radius: 3px;
           margin-top: 0.2rem;
-        }
-        .capacity-row { display: flex; flex-direction: column; gap: 0.5rem; }
-        .step-label {
-          font-family: 'Barlow Condensed', sans-serif;
-          font-size: 0.75rem; font-weight: 700;
-          letter-spacing: 0.15em; text-transform: uppercase;
-          color: hsl(35 100% 55%);
-        }
-        .capacity-controls { display: flex; align-items: center; gap: 0.5rem; }
-        .cap-btn {
-          width: 36px; height: 36px;
-          background: hsl(220 30% 18%); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 6px; cursor: pointer; color: #fff; font-size: 1.1rem;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .cap-btn:hover { background: hsl(220 30% 22%); }
-        .cap-input {
-          width: 72px; text-align: center;
-          background: hsl(220 30% 16%); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 6px; color: #fff; font-size: 1rem;
-          padding: 0.4rem 0; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.04em;
-        }
-        .capacity-hint {
-          font-family: 'Barlow', sans-serif; font-size: 0.78rem;
-          color: hsl(215 20% 45%);
         }
       `}</style>
     </div>

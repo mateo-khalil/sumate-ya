@@ -167,6 +167,9 @@ export interface RegisterClubInput {
   clubName: string;
   address: string;
   phone: string;
+  department: string;
+  lat: number;
+  lng: number;
 }
 
 export interface RegisterFieldErrors {
