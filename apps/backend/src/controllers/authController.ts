@@ -100,6 +100,10 @@ const ChangePasswordSchema = z
     path: ['newPassword'],
   });
 
+const GoogleLoginSchema = z.object({
+  idToken: z.string().min(20, 'Google credential is required.'),
+});
+
 export const authController = {
   async login(req: Request, res: Response): Promise<void> {
     const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
@@ -126,6 +130,29 @@ export const authController = {
 
       const status = message === 'Invalid login credentials' ? 401 : 400;
       res.status(status).json({ message });
+    }
+  },
+
+  async loginWithGoogle(req: Request, res: Response): Promise<void> {
+    const parsed = GoogleLoginSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ message: 'Google credential is required.' });
+      return;
+    }
+
+    try {
+      const result = await authService.loginWithGoogle(parsed.data.idToken);
+      res.status(200).json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Google authentication failed';
+
+      if (message === 'Invalid Google credentials') {
+        res.status(401).json({ message });
+        return;
+      }
+
+      res.status(400).json({ message: 'No pudimos iniciar sesion con Google. Intenta de nuevo.' });
     }
   },
 

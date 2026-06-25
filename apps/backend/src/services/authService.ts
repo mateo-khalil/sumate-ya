@@ -45,9 +45,18 @@ const PROFILE_COLUMNS = 'role, displayName';
 function resolveDisplayName(user: User): string {
   return (
     (typeof user.user_metadata?.displayName === 'string' ? user.user_metadata.displayName : null) ??
+    (typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null) ??
+    (typeof user.user_metadata?.name === 'string' ? user.user_metadata.name : null) ??
     (typeof user.user_metadata?.nombre === 'string' ? user.user_metadata.nombre : null) ??
     user.email ??
     'Usuario'
+  );
+}
+
+function resolveAvatarUrl(user: User): string | null {
+  return (
+    (typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : null) ??
+    (typeof user.user_metadata?.picture === 'string' ? user.user_metadata.picture : null)
   );
 }
 
@@ -124,6 +133,32 @@ async function getUserProfile(userId: string, client: SupabaseClient): Promise<U
   };
 }
 
+async function ensureGooglePlayerProfileExists(user: User): Promise<void> {
+  const { error } = await supabase.from('profiles').upsert(
+    {
+      id: user.id,
+      displayName: resolveDisplayName(user),
+      avatarUrl: resolveAvatarUrl(user),
+      role: 'player',
+      matchesPlayed: 0,
+      matchesWon: 0,
+      isPublic: true,
+    },
+    {
+      onConflict: 'id',
+      ignoreDuplicates: true,
+    },
+  );
+
+  if (error) {
+    console.error(
+      `[authService.loginWithGoogle] Profile upsert failed for userId=${user.id}:`,
+      error.message,
+    );
+    throw new Error(`Error al crear el perfil: ${error.message}`);
+  }
+}
+
 export const authService = {
   async login(email: string, password: string): Promise<LoginResult> {
     const authClient = createAnonClient();
@@ -147,6 +182,45 @@ export const authService = {
     }
 
     // Use user-scoped client so the profiles SELECT respects RLS.
+    const userClient = createUserClient(data.session.access_token);
+    const profile = await getUserProfile(data.user.id, userClient);
+
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      user: mapAuthenticatedUser(data.user, profile),
+    };
+  },
+
+  /**
+   * Login with a Google ID token.
+   *
+   * Decision Context:
+   * - The browser only obtains the Google credential. The backend exchanges it through
+   *   Supabase Auth, so the frontend never talks to Supabase or handles secrets directly.
+   * - First-time Google users receive a minimal player profile. Existing profiles are not
+   *   updated because club_admin accounts must keep their role and club ownership.
+   * - The final profile read still uses a user-scoped client, matching the password login
+   *   flow and proving RLS can resolve the authenticated user's own profile.
+   */
+  async loginWithGoogle(idToken: string): Promise<LoginResult> {
+    const authClient = createAnonClient();
+    const { data, error } = await authClient.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken,
+    });
+
+    if (error) {
+      console.error('[authService.loginWithGoogle] signInWithIdToken failed:', error.message);
+      throw new Error('Invalid Google credentials');
+    }
+
+    if (!data.session || !data.user) {
+      throw new Error('Invalid Google credentials');
+    }
+
+    await ensureGooglePlayerProfileExists(data.user);
+
     const userClient = createUserClient(data.session.access_token);
     const profile = await getUserProfile(data.user.id, userClient);
 
