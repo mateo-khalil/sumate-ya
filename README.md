@@ -47,6 +47,15 @@ Si querés apuntar el frontend a otro backend, creá `apps/frontend/.env` con:
 PRIVATE_BACKEND_URL=http://localhost:4000
 ```
 
+Para habilitar el inicio de sesion con Google:
+
+1. Configura Google en Supabase Auth > Providers > Google con el mismo Web Client ID.
+2. Agrega el Client ID publico en `apps/frontend/.env`:
+
+```env
+PUBLIC_GOOGLE_CLIENT_ID=<tu-google-web-client-id>.apps.googleusercontent.com
+```
+
 ### 4) Levantar entorno de desarrollo
 
 ```bash

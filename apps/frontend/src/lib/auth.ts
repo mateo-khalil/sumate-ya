@@ -119,6 +119,30 @@ export async function loginWithBackend(email: string, password: string): Promise
   };
 }
 
+export async function loginWithGoogleBackend(idToken: string): Promise<LoginResponse> {
+  const response = await fetch(`${backendUrl}/api/auth/google`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ idToken }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { message?: string; accessToken?: string; refreshToken?: string; user?: AuthUser }
+    | null;
+
+  if (!response.ok || !payload?.accessToken || !payload.refreshToken || !payload.user) {
+    throw new Error(payload?.message ?? 'Google authentication failed');
+  }
+
+  return {
+    accessToken: payload.accessToken,
+    refreshToken: payload.refreshToken,
+    user: payload.user,
+  };
+}
+
 export async function getSessionFromBackend(accessToken: string): Promise<AuthUser | null> {
   const response = await fetch(`${backendUrl}/api/auth/session`, {
     headers: {

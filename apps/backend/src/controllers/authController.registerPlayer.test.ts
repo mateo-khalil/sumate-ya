@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authServiceMock = vi.hoisted(() => ({
+  loginWithGoogle: vi.fn(),
   registerPlayer: vi.fn(),
   changePassword: vi.fn(),
 }));
@@ -35,6 +36,12 @@ async function registerPlayer(body: unknown): Promise<MockResponse> {
   return res;
 }
 
+async function loginWithGoogle(body: unknown): Promise<MockResponse> {
+  const res = createResponse();
+  await authController.loginWithGoogle({ body } as never, res as never);
+  return res;
+}
+
 async function changePassword(body: unknown, authorization = 'Bearer token-123'): Promise<MockResponse> {
   const res = createResponse();
   await authController.changePassword(
@@ -43,6 +50,60 @@ async function changePassword(body: unknown, authorization = 'Bearer token-123')
   );
   return res;
 }
+
+describe('authController.loginWithGoogle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authServiceMock.loginWithGoogle.mockResolvedValue({
+      accessToken: 'access-google',
+      refreshToken: 'refresh-google',
+      user: {
+        id: 'google-user-123',
+        email: 'mateo@gmail.com',
+        displayName: 'Mateo Google',
+        role: 'player',
+      },
+    });
+  });
+
+  it('validates the Google credential and returns the backend session payload', async () => {
+    const res = await loginWithGoogle({ idToken: 'google-id-token-with-enough-length' });
+
+    expect(authServiceMock.loginWithGoogle).toHaveBeenCalledWith(
+      'google-id-token-with-enough-length',
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      accessToken: 'access-google',
+      refreshToken: 'refresh-google',
+      user: {
+        id: 'google-user-123',
+        email: 'mateo@gmail.com',
+        displayName: 'Mateo Google',
+        role: 'player',
+      },
+    });
+  });
+
+  it('requires a Google credential', async () => {
+    const res = await loginWithGoogle({ idToken: '' });
+
+    expect(authServiceMock.loginWithGoogle).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ message: 'Google credential is required.' });
+  });
+
+  it('maps invalid Google credentials to 401', async () => {
+    authServiceMock.loginWithGoogle.mockRejectedValueOnce(
+      new Error('Invalid Google credentials'),
+    );
+
+    const res = await loginWithGoogle({ idToken: 'google-id-token-with-enough-length' });
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ message: 'Invalid Google credentials' });
+  });
+});
 
 describe('authController.registerPlayer', () => {
   beforeEach(() => {
