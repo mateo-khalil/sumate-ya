@@ -19,8 +19,11 @@
  *   DashboardFilters still handles court/status filters and quick-select buttons.
  * - Cell click routing:
  *     match slot     → onMatchClick (opens MatchDetailModal)
- *     free slot      → onFreeSlotClick (create/block options panel)
+ *     free slot      → onFreeSlotClick(slot, date) (create/block options panel)
  *     blocked slot   → onBlockedSlotClick (block info panel)
+ *   onFreeSlotClick receives the cell's concrete date (info.date) — slots are recurring
+ *   (dayOfWeek only), so the consumer needs the resolved calendar date to pre-fill the
+ *   match wizard with the exact occurrence the admin clicked.
  * - Previously fixed bugs:
  *   - MATCH_OPEN and MATCH_FULL sharing the same CSS class lost semantic information.
  *     Fixed by introducing cal-cell--match-open and cal-cell--match-full.
@@ -40,7 +43,7 @@ import type { ScheduleSlot, DashboardMatch } from '../../graphql/operations/club
 interface Props {
   slots: ScheduleSlot[];
   onMatchClick: (match: DashboardMatch) => void;
-  onFreeSlotClick?: (slot: ScheduleSlot) => void;
+  onFreeSlotClick?: (slot: ScheduleSlot, date: Date) => void;
   onBlockedSlotClick?: (slot: ScheduleSlot) => void;
   startDate?: string;
   endDate?: string;
@@ -159,7 +162,7 @@ export default function ClubScheduleView({
       onClick = () => onBlockedSlotClick(primary);
       isClickable = true;
     } else if (isFree && !isPastDay && onFreeSlotClick) {
-      onClick = () => onFreeSlotClick(primary);
+      onClick = () => onFreeSlotClick(primary, info.date);
       isClickable = true;
     }
 

@@ -9,15 +9,23 @@
  * - Courts derived from schedule data to avoid an extra query: the schedule already
  *   includes courtId/courtName per slot, so we deduplicate them here for the filter UI.
  * - Slot click routing added in this version:
- *     Free slot  → selectedFreeSlot state → SlotActionPanel with create/block links
+ *     Free slot  → selectedFreeSlot state → FreeSlotPanel with create/block actions
  *     Blocked    → selectedBlockedSlot state → BlockInfoPanel with block details
- *   Both panels are lightweight inline modals. Full slot management lives in horarios.
- * - SlotActionPanel navigates to /panel-club/horarios with slotId and action query
- *   params so the admin can create a match or block from the horarios page. This avoids
- *   duplicating block/create logic in the dashboard and keeps horarios as the single
- *   CRUD surface for slot management.
+ *   Both panels are lightweight inline modals.
+ * - "Crear partido aquí" opens the ClubMatchWizard IN A MODAL (createMatch state),
+ *   pre-filled with the clicked slot's slotId + resolved calendar date, instead of
+ *   navigating away. ClubScheduleView passes the concrete cell date (slots are recurring,
+ *   so the dayOfWeek alone can't identify the occurrence). On close we refetch the
+ *   dashboard so a freshly created match shows up in the grid without a full reload.
+ * - "Bloquear horario" still links to /panel-club/horarios for the block flow (single
+ *   CRUD surface for slot blocking); only the match-create action moved into a dialog.
  * - DashboardFilters.onReset resets to the current week (same default as SSR prefetch).
- * - Previously fixed bugs: none relevant (new feature).
+ * - Previously fixed bugs:
+ *   - "Crear partido aquí" linked to /panel-club/horarios?slotId=..&action=create, but
+ *     after the Horarios redesign (SlotManager → ScheduleConfigurator) that page ignores
+ *     slotId/action params, so the admin landed on the schedule configurator ("me lleva a
+ *     otra cosa"). Fixed by opening the match wizard in-place as a modal. Do NOT point the
+ *     create action back at horarios — those query params are no longer handled there.
  */
 
 import { useState } from 'react';
@@ -27,6 +35,7 @@ import DashboardHeader from './DashboardHeader';
 import DashboardFilters from './DashboardFilters';
 import ClubScheduleView from './ClubScheduleView';
 import ClubAgendaView from './ClubAgendaView';
+import ClubMatchWizard from './ClubMatchWizard';
 import MatchDetailModal from './MatchDetailModal';
 import ConflictAlerts from './ConflictAlerts';
 import ExportDialog from './ExportDialog';
@@ -52,10 +61,19 @@ function weekRange() {
   return { start: monday.toISOString().slice(0, 10), end: sunday.toISOString().slice(0, 10) };
 }
 
+// YYYY-MM-DD from a LOCAL Date (matches calendar-utils display logic — never UTC, which
+// would shift the date a day back in UTC-3 timezones).
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ── Slot action panels ────────────────────────────────────────────────────────
 
-function FreeSlotPanel({ slot, onClose }: { slot: ScheduleSlot; onClose: () => void }) {
-  const base = `/panel-club/horarios?slotId=${slot.slotId}`;
+function FreeSlotPanel({
+  slot, onClose, onCreateMatch,
+}: { slot: ScheduleSlot; onClose: () => void; onCreateMatch: () => void }) {
+  // Block flow still lives in horarios; only the match-create action opens a dialog here.
+  const blockHref = `/panel-club/horarios?slotId=${slot.slotId}&action=block`;
   return (
     <div className="slot-panel-backdrop" onClick={onClose}>
       <div className="slot-panel" onClick={(e) => e.stopPropagation()}>
@@ -69,11 +87,11 @@ function FreeSlotPanel({ slot, onClose }: { slot: ScheduleSlot; onClose: () => v
           </button>
         </div>
         <div className="slot-panel-actions">
-          <a href={`${base}&action=create`} className="slot-action-btn slot-action-btn--primary">
+          <button type="button" onClick={onCreateMatch} className="slot-action-btn slot-action-btn--primary">
             <Plus size={14} strokeWidth={2} aria-hidden="true" />
             Crear partido aquí
-          </a>
-          <a href={`${base}&action=block`} className="slot-action-btn">
+          </button>
+          <a href={blockHref} className="slot-action-btn">
             <Lock size={14} strokeWidth={2} aria-hidden="true" />
             Bloquear horario
           </a>
@@ -127,8 +145,12 @@ export default function ClubDashboardView(props: Props) {
 
   const [view, setView] = useState<ViewMode>('calendar');
   const [selectedMatch, setSelectedMatch] = useState<DashboardMatch | null>(null);
-  const [selectedFreeSlot, setSelectedFreeSlot] = useState<ScheduleSlot | null>(null);
+  // Free slot popover carries the resolved calendar date alongside the recurring slot so
+  // "Crear partido aquí" can pre-fill the wizard with the exact occurrence clicked.
+  const [selectedFreeSlot, setSelectedFreeSlot] = useState<{ slot: ScheduleSlot; date: string } | null>(null);
   const [selectedBlockedSlot, setSelectedBlockedSlot] = useState<ScheduleSlot | null>(null);
+  // When set, the match-creation wizard renders in a modal pre-filled with this slot/date.
+  const [createMatch, setCreateMatch] = useState<{ slotId: string; date: string } | null>(null);
   const [showExport, setShowExport] = useState(false);
 
   const courts = data?.schedule
@@ -138,6 +160,13 @@ export default function ClubDashboardView(props: Props) {
   function handleReset() {
     const w = weekRange();
     updateFilters({ startDate: w.start, endDate: w.end, courtIds: undefined, matchStatuses: undefined });
+  }
+
+  // Closing the wizard modal refetches so a just-created match appears without a full reload.
+  // Harmless if nothing was created (re-fetches the same filtered data).
+  function closeCreateMatch() {
+    setCreateMatch(null);
+    refetch(filters);
   }
 
   return (
@@ -202,7 +231,7 @@ export default function ClubDashboardView(props: Props) {
             <ClubScheduleView
               slots={data.schedule}
               onMatchClick={setSelectedMatch}
-              onFreeSlotClick={setSelectedFreeSlot}
+              onFreeSlotClick={(slot, date) => setSelectedFreeSlot({ slot, date: localISO(date) })}
               onBlockedSlotClick={setSelectedBlockedSlot}
               startDate={filters.startDate}
               endDate={filters.endDate}
@@ -223,10 +252,32 @@ export default function ClubDashboardView(props: Props) {
       <MatchDetailModal match={selectedMatch} onClose={() => setSelectedMatch(null)} />
 
       {selectedFreeSlot && (
-        <FreeSlotPanel slot={selectedFreeSlot} onClose={() => setSelectedFreeSlot(null)} />
+        <FreeSlotPanel
+          slot={selectedFreeSlot.slot}
+          onClose={() => setSelectedFreeSlot(null)}
+          onCreateMatch={() => {
+            setCreateMatch({ slotId: selectedFreeSlot.slot.slotId, date: selectedFreeSlot.date });
+            setSelectedFreeSlot(null);
+          }}
+        />
       )}
       {selectedBlockedSlot && (
         <BlockedSlotPanel slot={selectedBlockedSlot} onClose={() => setSelectedBlockedSlot(null)} />
+      )}
+
+      {createMatch && (
+        <div className="wizard-modal-backdrop" role="dialog" aria-modal="true" aria-label="Crear partido" onClick={closeCreateMatch}>
+          <div className="wizard-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="wizard-modal-close" onClick={closeCreateMatch} aria-label="Cerrar">
+              <X size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <ClubMatchWizard
+              accessToken={props.accessToken}
+              prefillSlotId={createMatch.slotId}
+              prefillDate={createMatch.date}
+            />
+          </div>
+        </div>
       )}
 
       {showExport && (
@@ -318,9 +369,9 @@ export default function ClubDashboardView(props: Props) {
         .slot-panel-meta { font-family: 'Barlow', sans-serif; font-size: 0.8rem; color: hsl(215 20% 45%); margin: 0; }
         .slot-panel-actions { display: flex; flex-direction: column; gap: 0.5rem; }
         .slot-action-btn {
-          display: flex; align-items: center; gap: 6px;
+          display: flex; align-items: center; gap: 6px; width: 100%; cursor: pointer;
           background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 8px; padding: 0.5rem 0.875rem; text-decoration: none;
+          border-radius: 8px; padding: 0.5rem 0.875rem; text-decoration: none; text-align: left;
           font-family: 'Barlow Condensed', sans-serif; font-size: 0.82rem; font-weight: 700;
           letter-spacing: 0.05em; color: hsl(215 20% 70%); transition: background 0.12s, color 0.12s;
         }
@@ -329,6 +380,23 @@ export default function ClubDashboardView(props: Props) {
         .slot-action-btn--primary:hover { background: rgba(246,164,0,0.2); }
         .slot-action-btn--danger { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.25); color: hsl(0 72% 65%); }
         .slot-action-btn--danger:hover { background: rgba(239,68,68,0.18); }
+        /* Match-creation wizard rendered in a modal over the dashboard. The wizard already
+           ships its own .wizard-card surface, so this backdrop only centers it + scrolls on
+           short viewports; the close button floats just above the card. */
+        .wizard-modal-backdrop {
+          position: fixed; inset: 0; z-index: 95;
+          background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+          display: flex; align-items: flex-start; justify-content: center;
+          overflow-y: auto; padding: 3rem 1rem 2rem;
+        }
+        .wizard-modal { position: relative; width: min(720px, 96vw); margin: auto 0; }
+        .wizard-modal-close {
+          position: absolute; top: -2.25rem; right: 0; z-index: 2;
+          background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+          border-radius: 7px; padding: 0.35rem; cursor: pointer; color: hsl(215 20% 70%);
+          display: inline-flex; transition: background 0.12s, color 0.12s;
+        }
+        .wizard-modal-close:hover { background: rgba(255,255,255,0.16); color: #fff; }
         /* ── Responsive ── */
         @media (max-width: 767px) {
           .dash-topbar { padding: 0.625rem 0; }

@@ -17,6 +17,12 @@ import {
  * - La primera carga hace fetch SSR contra GraphQL; Playwright no puede mockear
  *   ese request desde el browser. Por eso usamos el seed idempotente para dejar
  *   un club, una cancha y tres estados de slot determinísticos.
+ * - "Crear partido aquí" del popover de slot libre ahora es un BOTÓN que abre el
+ *   wizard de partido en un modal in-place (antes era un link a /panel-club/horarios
+ *   con action=create, que la página rediseñada ignora). Verificamos el cambio de
+ *   contrato: el botón existe y abre un dialog "Crear partido" sin navegar fuera del
+ *   dashboard. No afirmamos el paso/heading interno del wizard porque el auto-avance
+ *   depende de que el slot semilla caiga en la semana actual (time-drift de seed).
  */
 
 function emptyStorageState() {
@@ -100,15 +106,10 @@ test.describe('Dashboard de club (/panel-club/dashboard)', () => {
       await clubDashboardPage.slotCell(SEED_CLUB_DASHBOARD.freeSlotTime, 'AVAILABLE').click();
       await expect(page.getByText(/horario libre/i)).toBeVisible();
       await expect(page.getByText(/cancha/i).first()).toBeVisible();
-      await expect(page.getByRole('link', { name: /crear partido aqu/i })).toHaveAttribute(
-        'href',
-        /action=create/,
-      );
-      await expect(page.getByRole('link', { name: /bloquear horario/i })).toHaveAttribute(
-        'href',
-        /action=block/,
-      );
-      await page.getByRole('button', { name: /cerrar/i }).click();
+      // "Crear partido aquí" es un botón (abre el wizard en un modal), no un link.
+      await expect(clubDashboardPage.createMatchAction).toBeVisible();
+      await expect(clubDashboardPage.blockSlotLink).toHaveAttribute('href', /action=block/);
+      await clubDashboardPage.freeSlotPanel.getByRole('button', { name: /cerrar/i }).click();
 
       await clubDashboardPage.slotCell(SEED_CLUB_DASHBOARD.blockedSlotTime, 'BLOCKED').click();
       const blockedPanel = page.locator('.slot-panel');
@@ -118,6 +119,24 @@ test.describe('Dashboard de club (/panel-club/dashboard)', () => {
         'href',
         /action=unblock/,
       );
+    });
+
+    test('"Crear partido aquí" abre el wizard en un modal sin salir del dashboard', async ({
+      clubDashboardPage,
+      page,
+    }) => {
+      await clubDashboardPage.goto();
+
+      await clubDashboardPage.slotCell(SEED_CLUB_DASHBOARD.freeSlotTime, 'AVAILABLE').click();
+      await clubDashboardPage.createMatchAction.click();
+
+      await expect(clubDashboardPage.matchWizardDialog).toBeVisible();
+      // Regresión previa: el link a /panel-club/horarios?action=create dejaba al admin en el
+      // configurador de horarios. Ahora abre un dialog y NO navega fuera del dashboard.
+      await expect(page).toHaveURL(/\/panel-club\/dashboard/);
+
+      await clubDashboardPage.matchWizardDialog.getByRole('button', { name: /cerrar/i }).click();
+      await expect(clubDashboardPage.matchWizardDialog).toBeHidden();
     });
 
     test('abre el detalle del partido con cancha, formato, cupos y organizador', async ({

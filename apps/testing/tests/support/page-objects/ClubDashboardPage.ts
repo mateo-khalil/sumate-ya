@@ -11,6 +11,11 @@ import { CLUB_DASHBOARD_URL } from '../constants';
  * - Cell locators use CalendarGrid's accessible aria-labels instead of CSS
  *   color classes, so the E2E contract remains user-facing: a slot is free,
  *   occupied by a match, or blocked.
+ * - Free-slot popover: "Crear partido aquí" is a BUTTON that opens the match
+ *   wizard in an in-place modal (matchWizardDialog), not a link. It used to be a
+ *   link to /panel-club/horarios?action=create, but the redesigned Horarios page
+ *   ignores those params, so the action now opens a dialog. "Bloquear horario"
+ *   stays a link to the horarios block flow.
  */
 export class ClubDashboardPage {
   readonly page: Page;
@@ -21,6 +26,10 @@ export class ClubDashboardPage {
   readonly previousWeekButton: Locator;
   readonly nextWeekButton: Locator;
   readonly loadingBar: Locator;
+  readonly freeSlotPanel: Locator;
+  readonly createMatchAction: Locator;
+  readonly blockSlotLink: Locator;
+  readonly matchWizardDialog: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -31,6 +40,10 @@ export class ClubDashboardPage {
     this.previousWeekButton = page.getByRole('button', { name: /semana anterior/i });
     this.nextWeekButton = page.getByRole('button', { name: /semana siguiente/i });
     this.loadingBar = page.getByLabel(/cargando dashboard/i);
+    this.freeSlotPanel = page.locator('.slot-panel');
+    this.createMatchAction = page.getByRole('button', { name: /crear partido aqu/i });
+    this.blockSlotLink = page.getByRole('link', { name: /bloquear horario/i });
+    this.matchWizardDialog = page.getByRole('dialog', { name: /crear partido/i });
   }
 
   async goto(): Promise<void> {

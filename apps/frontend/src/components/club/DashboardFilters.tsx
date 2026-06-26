@@ -13,10 +13,19 @@
  * - "Este mes" sets startDate to the first day of the month; the calendar nav computes
  *   the Monday of that week and shows it as the initial view.
  * - courtIds and matchStatuses use simple multi-select dropdowns.
+ * - Active indicator: the quick-range buttons (Hoy / Esta semana / Este mes) had no
+ *   visual "selected" state, so users couldn't tell which range was applied. We derive
+ *   the active range by comparing the current filters.startDate/endDate against each
+ *   computed range and apply an `.active` highlight (mirrors .view-btn.active). If the
+ *   calendar's internal week nav moves off any preset range, none is highlighted — that
+ *   is intentional, the presets only light up when their exact range is in effect.
+ *   Cancha/Estado dropdowns also gain the same highlight when they hold selections, so
+ *   the whole toolbar reads its active state consistently (count badge + highlight).
  * - Previously fixed bugs:
  *   - "Invalid request body" from empty strings for dates (fixed by converting '' → undefined).
  *   - Date picker week nav duplicated the calendar's internal nav, causing two conflicting
  *     navigation systems. Fixed by removing it from this component entirely.
+ *   - Quick-range buttons gave no active feedback (this change): added derived active state.
  */
 
 import { useState } from 'react';
@@ -76,6 +85,20 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
 
   const activeFiltersCount = [filters.courtIds?.length, filters.matchStatuses?.length].filter(Boolean).length;
 
+  const hasCourtFilter = !!filters.courtIds?.length;
+  const hasStatusFilter = !!filters.matchStatuses?.length;
+
+  // Which quick-range preset (if any) matches the currently applied range.
+  const rangeMatches = (r: { start: string; end: string }) =>
+    filters.startDate === r.start && filters.endDate === r.end;
+  const activeRange = rangeMatches(todayRange())
+    ? 'today'
+    : rangeMatches(currentWeek())
+      ? 'week'
+      : rangeMatches(currentMonthStart())
+        ? 'month'
+        : null;
+
   function toggleCourt(id: string) {
     const current = filters.courtIds ?? [];
     const next = current.includes(id) ? current.filter((c) => c !== id) : [...current, id];
@@ -93,19 +116,22 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
       {/* Quick range selectors */}
       <div className="quick-btns">
         <button
-          className="quick-btn"
+          className={`quick-btn${activeRange === 'today' ? ' active' : ''}`}
+          aria-pressed={activeRange === 'today'}
           onClick={() => { const r = todayRange(); onChange({ startDate: r.start, endDate: r.end }); }}
         >
           Hoy
         </button>
         <button
-          className="quick-btn"
+          className={`quick-btn${activeRange === 'week' ? ' active' : ''}`}
+          aria-pressed={activeRange === 'week'}
           onClick={() => { const r = currentWeek(); onChange({ startDate: r.start, endDate: r.end }); }}
         >
           Esta semana
         </button>
         <button
-          className="quick-btn"
+          className={`quick-btn${activeRange === 'month' ? ' active' : ''}`}
+          aria-pressed={activeRange === 'month'}
           onClick={() => { const r = currentMonthStart(); onChange({ startDate: r.start, endDate: r.end }); }}
         >
           Este mes
@@ -115,7 +141,11 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
       {/* Court multi-select */}
       {courts.length > 0 && (
         <div className="dropdown-wrap">
-          <button className="filter-btn" onClick={() => setShowCourtMenu((v) => !v)}>
+          <button
+            className={`filter-btn${hasCourtFilter ? ' active' : ''}`}
+            aria-pressed={hasCourtFilter}
+            onClick={() => setShowCourtMenu((v) => !v)}
+          >
             <Filter size={13} strokeWidth={2} aria-hidden="true" />
             Cancha {filters.courtIds?.length ? `(${filters.courtIds.length})` : ''}
           </button>
@@ -134,7 +164,11 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
 
       {/* Status multi-select */}
       <div className="dropdown-wrap">
-        <button className="filter-btn" onClick={() => setShowStatusMenu((v) => !v)}>
+        <button
+          className={`filter-btn${hasStatusFilter ? ' active' : ''}`}
+          aria-pressed={hasStatusFilter}
+          onClick={() => setShowStatusMenu((v) => !v)}
+        >
           <Filter size={13} strokeWidth={2} aria-hidden="true" />
           Estado {filters.matchStatuses?.length ? `(${filters.matchStatuses.length})` : ''}
         </button>
@@ -172,6 +206,10 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
           transition: background 0.12s, color 0.12s;
         }
         .quick-btn:hover { background: rgba(246,164,0,0.1); color: hsl(42 100% 65%); }
+        .quick-btn.active {
+          background: rgba(246,164,0,0.12); border-color: rgba(246,164,0,0.35);
+          color: hsl(42 100% 65%);
+        }
         .dropdown-wrap { position: relative; }
         .filter-btn {
           display: flex; align-items: center; gap: 0.35rem;
@@ -181,6 +219,10 @@ export default function DashboardFilters({ filters, courts, onChange, onReset }:
           color: hsl(215 20% 60%); cursor: pointer; transition: background 0.12s;
         }
         .filter-btn:hover { background: rgba(255,255,255,0.08); color: hsl(210 20% 85%); }
+        .filter-btn.active {
+          background: rgba(246,164,0,0.12); border-color: rgba(246,164,0,0.35);
+          color: hsl(42 100% 65%);
+        }
         .dropdown-menu {
           position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
           background: hsl(220 55% 11%); border: 1px solid rgba(255,255,255,0.1);
