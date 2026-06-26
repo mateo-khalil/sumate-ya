@@ -9,11 +9,20 @@
  *   normalises it to UTC. Edit mode prefills both from the stored ISO reservedAt (local view).
  * - Styles are defined by ReservationManager (rm- classes) so this modal stays presentation-only;
  *   the <style> block is rendered once on the page by the manager.
- * - Previously fixed bugs: none relevant (new component).
+ * - Submit gating: the button is disabled ONLY while `busy` (in-flight request). Field validation
+ *   runs on submit and surfaces a SPECIFIC error message instead of silently greying out the
+ *   button — see validate(). A silently-disabled button gave the club zero feedback about what was
+ *   missing, which read as "no me deja crear la reserva aunque tengo todo pronto".
+ * - New reservations pre-fill date + the next half hour (defaultDateTime) so the form opens in a
+ *   ready-to-submit state; the empty <input type="time"> was the usual culprit behind the
+ *   disabled button (the field looked filled but `time` was '').
+ * - Previously fixed bugs: "Crear reserva" stayed disabled with no explanation when the time field
+ *   was empty (no default + no validation feedback). Do NOT regress to disabling the button on
+ *   `!canSubmit`; keep the explicit validate() + error banner path.
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Check, X, Search, UserRound } from 'lucide-react';
+import { Loader2, Check, X, Search, UserRound, AlertTriangle } from 'lucide-react';
 import type { ManagedCourt } from '../../graphql/operations/courts';
 import type { TeamProfile } from '../../graphql/operations/teams';
 import {
@@ -55,6 +64,19 @@ function isoToLocalInputs(iso: string): { date: string; time: string } {
   };
 }
 
+// Para reservas nuevas pre-cargamos fecha de hoy y la próxima media hora (redondeo hacia arriba)
+// para que el form abra listo para enviar. Antes `time` arrancaba en '' y el botón quedaba
+// deshabilitado aunque el resto estuviera completo.
+function defaultDateTime(): { date: string; time: string } {
+  const HALF_HOUR = 30 * 60 * 1000;
+  const d = new Date(Math.ceil(Date.now() / HALF_HOUR) * HALF_HOUR);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+}
+
 export default function ReservationFormModal({
   reservation,
   courts,
@@ -64,7 +86,7 @@ export default function ReservationFormModal({
   onClose,
   onSubmit,
 }: Props) {
-  const initial = reservation ? isoToLocalInputs(reservation.reservedAt) : { date: '', time: '' };
+  const initial = reservation ? isoToLocalInputs(reservation.reservedAt) : defaultDateTime();
 
   const [courtId, setCourtId] = useState(reservation?.courtId ?? courts[0]?.id ?? '');
   const [date, setDate] = useState(initial.date);
@@ -84,6 +106,9 @@ export default function ReservationFormModal({
   const [priceAuto, setPriceAuto] = useState(false);
   const [notes, setNotes] = useState(reservation?.notes ?? '');
   const [status, setStatus] = useState<ReservationStatus>(reservation?.status ?? 'CONFIRMED');
+  // Mensaje de validación mostrado al intentar enviar con datos faltantes (en vez de deshabilitar
+  // el botón sin explicación). Se limpia en cuanto el envío es válido.
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Player search
   const [term, setTerm] = useState('');
@@ -119,12 +144,23 @@ export default function ReservationFormModal({
     return () => { cancelled = true; };
   }, [suggestPrice, priceTouched, courtId, date, time, durationMin]);
 
-  const bookerOk = mode === 'app' ? !!selectedPlayer : contactName.trim().length > 0;
-  const canSubmit = !!courtId && !!date && !!time && durationMin > 0 && bookerOk && !busy;
+  // Validación explícita: devuelve el primer campo faltante como mensaje accionable, o null si
+  // está todo pronto. Reemplaza al viejo `canSubmit` que sólo deshabilitaba el botón en silencio.
+  const validate = (): string | null => {
+    if (!courtId) return 'Elegí una cancha.';
+    if (!date) return 'Elegí la fecha de la reserva.';
+    if (!time) return 'Ingresá la hora de la reserva.';
+    if (!(durationMin > 0)) return 'La duración debe ser mayor a 0 minutos.';
+    if (mode === 'app' && !selectedPlayer) return 'Buscá y elegí el jugador de la app.';
+    if (mode === 'manual' && contactName.trim().length === 0) return 'Ingresá el nombre de contacto.';
+    return null;
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    const err = validate();
+    if (err) { setFormError(err); return; }
+    setFormError(null);
     const parsedPrice = priceArs.trim() === '' ? null : Number(priceArs);
     onSubmit({
       courtId,
@@ -262,9 +298,16 @@ export default function ReservationFormModal({
               onChange={(e) => setNotes(e.target.value)} />
           </label>
 
+          {formError && (
+            <div className="rm-banner rm-banner--error" role="alert">
+              <AlertTriangle size={16} aria-hidden="true" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           <div className="rm-dialog-actions">
             <button type="button" className="rm-btn rm-btn--ghost" onClick={onClose} disabled={busy}>Cancelar</button>
-            <button type="submit" className="rm-btn rm-btn--primary" disabled={!canSubmit}>
+            <button type="submit" className="rm-btn rm-btn--primary" disabled={busy}>
               {busy ? <Loader2 className="rm-spin" size={14} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}
               {reservation ? 'Guardar' : 'Crear reserva'}
             </button>

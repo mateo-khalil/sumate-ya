@@ -10,7 +10,12 @@
  * - SSR-hydrated initial data + accessToken prop. Changing the date range refetches client-side
  *   via the shared gqlAuth helper (the backend caches each range for cheap recomputation).
  * - occupancyRate arrives as a 0–100 percentage; cancellationRate as a 0–1 fraction.
- * - Previously fixed bugs: none relevant (new component).
+ * - Peak-hours layout: "Horas pico" renders 24 hourly bars and is a `wide` (full-row) panel.
+ *   In a 1/3-width grid cell (minmax(300px,1fr)) the 24 bars cannot fit and overflow the card's
+ *   right edge. VBars also has overflow-x:auto + a non-zero flex-basis so bars scroll instead of
+ *   spilling out on narrow viewports, rather than relying on shrink-to-zero (which clips labels).
+ * - Previously fixed bugs: "Horas pico" bars overflowed the panel ("se sale") because the 24-bar
+ *   chart shared the 7-bar Días grid cell. Fixed by making the panel wide + overflow-safe VBars.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -111,8 +116,8 @@ export default function ClubStatisticsView({ initialData, initialError, initialF
               <VBars items={data.matchesByDayOfWeek.map((d) => ({ label: d.label, value: d.count }))} />
             </Panel>
 
-            {/* Peak hours */}
-            <Panel title="Horas pico" icon={<Gauge size={16} aria-hidden="true" />}>
+            {/* Peak hours — wide row: 24 hourly bars need full width or they overflow a 1/3 grid cell */}
+            <Panel title="Horas pico" icon={<Gauge size={16} aria-hidden="true" />} wide>
               {data.matchesByHour.length === 0
                 ? <p className="cs-empty">Sin datos de horario</p>
                 : <VBars items={data.matchesByHour.map((h) => ({ label: `${String(h.hour).padStart(2, '0')}h`, value: h.count }))} />}
@@ -251,13 +256,14 @@ function StatsStyles() {
       .cs-hbar-val { font-size: 0.8rem; font-weight: 600; color: var(--color-foreground, #fff); white-space: nowrap; }
       .cs-hbar-val em { color: hsl(215 20% 55%); font-style: normal; font-weight: 400; }
 
-      /* Vertical bars */
-      .cs-vbars { display: flex; align-items: flex-end; gap: 0.5rem; height: 160px; }
-      .cs-vbar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; height: 100%; justify-content: flex-end; }
+      /* Vertical bars — overflow-safe: bars grow to fill when there is room, scroll instead of
+         spilling out of the card when cramped (the 24-bar "Horas pico" chart on narrow viewports). */
+      .cs-vbars { display: flex; align-items: flex-end; gap: 0.5rem; height: 160px; overflow-x: auto; padding-bottom: 0.25rem; }
+      .cs-vbar { flex: 1 0 1.4rem; min-width: 1.4rem; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; height: 100%; justify-content: flex-end; }
       .cs-vbar-track { width: 100%; max-width: 34px; flex: 1; display: flex; align-items: flex-end; }
       .cs-vbar-fill { width: 100%; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, hsl(216 85% 60%), hsl(216 85% 45%)); min-height: 2px; }
-      .cs-vbar-val { font-size: 0.72rem; font-weight: 600; color: var(--color-foreground, #fff); }
-      .cs-vbar-label { font-size: 0.68rem; color: hsl(215 20% 55%); }
+      .cs-vbar-val { font-size: 0.72rem; font-weight: 600; color: var(--color-foreground, #fff); white-space: nowrap; }
+      .cs-vbar-label { font-size: 0.68rem; color: hsl(215 20% 55%); white-space: nowrap; }
 
       /* Trend */
       .cs-trend { display: flex; flex-direction: column; gap: 0.4rem; }

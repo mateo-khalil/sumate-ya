@@ -131,9 +131,13 @@ export default function ReservationManager({
         </div>
         {/* Desde Reservas el club elige qué crear: una reserva de cancha o un partido
             abierto. "Crear partido" navega al wizard de partidos; "Nueva reserva" abre el
-            modal local. (Pedido: mover la creación de partidos dentro de Reservas.) */}
+            modal local. (Pedido: mover la creación de partidos dentro de Reservas.)
+            Decisión de UI: "Crear partido" usa el variante --secondary (azul FIFA) en lugar
+            de --ghost porque el botón gris translúcido pasaba desapercibido junto al CTA naranja.
+            Azul (acción secundaria del design system) lo hace llamativo sin competir con el
+            naranja primario de "Nueva reserva". Previously fixed bugs: none relevant. */}
         <div className="rm-actions">
-          <a className="rm-btn rm-btn--ghost" href="/panel-club/crear-partido">
+          <a className="rm-btn rm-btn--secondary" href="/panel-club/crear-partido">
             <Volleyball size={16} strokeWidth={2.5} aria-hidden="true" />
             Crear partido
           </a>
@@ -280,6 +284,8 @@ function ReservationManagerStyles() {
       .rm-btn:disabled { opacity: 0.55; cursor: not-allowed; }
       .rm-btn--primary { background: hsl(35 100% 48%); color: hsl(220 72% 8%); }
       .rm-btn--primary:hover:not(:disabled) { background: hsl(35 100% 54%); }
+      .rm-btn--secondary { background: hsl(216 85% 45%); color: hsl(210 20% 96%); }
+      .rm-btn--secondary:hover:not(:disabled) { background: hsl(216 85% 52%); }
       .rm-btn--ghost { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); color: hsl(210 20% 80%); }
       .rm-btn--ghost:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
       .rm-btn--danger { background: hsl(0 72% 51%); color: #fff; }
