@@ -10,3 +10,5 @@ node_modules/
 apps/backend/load-tests/results/*
 !apps/backend/load-tests/results/.gitkeep
 docs/presentation
+.vercel
+.env*
